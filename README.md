@@ -1,16 +1,12 @@
 # Twine - RSS Reader
 
-![CI-MAIN](https://github.com/msasikanth/twine/actions/workflows/ci_checks.yml/badge.svg?branch=main)
-[![Sponsor](https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86)](https://github.com/sponsors/msasikanth)
-
 Twine is a cross-platform RSS reader app built using Kotlin and Compose Multiplatform. It features an nice
 user interface and experience to browse through the feeds, and supports Material 3 content based 
 [dynamic theming](https://m3.material.io/styles/color/dynamic-color/user-generated-color).
 
 ## Download
 
-<a href='https://play.google.com/store/apps/details?id=dev.sasikanth.rss.reader&pcampaignid=pcampaignidMKT-Other-global-all-co-prtnr-py-PartBadge-Mar2515-1'><img alt='Get it on Google Play' src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png' width="200px"/></a>
-<a href="https://apps.apple.com/us/app/twine-rss-reader/id6465694958?itsct=apps_box_badge&amp;itscg=30200" style="display: inline-block; overflow: hidden; border-radius: 13px;"><img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/white/en-us;releaseDate=1694390400" alt="Download on the App Store" width="200px"></a>
+Coming Soon
 
 ## Images
 <img src="readme_images/banner.png" alt="banner" />
@@ -63,31 +59,25 @@ You can contribute bug fixes to the project via PRs, for anything else open an i
 This project uses ktfmt, provided via the spotless gradle plugin, and the bundled project IntelliJ codestyle. Run
 `./gradlew spotlessApply` to format the code before raising a PR.
 
-## Made with 💖 by
-
-- [Sasikanth Miriyampalli](https://www.sasikanth.dev) / Development
-- [Eduardo Pratti](https://twitter.com/edpratti) / Design
-
-## Error Reporting by
-
-<a href="http://www.bugsnag.com/">
-  <img src="readme_images/bugsnag.png" width="250" alt="bugsnag logo"/>
-</a>
-
 ## License
 
 ```
-Copyright Sasikanth Miriyampalli
+This product includes software developed by Sasikanth Miriyampalli.
+
+Copyright 2025 Sasikanth Miriyampalli
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    https://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
+
+Modifications:
+- Modified by CoinDex on 2025-05-19, adapted for use in the Podcast project.
 ```
