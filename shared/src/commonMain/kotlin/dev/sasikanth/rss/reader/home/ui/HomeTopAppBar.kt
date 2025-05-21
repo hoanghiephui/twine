@@ -40,6 +40,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.Podcasts
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
@@ -99,6 +100,7 @@ internal fun HomeTopAppBar(
   onSearchClicked: () -> Unit,
   onBookmarksClicked: () -> Unit,
   onSettingsClicked: () -> Unit,
+  onPodcastClicked: () -> Unit,
   onPostTypeChanged: (PostsType) -> Unit,
   onMarkPostsAsRead: (Source?) -> Unit,
 ) {
@@ -152,6 +154,16 @@ internal fun HomeTopAppBar(
     ) {
       Icon(
         imageVector = Icons.Outlined.BookmarkBorder,
+        contentDescription = LocalStrings.current.bookmarks,
+        tint = AppTheme.colorScheme.tintedForeground
+      )
+    }
+
+    IconButton(
+      onClick = onPodcastClicked,
+    ) {
+      Icon(
+        imageVector = Icons.Outlined.Podcasts,
         contentDescription = LocalStrings.current.bookmarks,
         tint = AppTheme.colorScheme.tintedForeground
       )

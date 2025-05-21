@@ -211,7 +211,8 @@ internal fun HomeScreen(
                     onPostTypeChanged = {
                       homePresenter.dispatch(HomeEvent.OnPostsTypeChanged(it))
                     },
-                    onMarkPostsAsRead = { homePresenter.dispatch(HomeEvent.MarkPostsAsRead(it)) }
+                    onMarkPostsAsRead = { homePresenter.dispatch(HomeEvent.MarkPostsAsRead(it)) },
+                    onPodcastClicked = { homePresenter.dispatch(HomeEvent.SwitchToPodcast) }
                   )
                 },
                 body = { paddingValues ->

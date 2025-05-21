@@ -1,4 +1,48 @@
+/*
+ * Copyright 2025 CoinDex
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package dev.podcast.player
 
-class PlayerBottomSheet {
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import dev.podcast.player.ui.BottomSheetCollapsedContent
+import dev.podcast.player.ui.expanded.BottomSheetExpandedContent
+import dev.sasikanth.rss.reader.feeds.ui.BottomSheetHandle
+import dev.sasikanth.rss.reader.utils.inverse
+
+@Composable
+fun PlayerBottomSheet(
+  bottomSheetProgress: Float,
+  closeSheet: () -> Unit,
+) {
+  Column(modifier = Modifier.fillMaxSize()) {
+    BottomSheetHandle(bottomSheetProgress)
+
+    // Transforming the bottom sheet progress from 0-1 to 1-0,
+    // since we want to control the alpha of the content as
+    // users swipes the sheet up and down
+    val bottomSheetExpandingProgress = (bottomSheetProgress * 5f).inverse()
+    val hasBottomSheetExpandedThreshold = bottomSheetExpandingProgress > 1e-6f
+
+    if (hasBottomSheetExpandedThreshold) {
+      BottomSheetCollapsedContent()
+    } else {
+      BottomSheetExpandedContent()
+    }
+  }
 }

@@ -61,4 +61,6 @@ sealed interface HomeEvent {
   data class MarkFeaturedPostsAsRead(val postId: String) : HomeEvent
 
   data class UpdateCurrentDateTime(val dateTime: LocalDateTime) : HomeEvent
+
+  data object SwitchToPodcast : HomeEvent
 }

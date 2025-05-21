@@ -34,6 +34,7 @@ import com.arkivanov.essenty.instancekeeper.InstanceKeeper
 import com.arkivanov.essenty.instancekeeper.getOrCreate
 import com.arkivanov.essenty.lifecycle.coroutines.coroutineScope
 import com.arkivanov.essenty.lifecycle.doOnStart
+import dev.podcast.home.PodcastHomePresenterFactory
 import dev.sasikanth.rss.reader.about.AboutPresenterFactory
 import dev.sasikanth.rss.reader.addfeed.AddFeedEvent
 import dev.sasikanth.rss.reader.addfeed.AddFeedPresenterFactory
@@ -90,6 +91,7 @@ class AppPresenter(
   private val addFeedPresenter: AddFeedPresenterFactory,
   private val groupPresenter: GroupPresenterFactory,
   private val blockedWordsPresenter: BlockedWordsPresenterFactory,
+  private val podcastHomePresenter: PodcastHomePresenterFactory,
   private val lastUpdatedAt: LastUpdatedAt,
   private val rssRepository: RssRepository,
   private val settingsRepository: SettingsRepository,
@@ -138,7 +140,9 @@ class AppPresenter(
     scope.launch {
       withContext(dispatchersProvider.io) { rssRepository.numberOfFeeds().firstOrNull() }
       if (screenStack.active.instance is Screen.Placeholder) {
-        navigation.replaceAll(Config.Home)
+        // navigation.replaceAll(Config.Home)
+        // make start with podcast
+        navigation.replaceAll(Config.PodcastHome)
       }
     }
   }
@@ -213,7 +217,8 @@ class AppPresenter(
               { modalNavigation.activate(ModalConfig.GroupSelection) },
               { modalNavigation.activate(ModalConfig.FeedInfo(it)) },
               { navigation.pushNew(Config.AddFeed) },
-              { navigation.pushNew(Config.GroupDetails(it)) }
+              { navigation.pushNew(Config.GroupDetails(it)) },
+              { navigation.replaceAll(Config.PodcastHome) }
             )
         )
       }
@@ -301,6 +306,20 @@ class AppPresenter(
       is Config.BlockedWords -> {
         Screen.BlockedWords(
           presenter = blockedWordsPresenter(componentContext) { navigation.pop() }
+        )
+      }
+
+      // Start with Podcast
+      is Config.PodcastHome -> {
+        Screen.PodcastHome(
+          presenter =
+            podcastHomePresenter(
+              componentContext,
+              { navigation.pushNew(Config.Search) },
+              { navigation.pushNew(Config.Bookmarks) },
+              { navigation.pushNew(Config.Settings) },
+              { navigation.replaceAll(Config.Home) }
+            )
         )
       }
     }
@@ -393,6 +412,8 @@ class AppPresenter(
     @Serializable data class GroupDetails(val groupId: String) : Config
 
     @Serializable data object BlockedWords : Config
+
+    @Serializable data object PodcastHome : Config
   }
 
   @Serializable

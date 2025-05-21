@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package dev.sasikanth.rss.reader.home.ui
+package dev.podcast.home.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -40,6 +40,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.RssFeed
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
@@ -98,6 +99,7 @@ internal fun HomeTopAppBar(
   modifier: Modifier = Modifier,
   onSearchClicked: () -> Unit,
   onBookmarksClicked: () -> Unit,
+  onRssFeedClicked: () -> Unit,
   onSettingsClicked: () -> Unit,
   onPostTypeChanged: (PostsType) -> Unit,
   onMarkPostsAsRead: (Source?) -> Unit,
@@ -152,6 +154,16 @@ internal fun HomeTopAppBar(
     ) {
       Icon(
         imageVector = Icons.Outlined.BookmarkBorder,
+        contentDescription = LocalStrings.current.bookmarks,
+        tint = AppTheme.colorScheme.tintedForeground
+      )
+    }
+
+    IconButton(
+      onClick = onRssFeedClicked,
+    ) {
+      Icon(
+        imageVector = Icons.Outlined.RssFeed,
         contentDescription = LocalStrings.current.bookmarks,
         tint = AppTheme.colorScheme.tintedForeground
       )

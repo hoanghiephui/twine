@@ -28,3 +28,7 @@ androidApp/release
 .idea/shelf
 gradle.xml
 *.iml
+/.idea/graphql-settings.xml
+/.idea/inspectionProfiles
+/.idea/migrations.xml
+/.idea/other.xml

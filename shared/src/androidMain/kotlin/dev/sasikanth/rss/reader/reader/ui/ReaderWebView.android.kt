@@ -19,6 +19,7 @@ package dev.sasikanth.rss.reader.reader.ui
 import android.annotation.SuppressLint
 import android.graphics.Color
 import android.webkit.JavascriptInterface
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
@@ -77,7 +78,12 @@ actual fun ReaderWebView(
   AndroidView(
     factory = { context ->
       WebView(context).apply {
-        settings.javaScriptEnabled = true
+        settings.apply {
+          javaScriptEnabled = true
+          loadsImagesAutomatically = true // Enable image loading
+          domStorageEnabled = true
+          mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+        }
         setBackgroundColor(Color.TRANSPARENT)
         addJavascriptInterface(ReaderJSInterface(), "ReaderJSInterface")
       }

@@ -93,6 +93,7 @@ class HomePresenter(
   @Assisted private val openFeedInfoSheet: (feedId: String) -> Unit,
   @Assisted private val openAddFeedScreen: () -> Unit,
   @Assisted private val openGroupScreen: (groupId: String) -> Unit,
+  @Assisted private val openPodcastScreen: () -> Unit,
 ) : ComponentContext by componentContext {
 
   internal val feedsPresenter =
@@ -150,6 +151,7 @@ class HomePresenter(
       is HomeEvent.BookmarksClicked -> openBookmarks()
       is HomeEvent.SettingsClicked -> openSettings()
       is HomeEvent.OnPostClicked -> openPost(event.postIndex, event.post)
+      is HomeEvent.SwitchToPodcast -> openPodcastScreen()
       else -> {
         // no-op
       }
@@ -212,6 +214,7 @@ class HomePresenter(
         HomeEvent.MarkScrolledPostsAsRead -> markScrolledPostsAsRead()
         is HomeEvent.MarkFeaturedPostsAsRead -> markFeaturedPostAsRead(event.postId)
         is HomeEvent.UpdateCurrentDateTime -> updateCurrentDateTime(event.dateTime)
+        HomeEvent.SwitchToPodcast -> {}
       }
     }
 
@@ -443,6 +446,7 @@ internal typealias HomePresenterFactory =
     openFeedInfoSheet: (feedId: String) -> Unit,
     openAddFeedScreen: () -> Unit,
     openGroupScreen: (groupId: String) -> Unit,
+    openPodcastScreen: () -> Unit
   ) -> HomePresenter
 
 private typealias OpenPost = (postIndex: Int, post: PostWithMetadata) -> Unit

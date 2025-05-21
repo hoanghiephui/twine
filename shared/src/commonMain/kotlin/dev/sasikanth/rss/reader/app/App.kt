@@ -32,9 +32,9 @@ import coil3.compose.setSingletonImageLoaderFactory
 import com.arkivanov.decompose.ExperimentalDecomposeApi
 import com.arkivanov.decompose.extensions.compose.experimental.stack.ChildStack
 import com.arkivanov.decompose.extensions.compose.experimental.stack.animation.StackAnimation
-import com.arkivanov.decompose.extensions.compose.experimental.stack.animation.plus
 import com.arkivanov.decompose.extensions.compose.subscribeAsState
 import com.arkivanov.essenty.backhandler.BackHandler
+import dev.podcast.home.ui.PodcastHomeScreen
 import dev.sasikanth.rss.reader.about.ui.AboutScreen
 import dev.sasikanth.rss.reader.addfeed.ui.AddFeedScreen
 import dev.sasikanth.rss.reader.blockedwords.BlockedWordsScreen
@@ -184,6 +184,24 @@ fun App(
               BlockedWordsScreen(
                 modifier = fillMaxSizeModifier,
                 presenter = screen.presenter,
+              )
+            }
+            is Screen.PodcastHome -> {
+              PodcastHomeScreen(
+                modifier = fillMaxSizeModifier,
+                homePresenter = screen.presenter,
+                useDarkTheme = useDarkTheme,
+                onBottomSheetStateChanged = { sheetValue ->
+                  val showDarkStatusBar =
+                    if (sheetValue == SheetValue.Expanded) {
+                      true
+                    } else {
+                      useDarkTheme
+                    }
+
+                  toggleLightStatusBar(showDarkStatusBar.not())
+                },
+                onBottomSheetHidden = { isHidden -> toggleLightNavBar(isHidden) },
               )
             }
           }
