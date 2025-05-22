@@ -113,6 +113,16 @@ async function parseReaderContent(link, html, bannerImage, fetchFullArticle) {
 
   const parseResult = await parse(doc.body.innerHTML, link);
   const turndownService = new TurndownService()
+  turndownService.addRule('fixImageSrc', {
+    filter: 'img',
+    replacement: function (content, node) {
+      const alt = node.getAttribute('alt') || ''
+      const realSrc = node.getAttribute('data-src') || node.getAttribute('data-original') || node.getAttribute('src') || ''
+      const title = node.getAttribute('title')
+      const titlePart = title ? ` "${title}"` : ''
+      return `![${alt}](${realSrc}${titlePart})`
+    }
+  })
   const markdown = turndownService.turndown(parseResult.content)
   return JSON.stringify({ content: markdown, excerpt: parseResult.excerpt });
 }
