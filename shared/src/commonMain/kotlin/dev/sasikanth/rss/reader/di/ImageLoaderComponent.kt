@@ -20,6 +20,7 @@ import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
+import coil3.request.CachePolicy
 import dev.sasikanth.rss.reader.app.AppInfo
 import me.tatarka.inject.annotations.Provides
 import okio.Path.Companion.toPath
@@ -36,9 +37,12 @@ interface ImageLoaderComponent : ImageLoaderPlatformComponent {
     appInfo: AppInfo,
   ): ImageLoader {
     return ImageLoader.Builder(platformContext)
+      .memoryCachePolicy(CachePolicy.ENABLED)
       .memoryCache { MemoryCache.Builder().maxSizePercent(platformContext, percent = 0.25).build() }
+      .diskCachePolicy(CachePolicy.ENABLED)
       .diskCache {
         DiskCache.Builder()
+          .maxSizeBytes(50L * 1024L * 1024L)
           .directory(appInfo.cachePath().toPath().resolve("dev_sasikanth_rss_reader_images_cache"))
           .build()
       }
