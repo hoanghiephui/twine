@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Sasikanth Miriyampalli
+ * Copyright 2025 CoinDex
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,22 +14,17 @@
  * limitations under the License.
  */
 
-plugins {
-  alias(libs.plugins.kotlin.multiplatform)
-  alias(libs.plugins.kotlin.serialization)
-}
+package dev.sasikanth.rss.reader.core.network.podcast
 
-kotlin {
-  jvm()
-  listOf(iosX64(), iosArm64(), iosSimulatorArm64())
+import de.jensklingenberg.ktorfit.http.GET
+import de.jensklingenberg.ktorfit.http.Path
+import dev.sasikanth.rss.reader.core.model.remote.podcast.ItunesTopPodcastResponse
 
-  sourceSets {
-    commonMain.dependencies {
-      implementation(libs.kotlinx.datetime)
-      implementation(libs.kotlinx.serialization.json)
-      // Require this for `@Immutable` annotation for models
-      implementation(libs.compose.runtime)
-      implementation(libs.uuid)
-    }
-  }
+interface ItunesApi {
+
+  @GET("{country}/rss/toppodcasts/limit={limit}/explicit=true/json")
+  suspend fun getTopPodcast(
+    @Path("country") country: String,
+    @Path("limit") limit: Int
+  ): ItunesTopPodcastResponse
 }

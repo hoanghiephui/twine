@@ -46,7 +46,7 @@ kotlin {
     )
   // spotless:on
 
-  listOf(iosArm64(), iosSimulatorArm64()).forEach { iOSTarget ->
+  listOf(iosX64(), iosArm64(), iosSimulatorArm64()).forEach { iOSTarget ->
     iOSTarget.binaries.framework {
       baseName = "shared"
       isStatic = true
@@ -174,6 +174,7 @@ android {
 dependencies {
   // https://github.com/google/ksp/pull/1021
   add("kspAndroid", libs.kotlininject.compiler)
+  add("kspIosX64", libs.kotlininject.compiler)
   add("kspIosArm64", libs.kotlininject.compiler)
   add("kspIosSimulatorArm64", libs.kotlininject.compiler)
 }

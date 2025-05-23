@@ -21,6 +21,8 @@ plugins {
   alias(libs.plugins.kotlin.multiplatform)
   alias(libs.plugins.android.library)
   alias(libs.plugins.kotlin.serialization)
+  alias(libs.plugins.ksp)
+  alias(libs.plugins.ktorfit)
 }
 
 kotlin {
@@ -28,7 +30,7 @@ kotlin {
 
   @Suppress("OPT_IN_USAGE")
   androidTarget { instrumentedTestVariant.sourceSetTree.set(KotlinSourceSetTree.test) }
-  listOf(iosArm64(), iosSimulatorArm64())
+  listOf(iosX64(), iosArm64(), iosSimulatorArm64())
 
   sourceSets {
     commonMain.dependencies {
@@ -41,13 +43,20 @@ kotlin {
       implementation(libs.kotlininject.runtime)
       implementation(libs.ktor.core)
       implementation(libs.ktor.client.logging)
+      implementation(libs.ktor.client.content.negotiation)
+      implementation(libs.ktor.client.serialization)
       implementation(libs.kotlinx.serialization.json)
+      implementation(libs.ktor.serialization.json)
       implementation(libs.ksoup)
       implementation(libs.ksoup.kotlinx.io)
       implementation(libs.ktxml)
       implementation(libs.kermit)
       implementation(libs.crashkios.bugsnag)
       api(libs.korlibs.string)
+
+      // ktorfit
+      implementation(libs.ktorfit)
+      implementation(libs.ktorfit.call)
     }
     commonTest.dependencies { implementation(libs.kotlin.test) }
 
