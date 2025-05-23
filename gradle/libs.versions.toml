@@ -9,7 +9,7 @@ android_sdk_compile = "35"
 android_sdk_target = "35"
 android_sdk_min = "26"
 
-sqldelight = "2.0.2"
+sqldelight = "2.1.0"
 ktor = "3.1.3"
 kotlinx_coroutines = "1.10.2"
 kotlinx_date_time = "0.6.2"
@@ -56,7 +56,7 @@ filekit = "0.8.8"
 leakcanary = "2.14"
 markdown = "0.34.0"
 shadow = "2.0.3"
-haze = "1.6.0"
+haze = "1.6.2"
 
 [libraries]
 compose_runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "compose" }
