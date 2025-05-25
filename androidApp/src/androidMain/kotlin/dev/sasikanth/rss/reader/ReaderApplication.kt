@@ -26,6 +26,7 @@ import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
 import co.touchlab.crashkios.bugsnag.enableBugsnag
 import com.bugsnag.android.Bugsnag
+import dev.podcast.configureLogger
 import dev.sasikanth.rss.reader.di.ApplicationComponent
 import dev.sasikanth.rss.reader.di.create
 
@@ -87,6 +88,7 @@ class ReaderApplication : Application(), Configuration.Provider {
       Bugsnag.start(this)
       enableBugsnag()
     }
+    configureLogger(BuildConfig.DEBUG)
 
     enqueuePeriodicFeedsRefresh()
     enqueuePeriodicPostsCleanUp()

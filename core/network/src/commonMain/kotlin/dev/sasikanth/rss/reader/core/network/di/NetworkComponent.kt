@@ -15,7 +15,6 @@
  */
 package dev.sasikanth.rss.reader.core.network.di
 
-import co.touchlab.kermit.Logger as KermitLogger
 import de.jensklingenberg.ktorfit.Ktorfit
 import de.jensklingenberg.ktorfit.converter.CallConverterFactory
 import dev.sasikanth.rss.reader.core.network.podcast.ItunesApi
@@ -30,77 +29,111 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logger
 import io.ktor.client.plugins.logging.Logging
+import io.ktor.http.ContentType
+import io.ktor.serialization.kotlinx.KotlinxSerializationConverter
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import me.tatarka.inject.annotations.Component
 import me.tatarka.inject.annotations.Provides
 import me.tatarka.inject.annotations.Qualifier
+import co.touchlab.kermit.Logger as KermitLogger
 
 expect interface NetworkComponent
 
-@Qualifier annotation class PodcastApiService
+@Qualifier
+@Target(
+    AnnotationTarget.PROPERTY_GETTER,
+    AnnotationTarget.FUNCTION,
+    AnnotationTarget.VALUE_PARAMETER,
+    AnnotationTarget.TYPE
+)
+annotation class PodcastApiService
+
+@Qualifier
+@Target(
+    AnnotationTarget.PROPERTY_GETTER,
+    AnnotationTarget.FUNCTION,
+    AnnotationTarget.VALUE_PARAMETER,
+    AnnotationTarget.TYPE
+)
+annotation class RssApiService
 
 fun <T : HttpClientEngineConfig> httpClient(
-  engine: HttpClientEngineFactory<T>,
-  config: T.() -> Unit
+    engine: HttpClientEngineFactory<T>,
+    config: T.() -> Unit
 ): HttpClient {
-  return HttpClient(engine) {
-    followRedirects = false
+    return HttpClient(engine) {
+        followRedirects = false
 
-    engine { config() }
+        engine { config() }
 
-    install(HttpCache)
+        install(HttpCache)
 
-    install(Logging) {
-      level = LogLevel.ALL
-      logger =
-        object : Logger {
-          override fun log(message: String) {
-            KermitLogger.v("HttpClient") { message.lines().joinToString { "\n\t\t$it" } }
-          }
+        install(Logging) {
+            level = LogLevel.ALL
+            logger =
+                object : Logger {
+                    override fun log(message: String) {
+                        KermitLogger.v("HttpClient") {
+                            message.lines().joinToString { "\n\t\t$it" }
+                        }
+                    }
+                }
         }
     }
-  }
 }
 
-@get:Provides
-@get:AppScope
-val json = Json {
-  ignoreUnknownKeys = true
-  isLenient = true
-  explicitNulls = false
-  encodeDefaults = true
-  coerceInputValues = true
-}
-
-@Provides
 @AppScope
-@PodcastApiService
-fun provideHttpClient(
-  json: Json,
-): HttpClient = HttpClient {
-  install(ContentNegotiation) { json(json) }
-  install(Logging) {
-    logger =
-      object : Logger {
-        override fun log(message: String) {
-          KermitLogger.v("Podcast HttpClient") { message.lines().joinToString { "\n\t\t$it" } }
+@Component
+interface NetworkComponentImpl {
+    @Provides
+    @AppScope
+    fun json() = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+        explicitNulls = false
+        encodeDefaults = true
+        coerceInputValues = true
+    }
+
+    @Provides
+    @AppScope
+    fun provideHttpClient(
+        json: Json,
+    ): @PodcastApiService HttpClient = HttpClient {
+        install(ContentNegotiation) {
+            register(
+                ContentType.Text.JavaScript,
+                KotlinxSerializationConverter(json)
+            )
+            json(json)
         }
-      }
-    level = LogLevel.ALL
-  }
-  install(HttpTimeout) {
-    requestTimeoutMillis = 60000
-    socketTimeoutMillis = 60000
-    connectTimeoutMillis = 60000
-  }
+        install(Logging) {
+            logger =
+                object : io.ktor.client.plugins.logging.Logger {
+                    override fun log(message: String) {
+                        co.touchlab.kermit.Logger.v("Podcast HttpClient") {
+                            message.lines().joinToString { "\n\t\t$it" }
+                        }
+                    }
+                }
+            level = LogLevel.ALL
+        }
+        install(HttpTimeout) {
+            requestTimeoutMillis = 60000
+            socketTimeoutMillis = 60000
+            connectTimeoutMillis = 60000
+        }
+    }
+
+    @Provides
+    @AppScope
+    fun provideItunesApi(@PodcastApiService client: HttpClient): ItunesApi =
+        Ktorfit.Builder()
+            .converterFactories(CallConverterFactory())
+            .httpClient(client)
+            .baseUrl("https://itunes.apple.com/")
+            .build()
+            .createItunesApi()
 }
 
-@Provides
-@AppScope
-fun provideItunesApi(@PodcastApiService client: HttpClient): ItunesApi =
-  Ktorfit.Builder()
-    .converterFactories(CallConverterFactory())
-    .httpClient(client)
-    .baseUrl("https://itunes.apple.com/")
-    .build()
-    .createItunesApi()

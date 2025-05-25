@@ -22,6 +22,7 @@ import com.arkivanov.essenty.backhandler.BackCallback
 import com.arkivanov.essenty.instancekeeper.InstanceKeeper
 import com.arkivanov.essenty.instancekeeper.getOrCreate
 import com.arkivanov.essenty.lifecycle.doOnCreate
+import dev.sasikanth.rss.reader.data.repository.podcast.ItunesRepository
 import dev.sasikanth.rss.reader.home.HomeState
 import dev.sasikanth.rss.reader.util.DispatchersProvider
 import kotlinx.coroutines.CoroutineScope
@@ -29,6 +30,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -41,6 +45,7 @@ import me.tatarka.inject.annotations.Inject
 @Inject
 class PodcastHomePresenter(
   dispatchersProvider: DispatchersProvider,
+  itunesRepository: ItunesRepository,
   @Assisted componentContext: ComponentContext,
   @Assisted private val openSearch: () -> Unit,
   @Assisted private val openBookmarks: () -> Unit,
@@ -59,6 +64,7 @@ class PodcastHomePresenter(
     instanceKeeper.getOrCreate {
       PresenterInstance(
         dispatchersProvider = dispatchersProvider,
+        itunesRepository = itunesRepository
       )
     }
 
@@ -89,6 +95,7 @@ class PodcastHomePresenter(
 
   private class PresenterInstance(
     dispatchersProvider: DispatchersProvider,
+    private val itunesRepository: ItunesRepository
   ) : InstanceKeeper.Instance {
 
     private val coroutineScope = CoroutineScope(SupervisorJob() + dispatchersProvider.main)
@@ -148,7 +155,19 @@ class PodcastHomePresenter(
       }
     }
 
-    private fun init() {}
+    private fun init() {
+      coroutineScope.launch {
+        itunesRepository.getTopPodcast(country = "VN", 25)
+          .onEach { feed -> /*_state.update { it.copy(feed = feed) }*/
+            println("feed: $feed")
+          }
+          .catch {
+            // no-op
+            // When we delete a feed, this flow crashes because, that feed is no longer available
+          }
+          .launchIn(coroutineScope)
+      }
+    }
 
     private fun refreshContent() {}
   }

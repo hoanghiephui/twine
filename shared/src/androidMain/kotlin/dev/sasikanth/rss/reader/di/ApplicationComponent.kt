@@ -21,6 +21,7 @@ import android.os.Build
 import dev.sasikanth.rss.reader.app.AppInfo
 import dev.sasikanth.rss.reader.data.repository.RssRepository
 import dev.sasikanth.rss.reader.data.repository.SettingsRepository
+import dev.sasikanth.rss.reader.data.repository.podcast.ItunesRepository
 import dev.sasikanth.rss.reader.di.scopes.AppScope
 import me.tatarka.inject.annotations.Component
 import me.tatarka.inject.annotations.Provides
@@ -28,33 +29,35 @@ import me.tatarka.inject.annotations.Provides
 @AppScope
 @Component
 abstract class ApplicationComponent(@get:Provides val context: Context) :
-  SharedApplicationComponent() {
+    SharedApplicationComponent() {
 
-  abstract val rssRepository: RssRepository
+    abstract val rssRepository: RssRepository
 
-  abstract val settingsRepository: SettingsRepository
+    abstract val settingsRepository: SettingsRepository
 
-  @Provides
-  @AppScope
-  fun providesAppInfo(context: Context): AppInfo {
-    val packageManager = context.packageManager
-    val packageInfo = packageManager.getPackageInfo(context.packageName, 0)
-    val applicationInfo = packageManager.getApplicationInfo(context.packageName, 0)
+    abstract val itunesRepository: ItunesRepository
 
-    val versionCode =
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-        (packageInfo.longVersionCode and 0xffffffffL).toInt()
-      } else {
-        @Suppress("DEPRECATION") packageInfo.versionCode
-      }
+    @Provides
+    @AppScope
+    fun providesAppInfo(context: Context): AppInfo {
+        val packageManager = context.packageManager
+        val packageInfo = packageManager.getPackageInfo(context.packageName, 0)
+        val applicationInfo = packageManager.getApplicationInfo(context.packageName, 0)
 
-    return AppInfo(
-      versionName = packageInfo.versionName ?: "0.0.1",
-      versionCode = versionCode,
-      isDebugBuild = (applicationInfo.flags and FLAG_DEBUGGABLE) != 0,
-      cachePath = { context.cacheDir.absolutePath }
-    )
-  }
+        val versionCode =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                (packageInfo.longVersionCode and 0xffffffffL).toInt()
+            } else {
+                @Suppress("DEPRECATION") packageInfo.versionCode
+            }
 
-  companion object
+        return AppInfo(
+            versionName = packageInfo.versionName ?: "0.0.1",
+            versionCode = versionCode,
+            isDebugBuild = (applicationInfo.flags and FLAG_DEBUGGABLE) != 0,
+            cachePath = { context.cacheDir.absolutePath }
+        )
+    }
+
+    companion object
 }

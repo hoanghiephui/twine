@@ -21,6 +21,7 @@ import com.fleeksoft.ksoup.Ksoup
 import com.fleeksoft.ksoup.parseMetaData
 import dev.sasikanth.rss.reader.core.model.remote.FeedPayload
 import dev.sasikanth.rss.reader.core.model.remote.PostPayload
+import dev.sasikanth.rss.reader.core.network.di.RssApiService
 import dev.sasikanth.rss.reader.core.network.parser.common.HtmlContentParser
 import dev.sasikanth.rss.reader.core.network.parser.xml.XmlFeedParser.Companion.ATTR_HREF
 import dev.sasikanth.rss.reader.core.network.parser.xml.XmlFeedParser.Companion.ATTR_REL
@@ -53,6 +54,7 @@ import org.kobjects.ktxml.api.XmlPullParser
 
 @Inject
 class AtomContentParser(
+  @RssApiService
   private val httpClient: HttpClient,
 ) : XmlContentParser() {
 

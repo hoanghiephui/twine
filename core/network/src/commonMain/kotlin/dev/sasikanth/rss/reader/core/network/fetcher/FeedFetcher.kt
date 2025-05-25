@@ -17,6 +17,7 @@ package dev.sasikanth.rss.reader.core.network.fetcher
 
 import com.fleeksoft.ksoup.Ksoup
 import com.fleeksoft.ksoup.parseSource
+import dev.sasikanth.rss.reader.core.network.di.RssApiService
 import dev.sasikanth.rss.reader.core.network.parser.json.JsonFeedParser
 import dev.sasikanth.rss.reader.core.network.parser.xml.XmlFeedParser
 import dev.sasikanth.rss.reader.core.network.parser.xml.XmlFeedParser.Companion.ATOM_MEDIA_TYPE
@@ -47,6 +48,7 @@ import me.tatarka.inject.annotations.Inject
 
 @Inject
 class FeedFetcher(
+  @RssApiService
   private val httpClient: HttpClient,
   private val xmlFeedParser: XmlFeedParser,
   private val jsonFeedParser: JsonFeedParser,

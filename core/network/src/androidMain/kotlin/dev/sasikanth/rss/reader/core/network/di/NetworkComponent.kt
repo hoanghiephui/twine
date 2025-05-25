@@ -26,7 +26,7 @@ actual interface NetworkComponent {
 
   @Provides
   @AppScope
-  fun providesHttpClient(): HttpClient {
+  fun providesHttpClient(): @RssApiService HttpClient {
     return httpClient(
       engine = OkHttp,
       config = {
