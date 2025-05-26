@@ -1,8 +1,3 @@
-@file:Suppress(
-  "CANNOT_OVERRIDE_INVISIBLE_MEMBER",
-  "INVISIBLE_MEMBER",
-  "INVISIBLE_REFERENCE",
-)
 /*
  * Copyright 2024 Sasikanth Miriyampalli
  *
@@ -119,7 +114,6 @@ import com.mikepenz.markdown.compose.elements.MarkdownHighlightedCodeFence
 import com.mikepenz.markdown.m3.markdownColor
 import com.mikepenz.markdown.m3.markdownTypography
 import com.mikepenz.markdown.model.Input
-import com.mikepenz.markdown.model.MarkdownState
 import com.mikepenz.markdown.model.ReferenceLinkHandlerImpl
 import com.mikepenz.markdown.model.State
 import com.mikepenz.markdown.model.markdownAnimations
@@ -134,6 +128,7 @@ import dev.sasikanth.rss.reader.core.model.local.PostWithMetadata
 import dev.sasikanth.rss.reader.home.ui.FeaturedImage
 import dev.sasikanth.rss.reader.home.ui.PostMetadataConfig
 import dev.sasikanth.rss.reader.markdown.CoilMarkdownTransformer
+import dev.sasikanth.rss.reader.markdown.MarkdownStateImpl
 import dev.sasikanth.rss.reader.markdown.handleElement
 import dev.sasikanth.rss.reader.platform.LocalLinkHandler
 import dev.sasikanth.rss.reader.reader.ReaderEvent
@@ -441,7 +436,7 @@ private fun ReaderPage(
           referenceLinkHandler = ReferenceLinkHandlerImpl(),
         )
 
-      MarkdownState(input)
+      MarkdownStateImpl(input)
     }
 
   LaunchedEffect(parsedMarkdownState) { parsedMarkdownState.parse() }
@@ -820,7 +815,6 @@ private fun PostInfo(
       text = title.ifBlank { description },
       style = MaterialTheme.typography.headlineSmall,
       color = AppTheme.colorScheme.onSurface,
-      maxLines = 3,
       overflow = TextOverflow.Ellipsis,
     )
 
