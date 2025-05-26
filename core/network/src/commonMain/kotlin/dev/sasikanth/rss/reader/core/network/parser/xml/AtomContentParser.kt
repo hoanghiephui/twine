@@ -58,6 +58,8 @@ class AtomContentParser(
   private val httpClient: HttpClient,
 ) : XmlContentParser() {
 
+  private val youTubeIconHttpClient = httpClient.config { followRedirects = true }
+
   override suspend fun parse(feedUrl: String, parser: XmlPullParser): FeedPayload {
     parser.require(EventType.START_TAG, parser.namespace, TAG_ATOM_FEED)
 
@@ -113,7 +115,7 @@ class AtomContentParser(
   }
 
   private suspend fun youtubeChannelImage(link: String): String {
-    val response = httpClient.get(urlString = link)
+    val response = youTubeIconHttpClient.get(urlString = link)
     return Ksoup.parseMetaData(response.bodyAsChannel().asSource().asInputStream(), baseUri = link)
       .ogImage!!
   }
