@@ -31,7 +31,9 @@ import dev.sasikanth.rss.reader.core.model.local.Source
 import dev.sasikanth.rss.reader.data.repository.ObservableActiveSource
 import dev.sasikanth.rss.reader.data.repository.RssRepository
 import dev.sasikanth.rss.reader.data.repository.SettingsRepository
-import dev.sasikanth.rss.reader.reader.ReaderScreenArgs.FromScreen.*
+import dev.sasikanth.rss.reader.reader.ReaderScreenArgs.FromScreen.Bookmarks
+import dev.sasikanth.rss.reader.reader.ReaderScreenArgs.FromScreen.Home
+import dev.sasikanth.rss.reader.reader.ReaderScreenArgs.FromScreen.Search
 import dev.sasikanth.rss.reader.util.DispatchersProvider
 import dev.sasikanth.rss.reader.utils.getLast24HourStart
 import dev.sasikanth.rss.reader.utils.getTodayStartInstant
@@ -99,12 +101,13 @@ class ReaderPresenter(
     private val coroutineScope = CoroutineScope(SupervisorJob() + dispatchersProvider.main)
     private val openedPostItems = mutableSetOf<String>()
 
-    private val _state = MutableStateFlow(ReaderState.default(readerScreenArgs.postIndex))
+    private val defaultReaderState = ReaderState.default(initialPostId = readerScreenArgs.postId)
+    private val _state = MutableStateFlow(defaultReaderState)
     val state: StateFlow<ReaderState> =
       _state.stateIn(
         scope = coroutineScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = ReaderState.default(readerScreenArgs.postIndex)
+        initialValue = defaultReaderState
       )
 
     init {
@@ -141,6 +144,7 @@ class ReaderPresenter(
 
     private fun postPageChange(post: PostWithMetadata) {
       openedPostItems += post.id
+      _state.update { it.copy(activePostId = post.id) }
     }
 
     private fun loadFullArticleClicked(postId: String) {
@@ -179,6 +183,7 @@ class ReaderPresenter(
                   pageSize = 4,
                   enablePlaceholders = false,
                 ),
+              initialKey = readerScreenArgs.postIndex,
             ) {
               when (readerScreenArgs.fromScreen) {
                 Home -> {
@@ -256,6 +261,7 @@ internal typealias ReaderPresenterFactory =
 @Serializable
 data class ReaderScreenArgs(
   val postIndex: Int,
+  val postId: String,
   val fromScreen: FromScreen,
 ) {
 

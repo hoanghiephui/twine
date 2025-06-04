@@ -96,8 +96,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.paging.LoadState
 import app.cash.paging.compose.collectAsLazyPagingItems
-import app.cash.paging.compose.itemKey
 import com.adamglin.composeshadow.dropShadow
 import com.mikepenz.markdown.compose.LocalImageTransformer
 import com.mikepenz.markdown.compose.LocalMarkdownAnimations
@@ -141,7 +141,6 @@ import dev.sasikanth.rss.reader.resources.icons.OpenBrowser
 import dev.sasikanth.rss.reader.resources.icons.Settings
 import dev.sasikanth.rss.reader.resources.icons.Share
 import dev.sasikanth.rss.reader.resources.icons.TwineIcons
-import dev.sasikanth.rss.reader.resources.strings.LocalStrings
 import dev.sasikanth.rss.reader.share.LocalShareHandler
 import dev.sasikanth.rss.reader.ui.AppTheme
 import dev.sasikanth.rss.reader.ui.LocalAppColorScheme
@@ -161,6 +160,16 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import org.intellij.markdown.parser.MarkdownParser
+import org.jetbrains.compose.resources.stringResource
+import twine.shared.generated.resources.Res
+import twine.shared.generated.resources.bookmark
+import twine.shared.generated.resources.cdLoadFullArticle
+import twine.shared.generated.resources.comingSoon
+import twine.shared.generated.resources.comments
+import twine.shared.generated.resources.openWebsite
+import twine.shared.generated.resources.readerSettings
+import twine.shared.generated.resources.share
+import twine.shared.generated.resources.unBookmark
 
 private val json = Json {
   ignoreUnknownKeys = true
@@ -174,12 +183,10 @@ internal fun ReaderScreen(
   presenter: ReaderPresenter,
   modifier: Modifier = Modifier
 ) {
+  val coroutineScope = rememberCoroutineScope()
   val state by presenter.state.collectAsState()
   val posts = state.posts.collectAsLazyPagingItems()
-  val pagerState = rememberPagerState(initialPage = state.initialIndex) { posts.itemCount }
-  val coroutineScope = rememberCoroutineScope()
   val linkHandler = LocalLinkHandler.current
-  val scrollBehaviour = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
   val seedColorExtractor = LocalSeedColorExtractor.current
   // Using theme colors as default from the home screen
   // before we create dynamic content theme
@@ -197,23 +204,9 @@ internal fun ReaderScreen(
       }
     }
   }
+  val pagerState = rememberPagerState { posts.itemCount }
 
-  LaunchedEffect(pagerState, posts.loadState) {
-    snapshotFlow { pagerState.settledPage }
-      .distinctUntilChanged()
-      .collectLatest { page ->
-        val readerPost =
-          try {
-            posts[page]
-          } catch (e: IndexOutOfBoundsException) {
-            null
-          }
-        if (readerPost != null) {
-          presenter.dispatch(ReaderEvent.PostPageChanged(readerPost))
-        }
-      }
-  }
-
+  // Dynamic theme animator
   LaunchedEffect(pagerState, posts.loadState) {
     snapshotFlow {
         val settledPage = pagerState.settledPage
@@ -224,14 +217,10 @@ internal fun ReaderScreen(
         }
       }
       .collect { offset ->
-        val readerPost =
-          try {
-            posts[pagerState.settledPage]
-          } catch (e: IndexOutOfBoundsException) {
-            null
-          }
+        val settledPage = pagerState.settledPage
+        val activePost = runCatching { posts.peek(settledPage) }.getOrNull()
 
-        if (readerPost != null) {
+        if (activePost != null) {
           // The default snap position of the pager is 0.5f, that means the targetPage
           // state only changes after reaching half way point. We instead want it to scale
           // as we start swiping.
@@ -239,19 +228,18 @@ internal fun ReaderScreen(
           // Instead of using EPSILON for snap threshold, we are doing that calculation
           // as the page offset changes
           //
-          val currentItem = readerPost
           val fromItem =
             if (offset < -EPSILON) {
-              posts[pagerState.settledPage - 1]
+              runCatching { posts.peek(settledPage - 1) }.getOrNull()
             } else {
-              currentItem
+              activePost
             }
 
           val toItem =
             if (offset > EPSILON) {
-              posts[pagerState.settledPage + 1]
+              runCatching { posts.peek(settledPage + 1) }.getOrNull()
             } else {
-              currentItem
+              activePost
             }
 
           val fromSeedColor =
@@ -277,6 +265,8 @@ internal fun ReaderScreen(
     LocalUriHandler provides readerLinkHandler
   ) {
     val snackbarHostState = remember { SnackbarHostState() }
+    val scrollBehaviour = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
     AppTheme(useDarkTheme = darkTheme) {
       Scaffold(
         modifier = modifier.fillMaxSize().nestedScroll(scrollBehaviour.nestedScrollConnection),
@@ -307,20 +297,20 @@ internal fun ReaderScreen(
               }
             },
             title = {
-              val pageIndicatorState = remember {
-                object : PageIndicatorState {
-                  override val pageOffset: Float
-                    get() = pagerState.currentPageOffsetFraction
-
-                  override val selectedPage: Int
-                    get() = pagerState.currentPage
-
-                  override val pageCount: Int
-                    get() = pagerState.pageCount
-                }
-              }
-
               if (pagerState.pageCount > 1) {
+                val pageIndicatorState = remember {
+                  object : PageIndicatorState {
+                    override val pageOffset: Float
+                      get() = pagerState.currentPageOffsetFraction
+
+                    override val selectedPage: Int
+                      get() = pagerState.currentPage
+
+                    override val pageCount: Int
+                      get() = pagerState.pageCount
+                  }
+                }
+
                 HorizontalPageIndicators(
                   pageIndicatorState = pageIndicatorState,
                 )
@@ -331,11 +321,11 @@ internal fun ReaderScreen(
         bottomBar = {
           val readerPost =
             try {
-              posts[pagerState.settledPage]
+              posts.peek(pagerState.settledPage)
             } catch (e: IndexOutOfBoundsException) {
               null
             }
-          val comingSoonString = LocalStrings.current.comingSoon
+          val comingSoonString = stringResource(Res.string.comingSoon)
 
           if (readerPost != null) {
             BottomBar(
@@ -368,13 +358,42 @@ internal fun ReaderScreen(
           remember(darkTheme) {
             Highlights.Builder().theme(SyntaxThemes.atom(darkMode = darkTheme))
           }
+        val adjustedInitialPage =
+          remember(posts.itemSnapshotList, state.activePostId, posts.loadState) {
+            if (posts.loadState.refresh is LoadState.NotLoading) {
+              posts.itemSnapshotList.indexOfFirst { it?.id == state.activePostId }
+            } else {
+              -1
+            }
+          }
+
+        LaunchedEffect(adjustedInitialPage) {
+          if (adjustedInitialPage != -1) {
+            pagerState.scrollToPage(adjustedInitialPage)
+          }
+        }
+
+        LaunchedEffect(pagerState, posts.loadState) {
+          snapshotFlow { pagerState.settledPage }
+            .distinctUntilChanged()
+            .collectLatest { page ->
+              val readerPost = runCatching { posts.peek(page) }.getOrNull()
+
+              if (readerPost != null) {
+                presenter.dispatch(ReaderEvent.PostPageChanged(readerPost))
+              }
+            }
+        }
 
         HorizontalPager(
           modifier = modifier,
           state = pagerState,
-          key = posts.itemKey { it.id },
-          beyondViewportPageCount = 1,
+          key = { page ->
+            val post = posts.peek(page)
+            post?.id ?: page
+          },
           overscrollEffect = null,
+          beyondViewportPageCount = 1,
           contentPadding =
             PaddingValues(
               start = paddingValues.calculateStartPadding(layoutDirection),
@@ -487,7 +506,15 @@ private fun ReaderPage(
       LocalMarkdownExtendedSpans provides markdownExtendedSpans(),
       LocalMarkdownAnimations provides markdownAnimations(),
       LocalMarkdownColors provides markdownColor(),
-      LocalMarkdownTypography provides markdownTypography(),
+      LocalMarkdownTypography provides
+        markdownTypography(
+          h1 = MaterialTheme.typography.displaySmall,
+          h2 = MaterialTheme.typography.headlineLarge,
+          h3 = MaterialTheme.typography.headlineMedium,
+          h4 = MaterialTheme.typography.headlineSmall,
+          h5 = MaterialTheme.typography.titleLarge,
+          h6 = MaterialTheme.typography.titleMedium,
+        ),
     ) {
       LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -674,7 +701,7 @@ private fun BottomBar(
 
         BottomBarIconButton(
           modifier = Modifier.padding(vertical = 12.dp),
-          label = LocalStrings.current.openWebsite,
+          label = stringResource(Res.string.openWebsite),
           icon = TwineIcons.OpenBrowser,
           onClick = openInBrowserClick,
           minWidth = buttonMinWidth
@@ -682,7 +709,7 @@ private fun BottomBar(
 
         BottomBarToggleIconButton(
           modifier = Modifier.fillMaxHeight().padding(vertical = readerViewToggleVerticalPadding),
-          label = LocalStrings.current.cdLoadFullArticle,
+          label = stringResource(Res.string.cdLoadFullArticle),
           icon = TwineIcons.ArticleShortcut,
           onClick = loadFullArticleClick,
           backgroundColor = readerViewToggleBackgroundColor,
@@ -692,7 +719,7 @@ private fun BottomBar(
 
         BottomBarIconButton(
           modifier = Modifier.padding(vertical = 12.dp),
-          label = LocalStrings.current.readerSettings,
+          label = stringResource(Res.string.readerSettings),
           icon = TwineIcons.Settings,
           onClick = openReaderViewSettings,
           minWidth = buttonMinWidth
@@ -924,7 +951,7 @@ private fun PostOptionsButtonRow(
 ) {
   Row(modifier = Modifier.semantics { isTraversalGroup = true }) {
     if (!commentsLink.isNullOrBlank()) {
-      val commentsLabel = LocalStrings.current.comments
+      val commentsLabel = stringResource(Res.string.comments)
       PostOptionIconButton(
         modifier =
           Modifier.semantics {
@@ -937,7 +964,7 @@ private fun PostOptionsButtonRow(
       )
     }
 
-    val sharedLabel = LocalStrings.current.share
+    val sharedLabel = stringResource(Res.string.share)
     PostOptionIconButton(
       modifier =
         Modifier.semantics {
@@ -951,9 +978,9 @@ private fun PostOptionsButtonRow(
 
     val bookmarkLabel =
       if (postBookmarked) {
-        LocalStrings.current.unBookmark
+        stringResource(Res.string.unBookmark)
       } else {
-        LocalStrings.current.bookmark
+        stringResource(Res.string.bookmark)
       }
     PostOptionIconButton(
       modifier =
