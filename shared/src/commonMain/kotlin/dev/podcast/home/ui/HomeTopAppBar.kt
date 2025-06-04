@@ -80,11 +80,21 @@ import dev.sasikanth.rss.reader.core.model.local.Source
 import dev.sasikanth.rss.reader.feeds.ui.FeedGroupIconGrid
 import dev.sasikanth.rss.reader.resources.icons.DropdownIcon
 import dev.sasikanth.rss.reader.resources.icons.TwineIcons
-import dev.sasikanth.rss.reader.resources.strings.LocalStrings
 import dev.sasikanth.rss.reader.ui.AppTheme
 import dev.sasikanth.rss.reader.util.homeAppBarTimestamp
 import dev.sasikanth.rss.reader.utils.LocalShowFeedFavIconSetting
 import kotlinx.datetime.LocalDateTime
+import org.jetbrains.compose.resources.stringResource
+import twine.shared.generated.resources.Res
+import twine.shared.generated.resources.bookmarks
+import twine.shared.generated.resources.markAllAsRead
+import twine.shared.generated.resources.moreMenuOptions
+import twine.shared.generated.resources.postsAll
+import twine.shared.generated.resources.postsLast24Hours
+import twine.shared.generated.resources.postsSearchHint
+import twine.shared.generated.resources.postsToday
+import twine.shared.generated.resources.postsUnread
+import twine.shared.generated.resources.settings
 
 private const val APP_BAR_OPAQUE_THRESHOLD = 200f
 
@@ -144,7 +154,7 @@ internal fun HomeTopAppBar(
     ) {
       Icon(
         imageVector = Icons.Rounded.Search,
-        contentDescription = LocalStrings.current.postsSearchHint,
+        contentDescription = stringResource(Res.string.postsSearchHint),
         tint = AppTheme.colorScheme.tintedForeground
       )
     }
@@ -154,7 +164,7 @@ internal fun HomeTopAppBar(
     ) {
       Icon(
         imageVector = Icons.Outlined.BookmarkBorder,
-        contentDescription = LocalStrings.current.bookmarks,
+        contentDescription = stringResource(Res.string.bookmarks),
         tint = AppTheme.colorScheme.tintedForeground
       )
     }
@@ -164,7 +174,7 @@ internal fun HomeTopAppBar(
     ) {
       Icon(
         imageVector = Icons.Outlined.RssFeed,
-        contentDescription = LocalStrings.current.bookmarks,
+        contentDescription = stringResource(Res.string.bookmarks),
         tint = AppTheme.colorScheme.tintedForeground
       )
     }
@@ -342,13 +352,12 @@ private fun PostsFilterDropdown(
 }
 
 @Composable
-@ReadOnlyComposable
 private fun getPostTypeLabel(type: PostsType) =
   when (type) {
-    PostsType.ALL -> LocalStrings.current.postsAll
-    PostsType.UNREAD -> LocalStrings.current.postsUnread
-    PostsType.TODAY -> LocalStrings.current.postsToday
-    PostsType.LAST_24_HOURS -> LocalStrings.current.postsLast24Hours
+    PostsType.ALL -> stringResource(Res.string.postsAll)
+    PostsType.UNREAD -> stringResource(Res.string.postsUnread)
+    PostsType.TODAY -> stringResource(Res.string.postsToday)
+    PostsType.LAST_24_HOURS -> stringResource(Res.string.postsLast24Hours)
   }
 
 @Composable
@@ -371,7 +380,7 @@ private fun OverflowMenu(
     ) {
       Icon(
         imageVector = Icons.Rounded.MoreVert,
-        contentDescription = LocalStrings.current.moreMenuOptions,
+        contentDescription = stringResource(Res.string.moreMenuOptions),
         tint = AppTheme.colorScheme.tintedForeground
       )
     }
@@ -383,7 +392,7 @@ private fun OverflowMenu(
         onDismissRequest = { dropdownExpanded = false }
       ) {
         if (hasUnreadPosts) {
-          val markAllAsReadLabel = LocalStrings.current.markAllAsRead
+          val markAllAsReadLabel = stringResource(Res.string.markAllAsRead)
           DropdownMenuItem(
             modifier =
               Modifier.clearAndSetSemantics {
@@ -405,7 +414,7 @@ private fun OverflowMenu(
           )
         }
 
-        val settingsLabel = LocalStrings.current.settings
+        val settingsLabel = stringResource(Res.string.settings)
         DropdownMenuItem(
           modifier =
             Modifier.clearAndSetSemantics {

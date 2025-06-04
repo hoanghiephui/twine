@@ -182,7 +182,7 @@ internal fun HomeTopAppBar(
     ) {
       Icon(
         imageVector = Icons.Outlined.Podcasts,
-        contentDescription = LocalStrings.current.bookmarks,
+        contentDescription = stringResource(Res.string.bookmarks),
         tint = AppTheme.colorScheme.tintedForeground
       )
     }

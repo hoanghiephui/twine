@@ -77,7 +77,7 @@ fun PodcastHomeScreen(
   val linkHandler = LocalLinkHandler.current
 
   val posts = state.posts?.collectAsLazyPagingItems()
-  val featuredPosts by featuredPosts(posts).collectAsState(initial = persistentListOf())
+  val featuredPosts by featuredPosts(posts, state.homeViewMode).collectAsState(initial = persistentListOf())
 
   val listState = rememberLazyListState()
   val featuredPostsPagerState = rememberPagerState(pageCount = { featuredPosts.size })

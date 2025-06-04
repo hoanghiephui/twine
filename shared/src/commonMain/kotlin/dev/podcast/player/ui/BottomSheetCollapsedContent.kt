@@ -28,8 +28,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.unit.dp
 import dev.sasikanth.rss.reader.feeds.ui.HomeBottomBarItem
-import dev.sasikanth.rss.reader.resources.strings.LocalStrings
 import dev.sasikanth.rss.reader.ui.AppTheme
+import org.jetbrains.compose.resources.stringResource
+import twine.shared.generated.resources.Res
+import twine.shared.generated.resources.allFeeds
 
 @Composable
 fun BottomSheetCollapsedContent(modifier: Modifier = Modifier) {
@@ -40,7 +42,7 @@ fun BottomSheetCollapsedContent(modifier: Modifier = Modifier) {
       1f to Color.Transparent
     )
 
-  val allFeedsLabel = LocalStrings.current.allFeeds
+  val allFeedsLabel = stringResource(Res.string.allFeeds)
 
   HomeBottomBarItem(
     selected = false,

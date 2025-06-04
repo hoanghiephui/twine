@@ -172,24 +172,24 @@ fun App(
             AppTheme(useDarkTheme = true) {
               AddFeedScreen(presenter = screen.presenter, modifier = fillMaxSizeModifier)
             }
-            is Screen.PodcastHome -> {
-              PodcastHomeScreen(
-                modifier = fillMaxSizeModifier,
-                homePresenter = screen.presenter,
-                useDarkTheme = useDarkTheme,
-                onBottomSheetStateChanged = { sheetValue ->
-                  val showDarkStatusBar =
-                    if (sheetValue == SheetValue.Expanded) {
-                      true
-                    } else {
-                      useDarkTheme
-                    }
+          }
+          is Screen.PodcastHome -> {
+            PodcastHomeScreen(
+              modifier = fillMaxSizeModifier,
+              homePresenter = screen.presenter,
+              useDarkTheme = useDarkTheme,
+              onBottomSheetStateChanged = { sheetValue ->
+                val showDarkStatusBar =
+                  if (sheetValue == SheetValue.Expanded) {
+                    true
+                  } else {
+                    useDarkTheme
+                  }
 
-                  toggleLightStatusBar(showDarkStatusBar.not())
-                },
-                onBottomSheetHidden = { isHidden -> toggleLightNavBar(isHidden) },
-              )
-            }
+                toggleLightStatusBar(showDarkStatusBar.not())
+              },
+              onBottomSheetHidden = { isHidden -> toggleLightNavBar(isHidden) },
+            )
           }
           is Screen.GroupDetails -> {
             AppTheme(useDarkTheme = true) {
