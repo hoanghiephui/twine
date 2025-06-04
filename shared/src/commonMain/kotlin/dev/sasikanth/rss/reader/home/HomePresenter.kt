@@ -33,6 +33,7 @@ import dev.sasikanth.rss.reader.core.model.local.FeedGroup
 import dev.sasikanth.rss.reader.core.model.local.PostWithMetadata
 import dev.sasikanth.rss.reader.core.model.local.PostsType
 import dev.sasikanth.rss.reader.core.model.local.Source
+import dev.sasikanth.rss.reader.data.repository.HomeViewMode
 import dev.sasikanth.rss.reader.data.repository.MarkAsReadOn
 import dev.sasikanth.rss.reader.data.repository.ObservableActiveSource
 import dev.sasikanth.rss.reader.data.repository.RssRepository
@@ -214,8 +215,13 @@ class HomePresenter(
         HomeEvent.MarkScrolledPostsAsRead -> markScrolledPostsAsRead()
         is HomeEvent.MarkFeaturedPostsAsRead -> markFeaturedPostAsRead(event.postId)
         is HomeEvent.UpdateCurrentDateTime -> updateCurrentDateTime(event.dateTime)
+        is HomeEvent.ChangeHomeViewMode -> changeHomeViewMode(event.homeViewMode)
         HomeEvent.SwitchToPodcast -> {}
       }
+    }
+
+    private fun changeHomeViewMode(homeViewMode: HomeViewMode) {
+      coroutineScope.launch { settingsRepository.updateHomeViewMode(homeViewMode) }
     }
 
     private fun updateCurrentDateTime(dateTime: LocalDateTime) {
@@ -303,6 +309,10 @@ class HomePresenter(
     private fun init() {
       val activeSourceFlow = observableActiveSource.activeSource
       val postsTypeFlow = settingsRepository.postsType
+
+      settingsRepository.homeViewMode
+        .onEach { homeViewMode -> _state.update { it.copy(homeViewMode = homeViewMode) } }
+        .launchIn(coroutineScope)
 
       _state
         .distinctUntilChangedBy { it.currentDateTime }

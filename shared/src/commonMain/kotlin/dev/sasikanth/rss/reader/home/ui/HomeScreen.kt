@@ -70,17 +70,18 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.unit.dp
+import androidx.paging.LoadState
 import app.cash.paging.compose.LazyPagingItems
 import app.cash.paging.compose.collectAsLazyPagingItems
 import dev.sasikanth.rss.reader.components.CompactFloatingActionButton
 import dev.sasikanth.rss.reader.core.model.local.PostWithMetadata
+import dev.sasikanth.rss.reader.data.repository.HomeViewMode
 import dev.sasikanth.rss.reader.feeds.ui.FeedsBottomSheet
 import dev.sasikanth.rss.reader.home.HomeEvent
 import dev.sasikanth.rss.reader.home.HomePresenter
 import dev.sasikanth.rss.reader.platform.LocalLinkHandler
 import dev.sasikanth.rss.reader.resources.icons.Feed
 import dev.sasikanth.rss.reader.resources.icons.TwineIcons
-import dev.sasikanth.rss.reader.resources.strings.LocalStrings
 import dev.sasikanth.rss.reader.ui.AppTheme
 import dev.sasikanth.rss.reader.ui.LocalSeedColorExtractor
 import dev.sasikanth.rss.reader.utils.Constants
@@ -91,6 +92,13 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
+import twine.shared.generated.resources.Res
+import twine.shared.generated.resources.noFeeds
+import twine.shared.generated.resources.noNewPosts
+import twine.shared.generated.resources.noNewPostsSubtitle
+import twine.shared.generated.resources.scrollToTop
+import twine.shared.generated.resources.swipeUpGetStarted
 
 internal val BOTTOM_SHEET_PEEK_HEIGHT = 96.dp
 private val BOTTOM_SHEET_CORNER_SIZE = 32.dp
@@ -109,7 +117,8 @@ internal fun HomeScreen(
   val linkHandler = LocalLinkHandler.current
 
   val posts = state.posts?.collectAsLazyPagingItems()
-  val featuredPosts by featuredPosts(posts).collectAsState(initial = persistentListOf())
+  val featuredPosts by
+    featuredPosts(posts, state.homeViewMode).collectAsState(initial = persistentListOf())
 
   val listState = rememberLazyListState()
   val featuredPostsPagerState = rememberPagerState(pageCount = { featuredPosts.size })
@@ -189,7 +198,7 @@ internal fun HomeScreen(
               val hasFeeds = state.hasFeeds
               val swipeRefreshState =
                 rememberPullRefreshState(
-                  refreshing = state.isRefreshing,
+                  refreshing = state.isRefreshing || posts?.loadState?.refresh is LoadState.Loading,
                   onRefresh = { homePresenter.dispatch(HomeEvent.OnSwipeToRefresh) }
                 )
               val canSwipeToRefresh = hasFeeds == true
@@ -205,6 +214,7 @@ internal fun HomeScreen(
                     listState = listState,
                     hasFeeds = hasFeeds,
                     hasUnreadPosts = state.hasUnreadPosts,
+                    homeViewMode = state.homeViewMode,
                     onSearchClicked = { homePresenter.dispatch(HomeEvent.SearchClicked) },
                     onBookmarksClicked = { homePresenter.dispatch(HomeEvent.BookmarksClicked) },
                     onSettingsClicked = { homePresenter.dispatch(HomeEvent.SettingsClicked) },
@@ -212,6 +222,9 @@ internal fun HomeScreen(
                       homePresenter.dispatch(HomeEvent.OnPostsTypeChanged(it))
                     },
                     onMarkPostsAsRead = { homePresenter.dispatch(HomeEvent.MarkPostsAsRead(it)) },
+                    onChangeHomeViewMode = {
+                      homePresenter.dispatch(HomeEvent.ChangeHomeViewMode(it))
+                    },
                     onPodcastClicked = { homePresenter.dispatch(HomeEvent.SwitchToPodcast) }
                   )
                 },
@@ -221,7 +234,15 @@ internal fun HomeScreen(
                       hasFeeds == null || posts == null -> {
                         // no-op
                       }
-                      posts.itemCount > 0 -> {
+                      !hasFeeds && posts.loadState.refresh is LoadState.NotLoading -> {
+                        NoFeeds { coroutineScope.launch { bottomSheetState.expand() } }
+                      }
+                      featuredPosts.isEmpty() &&
+                        posts.itemCount == 0 &&
+                        posts.loadState.refresh is LoadState.NotLoading -> {
+                        NoNewPosts()
+                      }
+                      else -> {
                         PostsList(
                           modifier = Modifier.nestedScroll(nestedScrollConnection),
                           paddingValues = paddingValues,
@@ -230,6 +251,7 @@ internal fun HomeScreen(
                           useDarkTheme = useDarkTheme,
                           listState = listState,
                           featuredPostsPagerState = featuredPostsPagerState,
+                          homeViewMode = state.homeViewMode,
                           markPostAsRead = {
                             homePresenter.dispatch(HomeEvent.MarkFeaturedPostsAsRead(it))
                           },
@@ -256,18 +278,13 @@ internal fun HomeScreen(
                           }
                         )
                       }
-                      !hasFeeds -> {
-                        NoFeeds { coroutineScope.launch { bottomSheetState.expand() } }
-                      }
-                      featuredPosts.isEmpty() && posts.itemCount == 0 -> {
-                        NoNewPosts()
-                      }
                     }
 
                     PullRefreshIndicator(
-                      refreshing = state.isRefreshing,
+                      modifier = Modifier.padding(paddingValues).align(Alignment.TopCenter),
+                      refreshing =
+                        state.isRefreshing || posts?.loadState?.refresh is LoadState.Loading,
                       state = swipeRefreshState,
-                      modifier = Modifier.padding(paddingValues).align(Alignment.TopCenter)
                     )
                   }
                 },
@@ -284,7 +301,7 @@ internal fun HomeScreen(
               )
 
               CompactFloatingActionButton(
-                label = LocalStrings.current.scrollToTop,
+                label = stringResource(Res.string.scrollToTop),
                 visible = showScrollToTop,
                 modifier =
                   Modifier.padding(
@@ -348,7 +365,7 @@ private fun NoFeeds(onNoFeedsSwipeUp: () -> Unit) {
     verticalArrangement = Arrangement.Center
   ) {
     Text(
-      text = LocalStrings.current.noFeeds,
+      text = stringResource(Res.string.noFeeds),
       style = MaterialTheme.typography.headlineMedium,
       color = AppTheme.colorScheme.textEmphasisHigh,
       textAlign = TextAlign.Center
@@ -357,7 +374,7 @@ private fun NoFeeds(onNoFeedsSwipeUp: () -> Unit) {
     Spacer(Modifier.requiredHeight(8.dp))
 
     Text(
-      text = LocalStrings.current.swipeUpGetStarted,
+      text = stringResource(Res.string.swipeUpGetStarted),
       style = MaterialTheme.typography.labelLarge,
       color = AppTheme.colorScheme.textEmphasisMed,
       textAlign = TextAlign.Center
@@ -391,7 +408,7 @@ private fun NoNewPosts() {
     Spacer(Modifier.requiredHeight(12.dp))
 
     Text(
-      text = LocalStrings.current.noNewPosts,
+      text = stringResource(Res.string.noNewPosts),
       style = MaterialTheme.typography.headlineMedium,
       color = AppTheme.colorScheme.textEmphasisHigh,
       textAlign = TextAlign.Center
@@ -400,7 +417,7 @@ private fun NoNewPosts() {
     Spacer(Modifier.requiredHeight(8.dp))
 
     Text(
-      text = LocalStrings.current.noNewPostsSubtitle,
+      text = stringResource(Res.string.noNewPostsSubtitle),
       style = MaterialTheme.typography.labelLarge,
       color = AppTheme.colorScheme.textEmphasisMed,
       textAlign = TextAlign.Center
@@ -426,12 +443,13 @@ private fun SheetState.progressAsState(): State<Float> {
 
 @Composable
 fun featuredPosts(
-  posts: LazyPagingItems<PostWithMetadata>?
+  posts: LazyPagingItems<PostWithMetadata>?,
+  homeViewMode: HomeViewMode
 ): Flow<ImmutableList<FeaturedPostItem>> {
   val seedColorExtractor = LocalSeedColorExtractor.current
-  return remember(posts?.loadState) {
+  return remember(posts?.itemSnapshotList?.items, homeViewMode) {
     flow {
-      if (posts == null || posts.itemCount == 0) {
+      if (homeViewMode != HomeViewMode.Default || posts == null || posts.itemCount == 0) {
         emit(persistentListOf())
         return@flow
       }
