@@ -23,7 +23,7 @@ import io.ktor.client.engine.okhttp.OkHttp
 import me.tatarka.inject.annotations.Provides
 import okhttp3.Protocol
 
-actual interface NetworkComponent {
+actual interface NetworkComponent : GraphQLComponent {
 
   @Provides
   @AppScope

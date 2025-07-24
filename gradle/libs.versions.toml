@@ -1,6 +1,6 @@
 [versions]
 kotlin = "2.2.0"
-android_gradle_plugin = "8.11.1"
+android_gradle_plugin = "8.0.2"
 compose = "1.9.0-beta01"
 compose-material3 = "1.9.0-alpha04"
 compose_material_icons_extended = "1.7.3"
@@ -56,6 +56,7 @@ revenuecat = "2.0.0+15.0.0"
 viewmodel = "2.9.1"
 navigation = "2.9.0-beta04"
 glance = "1.2.0-alpha01"
+apollo = "4.0.0"
 
 [libraries]
 compose_runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "compose" }
@@ -139,6 +140,8 @@ viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-com
 navigation = { module = "org.jetbrains.androidx.navigation:navigation-compose", version.ref = "navigation" }
 glance = { module = "androidx.glance:glance-appwidget", version.ref = "glance" }
 glance-material3 = { module = "androidx.glance:glance-material3", version.ref = "glance" }
+apollo-runtime = { module = "com.apollographql.apollo3:apollo-runtime", version.ref = "apollo" }
+apollo-api = { module = "com.apollographql.apollo3:apollo-api", version.ref = "apollo" }
 
 [plugins]
 android_application = { id = "com.android.application", version.ref = "android_gradle_plugin" }
@@ -153,6 +156,7 @@ sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
 spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
 ksp = { id = 'com.google.devtools.ksp', version.ref = 'ksp' }
 bugsnag = { id = "com.bugsnag.android.gradle", version.ref = "bugsnag-plugin" }
+apollo = { id = "com.apollographql.apollo3", version.ref = "apollo" }
 
 [bundles]
 compose = [ "compose_runtime", "compose_foundation", "compose_material", "compose_material3", "compose_resources", "compose_ui_tooling_preview", "compose_ui", "compose_ui_util", "compose_material_icons_extended", "compose_backhandler" ]

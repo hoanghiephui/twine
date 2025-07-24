@@ -22,7 +22,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.darwin.Darwin
 import me.tatarka.inject.annotations.Provides
 
-actual interface NetworkComponent {
+actual interface NetworkComponent : GraphQLComponent {
 
   @Provides
   @AppScope

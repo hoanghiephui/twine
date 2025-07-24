@@ -16,7 +16,11 @@
 package dev.sasikanth.rss.reader.core.network.di
 
 import co.touchlab.kermit.Logger as KermitLogger
+import com.apollographql.apollo3.ApolloClient
 import dev.sasikanth.rss.reader.app.AppInfo
+import dev.sasikanth.rss.reader.core.network.graphql.ApolloClientFactory
+import dev.sasikanth.rss.reader.core.network.graphql.GraphQLService
+import dev.sasikanth.rss.reader.core.network.graphql.GraphQLServiceImpl
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.HttpClientEngineConfig
 import io.ktor.client.engine.HttpClientEngineFactory
@@ -29,8 +33,26 @@ import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.plugins.resources.Resources
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import me.tatarka.inject.annotations.Provides
 
 expect interface NetworkComponent
+
+interface GraphQLComponent {
+  @Provides
+  fun apolloClientFactory(appInfo: AppInfo): ApolloClientFactory = ApolloClientFactory(appInfo)
+
+  @Provides
+  fun apolloClient(apolloClientFactory: ApolloClientFactory): ApolloClient {
+    // Default GraphQL endpoint - can be configured per environment
+    // This is a placeholder URL that would be replaced with actual GraphQL endpoint
+    return apolloClientFactory.createApolloClient("https://api.example.com/graphql")
+  }
+
+  @Provides
+  fun graphQLService(apolloClient: ApolloClient): GraphQLService {
+    return GraphQLServiceImpl(apolloClient)
+  }
+}
 
 fun <T : HttpClientEngineConfig> httpClient(
   appInfo: AppInfo,
