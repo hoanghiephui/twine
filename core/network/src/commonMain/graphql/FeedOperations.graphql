@@ -1,0 +1,60 @@
+query GetFeed($url: String!) {
+  feed(url: $url) {
+    id
+    title
+    description
+    url
+    websiteUrl
+    imageUrl
+    lastUpdated
+    items {
+      id
+      title
+      description
+      content
+      url
+      publishedAt
+      author
+      imageUrl
+    }
+  }
+}
+
+query SearchFeeds($query: String!, $limit: Int) {
+  searchFeeds(query: $query, limit: $limit) {
+    id
+    title
+    description
+    url
+    websiteUrl
+    imageUrl
+    lastUpdated
+  }
+}
+
+query GetMyFeeds {
+  myFeeds {
+    id
+    title
+    description
+    url
+    websiteUrl
+    imageUrl
+    lastUpdated
+  }
+}
+
+mutation SubscribeToFeed($url: String!) {
+  subscribeFeed(url: $url) {
+    success
+    error
+    feed {
+      id
+      title
+      description
+      url
+      websiteUrl
+      imageUrl
+    }
+  }
+}

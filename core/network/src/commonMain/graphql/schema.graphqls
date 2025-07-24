@@ -1,0 +1,49 @@
+# Schema for potential GraphQL feeds or API endpoints
+# This is a basic schema that could be extended for RSS aggregation services or GraphQL feeds
+
+type Query {
+  # Fetch feed information by URL
+  feed(url: String!): Feed
+  
+  # Search for feeds
+  searchFeeds(query: String!, limit: Int = 10): [Feed!]!
+  
+  # Get user's subscribed feeds (if authentication is added later)
+  myFeeds: [Feed!]!
+}
+
+type Mutation {
+  # Subscribe to a feed (if user management is added later)
+  subscribeFeed(url: String!): SubscriptionResult!
+  
+  # Unsubscribe from a feed
+  unsubscribeFeed(feedId: ID!): Boolean!
+}
+
+type Feed {
+  id: ID!
+  title: String!
+  description: String
+  url: String!
+  websiteUrl: String
+  imageUrl: String
+  lastUpdated: String
+  items: [FeedItem!]!
+}
+
+type FeedItem {
+  id: ID!
+  title: String!
+  description: String
+  content: String
+  url: String!
+  publishedAt: String!
+  author: String
+  imageUrl: String
+}
+
+type SubscriptionResult {
+  success: Boolean!
+  feed: Feed
+  error: String
+}
