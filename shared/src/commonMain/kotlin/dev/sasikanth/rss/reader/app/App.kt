@@ -125,7 +125,7 @@ fun App(
   homeViewModel: () -> HomeViewModel,
   feedsViewModel: () -> FeedsViewModel,
   readerViewModel: (SavedStateHandle) -> ReaderViewModel,
-  readerPageViewModel: () -> ReaderPageViewModel,
+  readerPageViewModel: (PostWithMetadata) -> ReaderPageViewModel,
   addFeedViewModel: () -> AddFeedViewModel,
   feedViewModel: (SavedStateHandle) -> FeedViewModel,
   groupSelectionViewModel: () -> GroupSelectionViewModel,
@@ -289,7 +289,9 @@ fun App(
             modifier = fillMaxSizeModifier,
             darkTheme = useDarkTheme,
             viewModel = viewModel,
-            pageViewModel = { key -> viewModel(key = key) { readerPageViewModel() } },
+            pageViewModelFactory = { post ->
+              viewModel(key = post.id) { readerPageViewModel(post) }
+            },
             onPostChanged = { activePostIndex ->
               if (fromScreen !is FromScreen.UnreadWidget) {
                 appViewModel.updateActivePostIndex(activePostIndex)

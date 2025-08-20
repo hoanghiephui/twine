@@ -1,0 +1,24 @@
+import kotlin.time.Instant;
+
+CREATE TABLE postContent (
+  id TEXT NOT NULL PRIMARY KEY,
+  rawContent TEXT,
+  htmlContent TEXT,
+  rawContentLen INTEGER,
+  createdAt INTEGER AS Instant NOT NULL
+);
+
+upsert:
+INSERT INTO postContent (id, rawContent, rawContentLen, htmlContent, createdAt)
+VALUES (:id, :rawContent, :rawContentLen, :htmlContent, :createdAt)
+ON CONFLICT (id) DO UPDATE SET
+  rawContent = excluded.rawContent
+WHERE COALESCE(postContent.rawContentLen, 0) < COALESCE(length(excluded.rawContent), 0);
+
+getByPostId:
+SELECT * FROM postContent
+WHERE id = :id;
+
+updateHtmlContent:
+UPDATE postContent SET htmlContent = :htmlContent
+WHERE id = :id;

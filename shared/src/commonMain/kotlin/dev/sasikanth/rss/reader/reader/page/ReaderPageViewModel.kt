@@ -15,6 +15,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mikepenz.markdown.model.State
 import com.mikepenz.markdown.model.parseMarkdownFlow
+import dev.sasikanth.rss.reader.core.model.local.PostContent
+import dev.sasikanth.rss.reader.core.model.local.PostWithMetadata
+import dev.sasikanth.rss.reader.core.network.FullArticleFetcher
+import dev.sasikanth.rss.reader.data.repository.PostContentRepository
 import dev.sasikanth.rss.reader.reader.page.ui.ReaderContent
 import dev.sasikanth.rss.reader.reader.page.ui.ReaderProcessingProgress
 import dev.sasikanth.rss.reader.util.DispatchersProvider
@@ -25,32 +29,92 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import me.tatarka.inject.annotations.Assisted
 import me.tatarka.inject.annotations.Inject
 
 @Inject
 class ReaderPageViewModel(
   dispatchersProvider: DispatchersProvider,
+  private val postContentRepository: PostContentRepository,
+  private val fullArticleFetcher: FullArticleFetcher,
+  @Assisted private val readerPost: PostWithMetadata,
 ) : ViewModel() {
+
+  private val _postContent = MutableStateFlow<PostContent?>(null)
+  val postContent: StateFlow<PostContent?> = _postContent
 
   private val _contentState = MutableStateFlow("")
   val contentState =
     _contentState
       .filter { it.isNotBlank() }
       .distinctUntilChanged()
-      .flatMapLatest { parseMarkdownFlow(it) }
+      .flatMapLatest {
+        parseMarkdownFlow(it).onEach { state ->
+          if (state !is State.Loading) {
+            _parsingProgress.value = ReaderProcessingProgress.Idle
+          }
+        }
+      }
       .flowOn(dispatchersProvider.default)
       .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), State.Loading())
 
   private val _excerptState = MutableStateFlow("")
   val excerptState: StateFlow<String> = _excerptState
 
-  private val _parsingProgress = MutableStateFlow(ReaderProcessingProgress.Idle)
+  private val _parsingProgress = MutableStateFlow(ReaderProcessingProgress.Loading)
   val parsingProgress: StateFlow<ReaderProcessingProgress> = _parsingProgress
 
+  private val _showFullArticle = MutableStateFlow(readerPost.alwaysFetchFullArticle)
+  val showFullArticle: StateFlow<Boolean> = _showFullArticle
+
+  init {
+    loadPostContent()
+    loadFullArticle()
+  }
+
   fun onParsingComplete(readerContent: ReaderContent) {
-    _parsingProgress.value = ReaderProcessingProgress.Idle
-    _contentState.value = readerContent.content.orEmpty()
-    _excerptState.value = readerContent.excerpt.orEmpty()
+    viewModelScope.launch {
+      _contentState.update { it -> readerContent.content ?: it }
+      _excerptState.update { it -> readerContent.excerpt ?: it }
+    }
+  }
+
+  fun loadFullArticle() {
+    if (_postContent.value?.fullArticleHtml != null) return
+
+    viewModelScope.launch {
+      _parsingProgress.value = ReaderProcessingProgress.Loading
+
+      val article = fullArticleFetcher.fetch(readerPost.link).getOrNull()
+      if (article == null) {
+        _parsingProgress.value = ReaderProcessingProgress.Idle
+        return@launch
+      }
+      postContentRepository.updateFullArticleContent(readerPost.id, article)
+    }
+  }
+
+  fun toggleFullArticle() {
+    _showFullArticle.value = !(_showFullArticle.value)
+    if (_showFullArticle.value) {
+      loadFullArticle()
+    }
+  }
+
+  private fun loadPostContent() {
+    postContentRepository
+      .postContent(readerPost.id)
+      .onEach {
+        _postContent.value = it
+        if (it.postContent.isNullOrBlank()) {
+          _parsingProgress.value = ReaderProcessingProgress.Idle
+        }
+      }
+      .launchIn(viewModelScope)
   }
 }
