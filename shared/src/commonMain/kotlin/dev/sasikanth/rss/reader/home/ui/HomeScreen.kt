@@ -15,8 +15,10 @@
  */
 package dev.sasikanth.rss.reader.home.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -27,7 +29,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.requiredSize
@@ -84,7 +85,7 @@ import dev.sasikanth.rss.reader.components.NewArticlesScrollToTopButton
 import dev.sasikanth.rss.reader.core.model.local.PostWithMetadata
 import dev.sasikanth.rss.reader.data.repository.HomeViewMode
 import dev.sasikanth.rss.reader.feeds.FeedsViewModel
-import dev.sasikanth.rss.reader.feeds.ui.FeedsBottomSheet
+import dev.sasikanth.rss.reader.feeds.ui.sheet.FeedsBottomSheet
 import dev.sasikanth.rss.reader.home.HomeEvent
 import dev.sasikanth.rss.reader.home.HomeState
 import dev.sasikanth.rss.reader.home.HomeViewModel
@@ -131,7 +132,6 @@ internal fun HomeScreen(
   openGroupScreen: (groupId: String) -> Unit,
   openPaywall: () -> Unit,
   onBottomSheetStateChanged: (SheetValue) -> Unit,
-  onBottomSheetHidden: (isHidden: Boolean) -> Unit,
   modifier: Modifier = Modifier,
   useDarkTheme: Boolean = false,
 ) {
@@ -235,22 +235,16 @@ internal fun HomeScreen(
   )
 
   Scaffold(modifier) { scaffoldPadding ->
-    val bottomPadding = scaffoldPadding.calculateBottomPadding()
-
     val sheetPeekHeight by
       animateDpAsState(
         targetValue =
           if (postsListState.isScrollingTowardsUp()) {
-            BOTTOM_SHEET_PEEK_HEIGHT + bottomPadding
+            BOTTOM_SHEET_PEEK_HEIGHT + scaffoldPadding.calculateBottomPadding()
           } else {
             0.dp
           },
         label = "Sheet Peek Height Animation",
-        animationSpec = tween(delayMillis = 500),
       )
-    val isBottomSheetHidden by remember { derivedStateOf { sheetPeekHeight == 0.dp } }
-
-    LaunchedEffect(isBottomSheetHidden) { onBottomSheetHidden(isBottomSheetHidden) }
 
     BottomSheetScaffold(
       scaffoldState = bottomSheetScaffoldState,
@@ -396,14 +390,21 @@ internal fun HomeScreen(
           )
 
           val navBarScrimColor = AppTheme.colorScheme.backdrop
-          Box(
+          AnimatedVisibility(
             modifier =
               Modifier.fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(Color.Transparent, navBarScrimColor)))
-                .navigationBarsPadding()
-                .padding(top = 24.dp)
-                .align(Alignment.BottomCenter)
-          )
+                .requiredHeight(BOTTOM_SHEET_PEEK_HEIGHT)
+                .align(Alignment.BottomCenter),
+            visible = postsListState.isScrollingTowardsUp(),
+            enter = slideInVertically { it },
+            exit = slideOutVertically { it }
+          ) {
+            Box(
+              modifier =
+                Modifier.matchParentSize()
+                  .background(Brush.verticalGradient(listOf(Color.Transparent, navBarScrimColor)))
+            )
+          }
 
           NewArticlesScrollToTopButton(
             unreadSinceLastSync = unreadSinceLastSync,

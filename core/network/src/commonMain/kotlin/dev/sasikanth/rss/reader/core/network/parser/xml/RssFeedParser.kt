@@ -138,16 +138,19 @@ class RSSContentParser(private val articleHtmlParser: ArticleHtmlParser) : XmlCo
         link.isNullOrBlank() && (name == TAG_LINK || name == TAG_URL) -> {
           link = parser.nextText()
         }
-        name == TAG_ENCLOSURE && link.isNullOrBlank() -> {
+        name == TAG_ENCLOSURE &&
+          link.isNullOrBlank() &&
+          parser.getAttributeValue(parser.namespace, ATTR_TYPE) != ATTR_VALUE_IMAGE -> {
           link = parser.getAttributeValue(parser.namespace, ATTR_URL)
           parser.nextTag()
         }
         name == TAG_DESCRIPTION || name == TAG_CONTENT_ENCODED -> {
-          rawContent = parser.nextText().trimIndent()
+          val postContent = parser.nextText().trimIndent()
+          val htmlContent = articleHtmlParser.parse(htmlContent = postContent)
 
-          val htmlContent = articleHtmlParser.parse(htmlContent = rawContent)
-          image = htmlContent?.leadImage ?: image
-          description = htmlContent?.content?.ifBlank { null } ?: rawContent.trim()
+          rawContent = htmlContent?.cleanedHtml
+          image = htmlContent?.heroImage ?: image
+          description = htmlContent?.textContent?.ifBlank { null } ?: rawContent?.trim()
         }
         name == TAG_PUB_DATE -> {
           date = parser.nextText()

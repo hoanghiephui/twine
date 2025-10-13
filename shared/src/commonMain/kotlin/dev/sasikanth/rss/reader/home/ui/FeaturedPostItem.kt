@@ -20,23 +20,24 @@ package dev.sasikanth.rss.reader.home.ui
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -45,23 +46,34 @@ import dev.sasikanth.rss.reader.ui.AppTheme
 import dev.sasikanth.rss.reader.util.relativeDurationString
 import dev.sasikanth.rss.reader.utils.Constants
 import dev.sasikanth.rss.reader.utils.LocalShowFeedFavIconSetting
+import dev.sasikanth.rss.reader.utils.LocalWindowSizeClass
+
+private val featuredItemPadding
+  @Composable
+  @ReadOnlyComposable
+  get() =
+    when (LocalWindowSizeClass.current.widthSizeClass) {
+      WindowWidthSizeClass.Expanded -> PaddingValues(horizontal = 128.dp)
+      else -> PaddingValues(0.dp)
+    }
 
 @Immutable data class FeaturedPostItem(val postWithMetadata: PostWithMetadata, val seedColor: Int?)
 
 @Composable
 internal fun FeaturedPostItem(
   item: PostWithMetadata,
-  pageOffset: () -> Float,
   onClick: () -> Unit,
   onBookmarkClick: () -> Unit,
   onCommentsClick: () -> Unit,
   onSourceClick: () -> Unit,
   onTogglePostReadClick: () -> Unit,
   modifier: Modifier = Modifier,
+  featuredImage: @Composable () -> Unit,
 ) {
   Column(
     modifier =
       Modifier.then(modifier)
+        .padding(featuredItemPadding)
         .clip(MaterialTheme.shapes.extraLarge)
         .clickable(onClick = onClick)
         .alpha(if (item.read) Constants.ITEM_READ_ALPHA else Constants.ITEM_UNREAD_ALPHA)
@@ -69,16 +81,7 @@ internal fun FeaturedPostItem(
     val density = LocalDensity.current
     var descriptionBottomPadding by remember(item.link) { mutableStateOf(0.dp) }
 
-    FeaturedImage(
-      modifier =
-        Modifier.graphicsLayer {
-            translationX = pageOffset.invoke() * 350f
-            scaleX = 1.15f
-            scaleY = 1.15f
-          }
-          .align(Alignment.CenterHorizontally),
-      image = item.imageUrl,
-    )
+    featuredImage()
 
     Spacer(modifier = Modifier.requiredHeight(8.dp))
 

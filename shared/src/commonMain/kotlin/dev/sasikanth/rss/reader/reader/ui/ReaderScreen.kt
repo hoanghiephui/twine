@@ -49,6 +49,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -70,6 +71,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LookaheadScope
+import androidx.compose.ui.layout.onFirstVisible
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
@@ -97,12 +99,11 @@ import dev.sasikanth.rss.reader.ui.RobotoSerifFontFamily
 import dev.sasikanth.rss.reader.ui.rememberDynamicColorState
 import dev.sasikanth.rss.reader.ui.typography
 import dev.sasikanth.rss.reader.utils.Constants.EPSILON
+import dev.sasikanth.rss.reader.utils.LocalWindowSizeClass
 import dev.sasikanth.rss.reader.utils.getOffsetFractionForPage
 import dev.snipme.highlights.Highlights
 import dev.snipme.highlights.model.SyntaxThemes
 import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalComposeUiApi::class, FlowPreview::class)
@@ -137,6 +138,7 @@ internal fun ReaderScreen(
     }
   }
   val pagerState = rememberPagerState(initialPage = state.activePostIndex) { posts.itemCount }
+  val exitScreen by viewModel.exitScreen.collectAsStateWithLifecycle(false)
 
   LaunchedEffect(pagerState, posts.loadState) {
     if (posts.itemCount == 0) return@LaunchedEffect
@@ -192,6 +194,12 @@ internal fun ReaderScreen(
     if (state.openPaywall) {
       openPaywall()
       viewModel.dispatch(ReaderEvent.MarkOpenPaywallDone)
+    }
+  }
+
+  LaunchedEffect(exitScreen) {
+    if (exitScreen) {
+      onBack()
     }
   }
 
@@ -318,26 +326,21 @@ internal fun ReaderScreen(
           modifier = Modifier.fillMaxSize(),
         ) {
           val layoutDirection = LocalLayoutDirection.current
+          val sizeClass = LocalWindowSizeClass.current.widthSizeClass
           val highlightsBuilder =
             remember(darkTheme) {
               Highlights.Builder().theme(SyntaxThemes.atom(darkMode = darkTheme))
             }
-
-          LaunchedEffect(pagerState, posts.loadState) {
-            snapshotFlow { pagerState.settledPage }
-              .distinctUntilChanged()
-              .collectLatest { page ->
-                val readerPost = runCatching { posts.peek(page) }.getOrNull()
-
-                if (readerPost != null) {
-                  onPostChanged(page)
-                  viewModel.dispatch(ReaderEvent.PostPageChanged(page, readerPost))
-                }
-              }
-          }
+          val readerContentMaxWidth =
+            if (sizeClass >= WindowWidthSizeClass.Expanded) {
+              960.dp
+            } else {
+              640.dp
+            }
 
           HorizontalPager(
-            modifier = Modifier.widthIn(max = 640.dp).fillMaxSize().align(Alignment.Center),
+            modifier =
+              Modifier.widthIn(max = readerContentMaxWidth).fillMaxSize().align(Alignment.Center),
             state = pagerState,
             overscrollEffect = null,
             beyondViewportPageCount = 1,
@@ -362,6 +365,12 @@ internal fun ReaderScreen(
               val showFullArticle by pageViewModel.showFullArticle.collectAsStateWithLifecycle()
 
               ReaderPage(
+                modifier =
+                  Modifier.fillMaxSize().onFirstVisible(minDurationMs = 200L) {
+                    onPostChanged(page)
+                    viewModel.dispatch(ReaderEvent.PostPageChanged(page, readerPost))
+                  },
+                contentPaddingValues = paddingValues,
                 pageViewModel = pageViewModel,
                 readerPost = readerPost,
                 page = page,
@@ -376,8 +385,9 @@ internal fun ReaderScreen(
                     )
                   )
                 },
-                modifier = Modifier.fillMaxSize(),
-                contentPaddingValues = paddingValues
+                onMarkAsUnread = {
+                  viewModel.dispatch(ReaderEvent.OnMarkAsUnread(postId = readerPost.id))
+                }
               )
             }
           }

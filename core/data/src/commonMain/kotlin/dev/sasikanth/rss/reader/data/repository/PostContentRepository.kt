@@ -12,11 +12,13 @@
 package dev.sasikanth.rss.reader.data.repository
 
 import app.cash.sqldelight.coroutines.asFlow
-import app.cash.sqldelight.coroutines.mapToOne
+import app.cash.sqldelight.coroutines.mapToOneOrNull
+import co.touchlab.kermit.Logger
 import dev.sasikanth.rss.reader.core.model.local.PostContent
 import dev.sasikanth.rss.reader.data.database.PostContentQueries
 import dev.sasikanth.rss.reader.util.DispatchersProvider
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.withContext
 import me.tatarka.inject.annotations.Inject
 
@@ -26,13 +28,17 @@ class PostContentRepository(
   private val dispatcherProvider: DispatchersProvider,
 ) {
 
-  fun postContent(postId: String): Flow<PostContent> {
+  fun postContent(postId: String): Flow<PostContent?> {
     return postContentQueries
       .getByPostId(postId) { id, rawContent, htmlContent, _, createdAt ->
         PostContent(id, rawContent, htmlContent)
       }
       .asFlow()
-      .mapToOne(dispatcherProvider.databaseRead)
+      .mapToOneOrNull(dispatcherProvider.databaseRead)
+      .catch { error ->
+        Logger.e("PostContentError", error) { "Failed to load post content for $postId" }
+        emit(null)
+      }
   }
 
   suspend fun updateFullArticleContent(postId: String, htmlContent: String?) {

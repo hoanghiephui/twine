@@ -109,9 +109,9 @@ class ReaderPageViewModel(
   private fun loadPostContent() {
     postContentRepository
       .postContent(readerPost.id)
-      .onEach {
-        _postContent.value = it
-        if (it.postContent.isNullOrBlank()) {
+      .onEach { postContent ->
+        _postContent.value = postContent
+        if (postContent?.postContent.isNullOrBlank()) {
           _parsingProgress.value = ReaderProcessingProgress.Idle
         }
       }

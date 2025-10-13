@@ -32,22 +32,29 @@ import dev.sasikanth.rss.reader.ui.AppTheme
 import dev.sasikanth.rss.reader.utils.LocalWindowSizeClass
 
 @Composable
-fun FeaturedImage(image: String?, modifier: Modifier = Modifier) {
+fun FeaturedImage(
+  image: String?,
+  modifier: Modifier = Modifier,
+) {
   val sizeClass = LocalWindowSizeClass.current.widthSizeClass
   val imageMaxHeight =
-    if (sizeClass >= WindowWidthSizeClass.Medium) {
-      198.dp
-    } else {
-      Dp.Unspecified
+    when {
+      sizeClass >= WindowWidthSizeClass.Expanded -> {
+        360.dp
+      }
+      sizeClass >= WindowWidthSizeClass.Medium -> {
+        250.dp
+      }
+      else -> Dp.Unspecified
     }
 
   if (!image.isNullOrBlank()) {
     AsyncImage(
       url = image,
       modifier =
-        Modifier.clip(MaterialTheme.shapes.extraLarge)
+        Modifier.aspectRatio(16f / 9f)
           .heightIn(max = imageMaxHeight)
-          .aspectRatio(ratio = 16f / 9f)
+          .clip(MaterialTheme.shapes.extraLarge)
           .background(AppTheme.colorScheme.surfaceContainerLowest)
           .then(modifier),
       contentDescription = null,
