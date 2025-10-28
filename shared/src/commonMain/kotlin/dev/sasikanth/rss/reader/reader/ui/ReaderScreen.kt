@@ -27,11 +27,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeightIn
 import androidx.compose.foundation.layout.requiredSize
@@ -75,9 +77,13 @@ import androidx.compose.ui.layout.onFirstVisible
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
+import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.cash.paging.compose.collectAsLazyPagingItems
+import com.mikepenz.markdown.compose.components.markdownComponents
+import com.mikepenz.markdown.compose.elements.MarkdownHighlightedCodeBlock
+import com.mikepenz.markdown.compose.elements.MarkdownHighlightedCodeFence
 import dev.sasikanth.rss.reader.components.HorizontalPageIndicators
 import dev.sasikanth.rss.reader.components.PageIndicatorState
 import dev.sasikanth.rss.reader.core.model.local.PostWithMetadata
@@ -128,7 +134,6 @@ internal fun ReaderScreen(
     rememberDynamicColorState(
       defaultLightAppColorScheme = LocalAppColorScheme.current,
       defaultDarkAppColorScheme = LocalAppColorScheme.current,
-      useTonalSpotScheme = true,
     )
   val readerLinkHandler = remember {
     object : UriHandler {
@@ -327,10 +332,6 @@ internal fun ReaderScreen(
         ) {
           val layoutDirection = LocalLayoutDirection.current
           val sizeClass = LocalWindowSizeClass.current.widthSizeClass
-          val highlightsBuilder =
-            remember(darkTheme) {
-              Highlights.Builder().theme(SyntaxThemes.atom(darkMode = darkTheme))
-            }
           val readerContentMaxWidth =
             if (sizeClass >= WindowWidthSizeClass.Expanded) {
               960.dp
@@ -363,6 +364,28 @@ internal fun ReaderScreen(
             if (readerPost != null) {
               val pageViewModel = pageViewModelFactory.invoke(readerPost)
               val showFullArticle by pageViewModel.showFullArticle.collectAsStateWithLifecycle()
+              val highlightsBuilder =
+                remember(darkTheme) {
+                  Highlights.Builder().theme(SyntaxThemes.atom(darkMode = darkTheme))
+                }
+              val markdownComponents = remember {
+                markdownComponents(
+                  codeBlock = { cm ->
+                    MarkdownHighlightedCodeBlock(
+                      content = cm.content,
+                      node = cm.node,
+                      highlightsBuilder = highlightsBuilder
+                    )
+                  },
+                  codeFence = { cm ->
+                    MarkdownHighlightedCodeFence(
+                      content = cm.content,
+                      node = cm.node,
+                      highlightsBuilder = highlightsBuilder
+                    )
+                  },
+                )
+              }
 
               ReaderPage(
                 modifier =
@@ -375,8 +398,9 @@ internal fun ReaderScreen(
                 readerPost = readerPost,
                 page = page,
                 pagerState = pagerState,
-                highlightsBuilder = highlightsBuilder,
+                markdownComponents = markdownComponents,
                 loadFullArticle = showFullArticle,
+                darkTheme = darkTheme,
                 onBookmarkClick = {
                   viewModel.dispatch(
                     ReaderEvent.TogglePostBookmark(
@@ -444,7 +468,6 @@ private fun ReaderActionsPanel(
               )
             },
           )
-          .navigationBarsPadding()
           .then(modifier),
       contentAlignment = Alignment.Center
     ) {
@@ -458,7 +481,14 @@ private fun ReaderActionsPanel(
 
       Box(
         modifier =
-          Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
+          Modifier.padding(
+              bottom =
+                WindowInsets.navigationBars
+                  .asPaddingValues()
+                  .calculateBottomPadding()
+                  .coerceAtLeast(16.dp)
+            )
+            .padding(horizontal = 16.dp)
             .widthIn(max = 640.dp)
             .pointerInput(Unit) {}
             .dropShadow(shape = backgroundShape) {

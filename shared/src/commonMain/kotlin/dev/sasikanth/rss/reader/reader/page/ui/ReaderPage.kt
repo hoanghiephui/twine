@@ -53,6 +53,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -77,9 +78,8 @@ import com.mikepenz.markdown.compose.LocalMarkdownPadding
 import com.mikepenz.markdown.compose.LocalMarkdownTypography
 import com.mikepenz.markdown.compose.LocalReferenceLinkHandler
 import com.mikepenz.markdown.compose.MarkdownElement
+import com.mikepenz.markdown.compose.components.MarkdownComponents
 import com.mikepenz.markdown.compose.components.markdownComponents
-import com.mikepenz.markdown.compose.elements.MarkdownHighlightedCodeBlock
-import com.mikepenz.markdown.compose.elements.MarkdownHighlightedCodeFence
 import com.mikepenz.markdown.m3.markdownColor
 import com.mikepenz.markdown.m3.markdownTypography
 import com.mikepenz.markdown.model.ReferenceLinkHandlerImpl
@@ -102,11 +102,11 @@ import dev.sasikanth.rss.reader.resources.icons.Comments
 import dev.sasikanth.rss.reader.resources.icons.Share
 import dev.sasikanth.rss.reader.resources.icons.TwineIcons
 import dev.sasikanth.rss.reader.share.LocalShareHandler
+import dev.sasikanth.rss.reader.ui.AntonFontFamily
 import dev.sasikanth.rss.reader.ui.AppTheme
 import dev.sasikanth.rss.reader.util.readerDateTimestamp
 import dev.sasikanth.rss.reader.utils.LocalShowFeedFavIconSetting
 import dev.sasikanth.rss.reader.utils.getOffsetFractionForPage
-import dev.snipme.highlights.Highlights
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -130,8 +130,9 @@ internal fun ReaderPage(
   readerPost: PostWithMetadata,
   page: Int,
   pagerState: PagerState,
-  highlightsBuilder: Highlights.Builder,
+  markdownComponents: MarkdownComponents,
   loadFullArticle: Boolean,
+  darkTheme: Boolean,
   onBookmarkClick: () -> Unit,
   onMarkAsUnread: () -> Unit,
   modifier: Modifier = Modifier,
@@ -145,24 +146,6 @@ internal fun ReaderPage(
   val linkHandler = LocalLinkHandler.current
   val sharedHandler = LocalShareHandler.current
   val coroutineScope = rememberCoroutineScope()
-  val markdownComponents = remember {
-    markdownComponents(
-      codeBlock = { cm ->
-        MarkdownHighlightedCodeBlock(
-          content = cm.content,
-          node = cm.node,
-          highlightsBuilder = highlightsBuilder
-        )
-      },
-      codeFence = { cm ->
-        MarkdownHighlightedCodeFence(
-          content = cm.content,
-          node = cm.node,
-          highlightsBuilder = highlightsBuilder
-        )
-      },
-    )
-  }
 
   val textSelectionColors =
     TextSelectionColors(
@@ -246,6 +229,7 @@ internal fun ReaderPage(
                 page = page,
                 pagerState = pagerState,
                 excerpt = excerptState,
+                darkTheme = darkTheme,
                 onCommentsClick = {
                   coroutineScope.launch { linkHandler.openLink(readerPost.commentsLink) }
                 },
@@ -310,6 +294,7 @@ private fun PostHeader(
   page: Int,
   pagerState: PagerState,
   excerpt: String,
+  darkTheme: Boolean,
   onCommentsClick: () -> Unit,
   onShareClick: () -> Unit,
   onBookmarkClick: () -> Unit,
@@ -356,10 +341,19 @@ private fun PostHeader(
       }
 
       Text(
-        modifier = Modifier.padding(top = 12.dp),
+        modifier =
+          Modifier.padding(top = 12.dp).graphicsLayer {
+            blendMode =
+              if (darkTheme) {
+                BlendMode.Screen
+              } else {
+                BlendMode.Multiply
+              }
+          },
         text = title.ifBlank { description },
-        style = MaterialTheme.typography.headlineSmall,
-        color = AppTheme.colorScheme.onSurface,
+        style = MaterialTheme.typography.headlineMedium,
+        fontFamily = AntonFontFamily,
+        color = AppTheme.colorScheme.secondary,
         overflow = TextOverflow.Ellipsis,
       )
 

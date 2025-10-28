@@ -109,6 +109,22 @@ class XmlFeedParserTest {
               isDateParsedCorrectly = true
             ),
             PostPayload(
+              title = "Post with media thumbnail",
+              link = "https://example.com/post-media-thumbnail",
+              description = "Post with media thumbnail",
+              rawContent =
+                """
+                  <html>
+                   <body>Post with media thumbnail</body>
+                  </html>
+              """
+                  .trimIndent(),
+              imageUrl = "https://example.com/media/post-with-media-thumbnail",
+              date = 1685005200000,
+              commentsLink = null,
+              isDateParsedCorrectly = true
+            ),
+            PostPayload(
               title = "Post without image",
               link = "https://example.com/second-post",
               description = "Second post description.",
@@ -205,6 +221,22 @@ class XmlFeedParserTest {
               imageUrl = null,
               date = 1685005200000,
               commentsLink = "https://example/post-with-comments/comments",
+              isDateParsedCorrectly = true
+            ),
+            PostPayload(
+              title = "Post with media group",
+              link = "https://example.com/post-with-media-group",
+              description = "Media group description",
+              rawContent =
+                """
+                  <html>
+                   <body>Media group description</body>
+                  </html>
+              """
+                  .trimIndent(),
+              imageUrl = "https://example.com/media/maxresdefault.jpg",
+              date = 1685005200000,
+              commentsLink = null,
               isDateParsedCorrectly = true
             ),
           )

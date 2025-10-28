@@ -85,6 +85,7 @@ import dev.sasikanth.rss.reader.components.NewArticlesScrollToTopButton
 import dev.sasikanth.rss.reader.core.model.local.PostWithMetadata
 import dev.sasikanth.rss.reader.data.repository.HomeViewMode
 import dev.sasikanth.rss.reader.feeds.FeedsViewModel
+import dev.sasikanth.rss.reader.feeds.ui.sheet.BOTTOM_SHEET_PEEK_HEIGHT
 import dev.sasikanth.rss.reader.feeds.ui.sheet.FeedsBottomSheet
 import dev.sasikanth.rss.reader.home.HomeEvent
 import dev.sasikanth.rss.reader.home.HomeState
@@ -113,8 +114,6 @@ import twine.shared.generated.resources.noFeeds
 import twine.shared.generated.resources.noNewPosts
 import twine.shared.generated.resources.noNewPostsSubtitle
 import twine.shared.generated.resources.swipeUpGetStarted
-
-internal val BOTTOM_SHEET_PEEK_HEIGHT = 116.dp
 
 @OptIn(ExperimentalComposeUiApi::class, FlowPreview::class)
 @Composable
@@ -239,7 +238,7 @@ internal fun HomeScreen(
       animateDpAsState(
         targetValue =
           if (postsListState.isScrollingTowardsUp()) {
-            BOTTOM_SHEET_PEEK_HEIGHT + scaffoldPadding.calculateBottomPadding()
+            BOTTOM_SHEET_PEEK_HEIGHT + scaffoldPadding.calculateBottomPadding().coerceAtLeast(16.dp)
           } else {
             0.dp
           },
@@ -262,6 +261,7 @@ internal fun HomeScreen(
                 hasFeeds = hasFeeds,
                 hasUnreadPosts = state.hasUnreadPosts,
                 homeViewMode = state.homeViewMode,
+                darkTheme = useDarkTheme,
                 onSearchClicked = openSearch,
                 onBookmarksClicked = openBookmarks,
                 onSettingsClicked = openSettings,
@@ -339,8 +339,8 @@ internal fun HomeScreen(
                     PullToRefreshContent(
                       pullToRefreshState = pullToRefreshState,
                       state = state,
-                      homeViewModel = viewModel,
                       paddingValues = paddingValues,
+                      onRefresh = { viewModel.dispatch(HomeEvent.OnSwipeToRefresh) }
                     ) {
                       NoNewPosts()
                     }
@@ -349,8 +349,8 @@ internal fun HomeScreen(
                     PullToRefreshContent(
                       pullToRefreshState = pullToRefreshState,
                       state = state,
-                      homeViewModel = viewModel,
                       paddingValues = paddingValues,
+                      onRefresh = { viewModel.dispatch(HomeEvent.OnSwipeToRefresh) }
                     ) {
                       PostsList(
                         modifier = Modifier.fillMaxSize(),
@@ -460,14 +460,14 @@ internal fun HomeScreen(
 private fun PullToRefreshContent(
   pullToRefreshState: PullToRefreshState,
   state: HomeState,
-  homeViewModel: HomeViewModel,
   paddingValues: PaddingValues,
+  onRefresh: () -> Unit,
   content: @Composable () -> Unit,
 ) {
   PullToRefreshBox(
     state = pullToRefreshState,
     isRefreshing = state.isSyncing,
-    onRefresh = { homeViewModel.dispatch(HomeEvent.OnSwipeToRefresh) },
+    onRefresh = onRefresh,
     indicator = {
       Indicator(
         modifier =
