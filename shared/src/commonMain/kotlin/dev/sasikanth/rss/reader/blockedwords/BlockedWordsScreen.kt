@@ -64,6 +64,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.sasikanth.rss.reader.components.CircularIconButton
 import dev.sasikanth.rss.reader.core.model.local.BlockedWord
 import dev.sasikanth.rss.reader.resources.icons.ArrowBack
 import dev.sasikanth.rss.reader.resources.icons.DeleteOutline
@@ -78,6 +79,7 @@ import twine.shared.generated.resources.blockedWordsDesc
 import twine.shared.generated.resources.blockedWordsEmpty
 import twine.shared.generated.resources.blockedWordsHint
 import twine.shared.generated.resources.buttonAdd
+import twine.shared.generated.resources.buttonGoBack
 import twine.shared.generated.resources.delete
 
 @Composable
@@ -93,11 +95,19 @@ fun BlockedWordsScreen(
     topBar = {
       Box {
         CenterAlignedTopAppBar(
-          title = { Text(stringResource(Res.string.blockedWords)) },
+          title = {
+            Text(
+              text = stringResource(Res.string.blockedWords),
+              color = AppTheme.colorScheme.onSurface,
+              style = MaterialTheme.typography.titleMedium,
+            )
+          },
           navigationIcon = {
-            IconButton(onClick = { goBack() }) {
-              Icon(TwineIcons.ArrowBack, contentDescription = null)
-            }
+            CircularIconButton(
+              icon = TwineIcons.ArrowBack,
+              label = stringResource(Res.string.buttonGoBack),
+              onClick = { goBack() }
+            )
           },
           colors =
             TopAppBarDefaults.topAppBarColors(
@@ -271,7 +281,8 @@ private fun BlockedWordItem(
     IconButton(onClick = removeClicked) {
       Icon(
         imageVector = TwineIcons.DeleteOutline,
-        contentDescription = stringResource(Res.string.delete)
+        contentDescription = stringResource(Res.string.delete),
+        tint = AppTheme.colorScheme.textEmphasisHigh,
       )
     }
   }

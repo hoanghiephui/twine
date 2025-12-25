@@ -16,11 +16,14 @@
 package dev.sasikanth.rss.reader.settings.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,7 +49,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -64,6 +66,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -76,6 +79,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.sasikanth.rss.reader.app.AppInfo
 import dev.sasikanth.rss.reader.billing.SubscriptionResult
+import dev.sasikanth.rss.reader.components.CircularIconButton
 import dev.sasikanth.rss.reader.components.DropdownMenu
 import dev.sasikanth.rss.reader.components.DropdownMenuItem
 import dev.sasikanth.rss.reader.components.OutlinedButton
@@ -87,6 +91,7 @@ import dev.sasikanth.rss.reader.components.image.AsyncImage
 import dev.sasikanth.rss.reader.data.opml.OpmlResult
 import dev.sasikanth.rss.reader.data.repository.AppThemeMode
 import dev.sasikanth.rss.reader.data.repository.BrowserType
+import dev.sasikanth.rss.reader.data.repository.HomeViewMode
 import dev.sasikanth.rss.reader.data.repository.MarkAsReadOn
 import dev.sasikanth.rss.reader.data.repository.Period
 import dev.sasikanth.rss.reader.data.repository.Period.NEVER
@@ -97,10 +102,15 @@ import dev.sasikanth.rss.reader.data.repository.Period.SIX_MONTHS
 import dev.sasikanth.rss.reader.data.repository.Period.THREE_MONTHS
 import dev.sasikanth.rss.reader.platform.LocalLinkHandler
 import dev.sasikanth.rss.reader.resources.icons.ArrowBack
+import dev.sasikanth.rss.reader.resources.icons.LayoutCompact
+import dev.sasikanth.rss.reader.resources.icons.LayoutDefault
+import dev.sasikanth.rss.reader.resources.icons.LayoutSimple
 import dev.sasikanth.rss.reader.resources.icons.TwineIcons
 import dev.sasikanth.rss.reader.settings.SettingsEvent
+import dev.sasikanth.rss.reader.settings.SettingsEvent.ChangeHomeViewMode
 import dev.sasikanth.rss.reader.settings.SettingsViewModel
 import dev.sasikanth.rss.reader.ui.AppTheme
+import dev.sasikanth.rss.reader.ui.LocalTranslucentStyles
 import dev.sasikanth.rss.reader.utils.Constants
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -109,6 +119,10 @@ import twine.shared.generated.resources.blockedWords
 import twine.shared.generated.resources.buttonGoBack
 import twine.shared.generated.resources.enableAutoSyncDesc
 import twine.shared.generated.resources.enableAutoSyncTitle
+import twine.shared.generated.resources.homeViewMode
+import twine.shared.generated.resources.homeViewModeCompact
+import twine.shared.generated.resources.homeViewModeDefault
+import twine.shared.generated.resources.homeViewModeSimple
 import twine.shared.generated.resources.markArticleAsRead
 import twine.shared.generated.resources.markArticleAsReadOnOpen
 import twine.shared.generated.resources.markArticleAsReadOnScroll
@@ -178,14 +192,19 @@ internal fun SettingsScreen(
     topBar = {
       Box {
         CenterAlignedTopAppBar(
-          title = { Text(stringResource(Res.string.settings)) },
+          title = {
+            Text(
+              stringResource(Res.string.settings),
+              color = AppTheme.colorScheme.onSurface,
+              style = MaterialTheme.typography.titleMedium,
+            )
+          },
           navigationIcon = {
-            IconButton(onClick = { goBack() }) {
-              Icon(
-                TwineIcons.ArrowBack,
-                contentDescription = stringResource(Res.string.buttonGoBack)
-              )
-            }
+            CircularIconButton(
+              icon = TwineIcons.ArrowBack,
+              label = stringResource(Res.string.buttonGoBack),
+              onClick = { goBack() }
+            )
           },
           colors =
             TopAppBarDefaults.topAppBarColors(
@@ -230,6 +249,38 @@ internal fun SettingsScreen(
               }
             }
           }
+
+          item { SubHeader(text = stringResource(Res.string.homeViewMode)) }
+
+          item {
+            Row(modifier = Modifier.padding(horizontal = 8.dp)) {
+              LayoutIconButton(
+                modifier = Modifier.weight(1f),
+                label = stringResource(Res.string.homeViewModeDefault),
+                icon = TwineIcons.LayoutDefault,
+                selected = state.homeViewMode == HomeViewMode.Default,
+                onClick = { viewModel.dispatch(ChangeHomeViewMode(HomeViewMode.Default)) }
+              )
+
+              LayoutIconButton(
+                modifier = Modifier.weight(1f),
+                label = stringResource(Res.string.homeViewModeSimple),
+                icon = TwineIcons.LayoutSimple,
+                selected = state.homeViewMode == HomeViewMode.Simple,
+                onClick = { viewModel.dispatch(ChangeHomeViewMode(HomeViewMode.Simple)) }
+              )
+
+              LayoutIconButton(
+                modifier = Modifier.weight(1f),
+                label = stringResource(Res.string.homeViewModeCompact),
+                icon = TwineIcons.LayoutCompact,
+                selected = state.homeViewMode == HomeViewMode.Compact,
+                onClick = { viewModel.dispatch(ChangeHomeViewMode(HomeViewMode.Compact)) }
+              )
+            }
+          }
+
+          item { Divider() }
 
           item {
             SubHeader(
@@ -392,6 +443,93 @@ internal fun SettingsScreen(
     containerColor = AppTheme.colorScheme.surfaceContainerLowest,
     contentColor = Color.Unspecified,
   )
+}
+
+@Composable
+private fun LayoutIconButton(
+  icon: ImageVector,
+  label: String,
+  selected: Boolean,
+  modifier: Modifier = Modifier,
+  onClick: () -> Unit
+) {
+  Column(
+    modifier =
+      Modifier.then(modifier)
+        .clip(MaterialTheme.shapes.medium)
+        .clickable { onClick() }
+        .padding(vertical = 8.dp),
+    horizontalAlignment = Alignment.CenterHorizontally
+  ) {
+    val defaultTranslucentStyle = LocalTranslucentStyles.current.default
+    val background =
+      if (selected) {
+        Color.Transparent
+      } else {
+        defaultTranslucentStyle.background
+      }
+    val border =
+      if (selected) {
+        defaultTranslucentStyle.outline.copy(alpha = 0.48f)
+      } else {
+        defaultTranslucentStyle.outline
+      }
+    val shape =
+      if (selected) {
+        MaterialTheme.shapes.medium
+      } else {
+        MaterialTheme.shapes.small
+      }
+    val iconTint =
+      if (selected) {
+        AppTheme.colorScheme.inverseOnSurface
+      } else {
+        AppTheme.colorScheme.outline
+      }
+    val padding by animateDpAsState(if (selected) 0.dp else 4.dp)
+
+    Box(
+      modifier =
+        Modifier.requiredSize(48.dp)
+          .padding(padding)
+          .background(background, shape)
+          .border(1.dp, border, shape),
+      contentAlignment = Alignment.Center
+    ) {
+      val iconBackground by
+        animateColorAsState(
+          if (selected) {
+            AppTheme.colorScheme.primary
+          } else {
+            Color.Transparent
+          }
+        )
+      val iconBackgroundSize by animateDpAsState(if (selected) 40.dp else 0.dp)
+
+      Box(
+        modifier =
+          Modifier.requiredSize(iconBackgroundSize)
+            .background(iconBackground, MaterialTheme.shapes.small),
+      )
+
+      Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = iconTint,
+        modifier = Modifier.requiredSize(20.dp)
+      )
+    }
+
+    Spacer(Modifier.requiredHeight(4.dp))
+
+    val textStyle =
+      if (selected) MaterialTheme.typography.labelMedium else MaterialTheme.typography.bodySmall
+    Text(
+      text = label,
+      style = textStyle,
+      color = AppTheme.colorScheme.onSurface,
+    )
+  }
 }
 
 @Composable

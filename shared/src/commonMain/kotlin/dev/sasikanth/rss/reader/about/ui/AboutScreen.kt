@@ -37,7 +37,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -55,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import dev.sasikanth.rss.reader.about.Person
 import dev.sasikanth.rss.reader.about.Social
+import dev.sasikanth.rss.reader.components.CircularIconButton
 import dev.sasikanth.rss.reader.components.image.AsyncImage
 import dev.sasikanth.rss.reader.platform.LocalLinkHandler
 import dev.sasikanth.rss.reader.resources.icons.ArrowBack
@@ -75,6 +75,7 @@ import twine.shared.generated.resources.aboutSocialGitHub
 import twine.shared.generated.resources.aboutSocialThreads
 import twine.shared.generated.resources.aboutSocialTwitter
 import twine.shared.generated.resources.aboutSocialWebsite
+import twine.shared.generated.resources.buttonGoBack
 
 @Composable
 fun AboutScreen(
@@ -145,11 +146,19 @@ fun AboutScreen(
     topBar = {
       Box {
         CenterAlignedTopAppBar(
-          title = { Text(stringResource(Res.string.about)) },
+          title = {
+            Text(
+              text = stringResource(Res.string.about),
+              color = AppTheme.colorScheme.onSurface,
+              style = MaterialTheme.typography.titleMedium,
+            )
+          },
           navigationIcon = {
-            IconButton(onClick = { goBack() }) {
-              Icon(TwineIcons.ArrowBack, contentDescription = null)
-            }
+            CircularIconButton(
+              icon = TwineIcons.ArrowBack,
+              label = stringResource(Res.string.buttonGoBack),
+              onClick = { goBack() }
+            )
           },
           colors =
             TopAppBarDefaults.topAppBarColors(
