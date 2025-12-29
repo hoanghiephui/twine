@@ -30,7 +30,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -49,13 +48,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.cash.paging.compose.collectAsLazyPagingItems
 import dev.sasikanth.rss.reader.bookmarks.BookmarksEvent
 import dev.sasikanth.rss.reader.bookmarks.BookmarksViewModel
+import dev.sasikanth.rss.reader.components.CircularIconButton
 import dev.sasikanth.rss.reader.components.NewArticlesScrollToTopButton
 import dev.sasikanth.rss.reader.core.model.local.PostWithMetadata
 import dev.sasikanth.rss.reader.home.ui.PostListItem
 import dev.sasikanth.rss.reader.home.ui.PostMetadataConfig
 import dev.sasikanth.rss.reader.platform.LocalLinkHandler
 import dev.sasikanth.rss.reader.resources.icons.ArrowBack
-import dev.sasikanth.rss.reader.resources.icons.Bookmarks
+import dev.sasikanth.rss.reader.resources.icons.BookmarkStacks
 import dev.sasikanth.rss.reader.resources.icons.TwineIcons
 import dev.sasikanth.rss.reader.ui.AppTheme
 import kotlinx.coroutines.launch
@@ -94,12 +94,12 @@ internal fun BookmarksScreen(
             )
           },
           navigationIcon = {
-            IconButton(onClick = { goBack() }) {
-              Icon(
-                TwineIcons.ArrowBack,
-                contentDescription = stringResource(Res.string.buttonGoBack)
-              )
-            }
+            CircularIconButton(
+              modifier = Modifier.padding(start = 12.dp),
+              icon = TwineIcons.ArrowBack,
+              label = stringResource(Res.string.buttonGoBack),
+              onClick = goBack,
+            )
           },
           colors =
             TopAppBarDefaults.topAppBarColors(
@@ -182,7 +182,7 @@ internal fun BookmarksScreen(
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
           Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
-              imageVector = TwineIcons.Bookmarks,
+              imageVector = TwineIcons.BookmarkStacks,
               contentDescription = null,
               modifier = Modifier.size(80.dp),
               tint = AppTheme.colorScheme.textEmphasisHigh
