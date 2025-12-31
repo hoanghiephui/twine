@@ -41,6 +41,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -49,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import dev.sasikanth.rss.reader.components.image.FeedIcon
 import dev.sasikanth.rss.reader.core.model.local.Feed
 import dev.sasikanth.rss.reader.ui.AppTheme
+import dev.sasikanth.rss.reader.ui.LocalTranslucentStyles
 import dev.sasikanth.rss.reader.utils.LocalShowFeedFavIconSetting
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -70,8 +72,9 @@ internal fun FeedListItem(
     if (isFeedSelected) {
       AppTheme.colorScheme.primaryContainer
     } else {
-      AppTheme.colorScheme.tintedSurface
+      Color.Transparent
     }
+  val translucentStyle = LocalTranslucentStyles.current
 
   Box(
     modifier =
@@ -113,7 +116,7 @@ internal fun FeedListItem(
       Text(
         modifier = Modifier.weight(1f),
         text = feed.name,
-        style = MaterialTheme.typography.bodyMedium,
+        style = MaterialTheme.typography.titleSmall,
         color = AppTheme.colorScheme.textEmphasisHigh,
         maxLines = 1,
         overflow = TextOverflow.Clip
@@ -124,13 +127,13 @@ internal fun FeedListItem(
       val numberOfUnreadPosts = feed.numberOfUnreadPosts
       if (canShowUnreadPostsCount && numberOfUnreadPosts > 0 && !isInMultiSelectMode) {
         Badge(
-          containerColor = AppTheme.colorScheme.tintedForeground,
-          contentColor = AppTheme.colorScheme.tintedBackground,
-          modifier = Modifier.sizeIn(minWidth = 24.dp, minHeight = 16.dp)
+          containerColor = translucentStyle.prominent.background,
+          contentColor = AppTheme.colorScheme.secondary,
+          modifier = Modifier.sizeIn(minWidth = 36.dp, minHeight = 24.dp)
         ) {
           Text(
             text = feed.numberOfUnreadPosts.toString(),
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelMedium,
             modifier = Modifier.align(Alignment.CenterVertically)
           )
         }

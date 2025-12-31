@@ -40,7 +40,6 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -388,12 +387,13 @@ internal fun ReaderScreen(
                   },
                 )
               }
-
               ReaderPage(
                 modifier =
                   Modifier.fillMaxSize().onVisibilityChanged(minDurationMs = 200L) {
-                    onPostChanged(page)
-                    viewModel.dispatch(ReaderEvent.PostPageChanged(page, readerPost))
+                    if (it) {
+                      onPostChanged(page)
+                      viewModel.dispatch(ReaderEvent.PostPageChanged(page, readerPost))
+                    }
                   },
                 contentPaddingValues = paddingValues,
                 pageViewModel = pageViewModel,

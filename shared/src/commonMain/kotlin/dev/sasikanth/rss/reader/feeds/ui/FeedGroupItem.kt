@@ -44,12 +44,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.sasikanth.rss.reader.core.model.local.FeedGroup
 import dev.sasikanth.rss.reader.ui.AppTheme
+import dev.sasikanth.rss.reader.ui.LocalTranslucentStyles
 import dev.sasikanth.rss.reader.utils.LocalShowFeedFavIconSetting
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
@@ -76,8 +78,9 @@ internal fun FeedGroupItem(
     if (selected) {
       AppTheme.colorScheme.primaryContainer
     } else {
-      AppTheme.colorScheme.tintedSurface
+      Color.Transparent
     }
+  val translucentStyle = LocalTranslucentStyles.current
 
   Box(
     modifier =
@@ -135,7 +138,7 @@ internal fun FeedGroupItem(
       Column(Modifier.weight(1f)) {
         Text(
           text = feedGroup.name,
-          style = MaterialTheme.typography.labelMedium,
+          style = MaterialTheme.typography.titleSmall,
           color = AppTheme.colorScheme.textEmphasisHigh,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis
@@ -154,7 +157,7 @@ internal fun FeedGroupItem(
 
         Text(
           text = text,
-          style = MaterialTheme.typography.bodySmall,
+          style = MaterialTheme.typography.bodyMedium,
           color = AppTheme.colorScheme.textEmphasisMed,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis
@@ -166,9 +169,9 @@ internal fun FeedGroupItem(
       val numberOfUnreadPosts = feedGroup.numberOfUnreadPosts
       if (canShowUnreadPostsCount && numberOfUnreadPosts > 0 && !isInMultiSelectMode) {
         Badge(
-          containerColor = AppTheme.colorScheme.tintedForeground,
-          contentColor = AppTheme.colorScheme.tintedBackground,
-          modifier = Modifier.sizeIn(minWidth = 24.dp, minHeight = 16.dp)
+          containerColor = translucentStyle.prominent.background,
+          contentColor = AppTheme.colorScheme.secondary,
+          modifier = Modifier.sizeIn(minWidth = 36.dp, minHeight = 24.dp)
         ) {
           Text(
             text = feedGroup.numberOfUnreadPosts.toString(),

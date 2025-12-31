@@ -79,6 +79,7 @@ import dev.sasikanth.rss.reader.resources.icons.NewGroup
 import dev.sasikanth.rss.reader.resources.icons.Pin
 import dev.sasikanth.rss.reader.resources.icons.TwineIcons
 import dev.sasikanth.rss.reader.ui.AppTheme
+import dev.sasikanth.rss.reader.ui.LocalTranslucentStyles
 import dev.sasikanth.rss.reader.utils.Constants
 import dev.sasikanth.rss.reader.utils.KeyboardState
 import dev.sasikanth.rss.reader.utils.keyboardVisibilityAsState
@@ -342,6 +343,7 @@ private fun SearchBar(
 ) {
   val keyboardState by keyboardVisibilityAsState()
   val focusManager = LocalFocusManager.current
+  val translucentStyle = LocalTranslucentStyles.current
 
   LaunchedEffect(keyboardState) {
     if (keyboardState == KeyboardState.Closed) {
@@ -365,15 +367,15 @@ private fun SearchBar(
       placeholder = {
         Text(
           text = stringResource(Res.string.feedsSearchHint),
-          color = AppTheme.colorScheme.tintedForeground,
-          style = MaterialTheme.typography.bodyLarge
+          color = AppTheme.colorScheme.onSurfaceVariant,
+          style = MaterialTheme.typography.bodyMedium
         )
       },
       leadingIcon = {
         Icon(
           imageVector = Icons.Rounded.Search,
           contentDescription = null,
-          tint = AppTheme.colorScheme.tintedForeground
+          tint = AppTheme.colorScheme.onSurfaceVariant
         )
       },
       trailingIcon = {
@@ -382,21 +384,22 @@ private fun SearchBar(
             Icon(
               Icons.Rounded.Close,
               contentDescription = null,
-              tint = AppTheme.colorScheme.tintedForeground
+              tint = AppTheme.colorScheme.onSurfaceVariant
             )
           }
         }
       },
-      shape = RoundedCornerShape(16.dp),
+      shape = RoundedCornerShape(50),
       singleLine = true,
-      textStyle = MaterialTheme.typography.bodyLarge,
+      textStyle = MaterialTheme.typography.bodyMedium,
       colors =
         OutlinedTextFieldDefaults.colors(
-          focusedBorderColor = AppTheme.colorScheme.primary,
-          unfocusedBorderColor = AppTheme.colorScheme.tintedHighlight,
-          disabledBorderColor = AppTheme.colorScheme.tintedHighlight,
-          focusedTextColor = AppTheme.colorScheme.textEmphasisHigh,
+          focusedBorderColor = translucentStyle.prominent.background,
+          unfocusedBorderColor = translucentStyle.default.background,
+          focusedTextColor = AppTheme.colorScheme.onSurfaceVariant,
           disabledTextColor = Color.Transparent,
+          unfocusedContainerColor = translucentStyle.default.background,
+          focusedContainerColor = translucentStyle.default.background,
         )
     )
   }
@@ -455,6 +458,6 @@ fun DeleteConfirmationDialog(
 
 internal fun bottomPaddingOfSourceItem(index: Int, itemCount: Int) =
   when {
-    index < itemCount -> 8.dp
+    index < itemCount -> 4.dp
     else -> 0.dp
   }
