@@ -107,6 +107,7 @@ import dev.sasikanth.rss.reader.ui.AppTheme
 import dev.sasikanth.rss.reader.util.readerDateTimestamp
 import dev.sasikanth.rss.reader.utils.LocalBlockImage
 import dev.sasikanth.rss.reader.utils.LocalShowFeedFavIconSetting
+import dev.sasikanth.rss.reader.utils.ParallaxAlignment
 import dev.sasikanth.rss.reader.utils.getOffsetFractionForPage
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -134,7 +135,7 @@ internal fun ReaderPage(
   pagerState: PagerState,
   markdownComponents: MarkdownComponents,
   loadFullArticle: Boolean,
-  darkTheme: Boolean,
+  isDarkTheme: Boolean,
   onBookmarkClick: () -> Unit,
   onMarkAsUnread: () -> Unit,
   modifier: Modifier = Modifier,
@@ -239,7 +240,7 @@ internal fun ReaderPage(
                 page = page,
                 pagerState = pagerState,
                 excerpt = excerptState,
-                darkTheme = darkTheme,
+                darkTheme = isDarkTheme,
                 onCommentsClick = {
                   coroutineScope.launch { linkHandler.openLink(readerPost.commentsLink) }
                 },
@@ -323,7 +324,13 @@ private fun PostHeader(
         FeaturedImage(
           imageUrl = postImage,
           isComicStrip = UrlUtils.isComicStrip(postImage),
-          parallaxProgress = { pagerState.getOffsetFractionForPage(page) }
+          alignment =
+            remember(pagerState) {
+              ParallaxAlignment(
+                horizontalBias = { pagerState.getOffsetFractionForPage(page) },
+                multiplier = 2f,
+              )
+            }
         )
       }
 

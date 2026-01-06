@@ -52,7 +52,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -101,10 +100,9 @@ import dev.sasikanth.rss.reader.ui.RethinkSansFontFamily
 import dev.sasikanth.rss.reader.ui.RobotoSerifFontFamily
 import dev.sasikanth.rss.reader.ui.rememberDynamicColorState
 import dev.sasikanth.rss.reader.ui.typography
-import dev.sasikanth.rss.reader.utils.Constants.EPSILON
+import dev.sasikanth.rss.reader.utils.CollectItemTransition
 import dev.sasikanth.rss.reader.utils.LocalBlockImage
 import dev.sasikanth.rss.reader.utils.LocalWindowSizeClass
-import dev.sasikanth.rss.reader.utils.getOffsetFractionForPage
 import dev.snipme.highlights.Highlights
 import dev.snipme.highlights.model.SyntaxThemes
 import kotlinx.coroutines.FlowPreview
@@ -116,7 +114,6 @@ import twine.shared.generated.resources.buttonGoBack
 @OptIn(ExperimentalComposeUiApi::class, FlowPreview::class)
 @Composable
 internal fun ReaderScreen(
-  darkTheme: Boolean,
   viewModel: ReaderViewModel,
   pageViewModelFactory: @Composable (PostWithMetadata) -> ReaderPageViewModel,
   onPostChanged: (Int) -> Unit,
@@ -149,55 +146,20 @@ internal fun ReaderScreen(
   val pagerState = rememberPagerState(initialPage = state.activePostIndex) { posts.itemCount }
   val exitScreen by viewModel.exitScreen.collectAsStateWithLifecycle(false)
 
-  LaunchedEffect(pagerState, posts.loadState) {
-    if (shouldBlockImage || posts.itemCount == 0) {
-      return@LaunchedEffect
+  pagerState.CollectItemTransition(
+    key = posts.itemCount,
+    itemProvider = { index ->
+      if (shouldBlockImage || posts.itemCount == 0) null else posts.peek(index)
     }
+  ) { fromItem, toItem, offset ->
+    val fromSeedColor = seedColorExtractor.calculateSeedColor(url = fromItem?.imageUrl)
+    val toSeedColor = seedColorExtractor.calculateSeedColor(url = toItem?.imageUrl)
 
-    snapshotFlow {
-        runCatching {
-            val settledPage = pagerState.settledPage
-            pagerState.getOffsetFractionForPage(settledPage)
-          }
-          .getOrNull()
-          ?: 0f
-      }
-      .collect { offset ->
-        val settledPage = pagerState.settledPage
-        val activePost = runCatching { posts.peek(settledPage) }.getOrNull()
-
-        if (activePost == null) return@collect
-
-        // The default snap position of the pager is 0.5f, that means the targetPage
-        // state only changes after reaching half way point. We instead want it to scale
-        // as we start swiping.
-        //
-        // Instead of using EPSILON for snap threshold, we are doing that calculation
-        // as the page offset changes
-        //
-        val fromItem =
-          if (offset < -EPSILON) {
-            runCatching { posts.peek(settledPage - 1) }.getOrNull() ?: activePost
-          } else {
-            activePost
-          }
-
-        val toItem =
-          if (offset > EPSILON) {
-            runCatching { posts.peek(settledPage + 1) }.getOrNull() ?: activePost
-          } else {
-            activePost
-          }
-
-        val fromSeedColor = seedColorExtractor.calculateSeedColor(url = fromItem.imageUrl)
-        val toSeedColor = seedColorExtractor.calculateSeedColor(url = toItem.imageUrl)
-
-        dynamicColorState.animate(
-          fromSeedColor = fromSeedColor,
-          toSeedColor = toSeedColor,
-          progress = offset
-        )
-      }
+    dynamicColorState.animate(
+      fromSeedColor = fromSeedColor,
+      toSeedColor = toSeedColor,
+      progress = offset
+    )
   }
 
   LaunchedEffect(state.openPaywall) {
@@ -239,7 +201,10 @@ internal fun ReaderScreen(
         lineHeightScalingFactor = state.readerLineHeightScaleFactor,
       )
 
-    AppTheme(useDarkTheme = darkTheme, typography = typography) {
+    val isParentThemeDark = AppTheme.isDark
+    AppTheme(useDarkTheme = isParentThemeDark, typography = typography) {
+      val isDarkTheme = AppTheme.isDark
+
       Scaffold(
         modifier = modifier.fillMaxSize().nestedScroll(scrollBehaviour.nestedScrollConnection),
         topBar = {
@@ -300,7 +265,7 @@ internal fun ReaderScreen(
             val showFullArticle by pageViewModel.showFullArticle.collectAsStateWithLifecycle()
 
             ReaderActionsPanel(
-              darkTheme = darkTheme,
+              isDarkTheme = isDarkTheme,
               loadFullArticle = showFullArticle,
               showReaderCustomisations = state.showReaderCustomisations,
               selectedFont = state.selectedReaderFont,
@@ -363,8 +328,8 @@ internal fun ReaderScreen(
               val pageViewModel = pageViewModelFactory.invoke(readerPost)
               val showFullArticle by pageViewModel.showFullArticle.collectAsStateWithLifecycle()
               val highlightsBuilder =
-                remember(darkTheme) {
-                  Highlights.Builder().theme(SyntaxThemes.atom(darkMode = darkTheme))
+                remember(isDarkTheme) {
+                  Highlights.Builder().theme(SyntaxThemes.atom(darkMode = isDarkTheme))
                 }
               val markdownComponents = remember {
                 markdownComponents(
@@ -401,7 +366,7 @@ internal fun ReaderScreen(
                 pagerState = pagerState,
                 markdownComponents = markdownComponents,
                 loadFullArticle = showFullArticle,
-                darkTheme = darkTheme,
+                isDarkTheme = isDarkTheme,
                 onBookmarkClick = {
                   viewModel.dispatch(
                     ReaderEvent.TogglePostBookmark(
@@ -436,7 +401,7 @@ internal fun ReaderScreen(
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun ReaderActionsPanel(
-  darkTheme: Boolean,
+  isDarkTheme: Boolean,
   loadFullArticle: Boolean,
   showReaderCustomisations: Boolean,
   selectedFont: ReaderFont,
@@ -473,7 +438,7 @@ private fun ReaderActionsPanel(
       contentAlignment = Alignment.Center
     ) {
       val (shadowColor1, shadowColor2) =
-        if (darkTheme) {
+        if (isDarkTheme) {
           Pair(Color.Black.copy(alpha = 0.6f), Color.Black.copy(alpha = 0.24f))
         } else {
           Pair(Color.Black.copy(alpha = 0.4f), Color.Black.copy(alpha = 0.16f))
