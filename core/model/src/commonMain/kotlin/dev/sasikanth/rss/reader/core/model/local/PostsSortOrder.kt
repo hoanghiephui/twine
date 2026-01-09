@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Sasikanth Miriyampalli
+ * Copyright 2026 Sasikanth Miriyampalli
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,28 +16,9 @@
 
 package dev.sasikanth.rss.reader.core.model.local
 
-import kotlin.time.Instant
-
-data class Post(
-  val id: String,
-  val sourceId: String,
-  val title: String,
-  val description: String,
-  val imageUrl: String?,
-  val postDate: Instant,
-  val createdAt: Instant,
-  val updatedAt: Instant,
-  val syncedAt: Instant,
-  val link: String,
-  val commentsLink: String?,
-  val flags: Set<PostFlag>,
-) {
-  val bookmarked: Boolean
-    get() = PostFlag.Bookmarked in flags
-
-  val read: Boolean
-    get() = PostFlag.Read in flags
-
-  val hidden: Boolean
-    get() = PostFlag.Hidden in flags
+enum class PostsSortOrder {
+  Latest,
+  Oldest,
+  AddedLatest,
+  AddedOldest,
 }

@@ -25,6 +25,7 @@ import dev.sasikanth.rss.reader.core.model.local.Feed
 import dev.sasikanth.rss.reader.core.model.local.FeedGroup
 import dev.sasikanth.rss.reader.core.model.local.Post
 import dev.sasikanth.rss.reader.core.model.local.PostWithMetadata
+import dev.sasikanth.rss.reader.core.model.local.PostsSortOrder
 import dev.sasikanth.rss.reader.core.model.local.SearchSortOrder
 import dev.sasikanth.rss.reader.core.model.local.Source
 import dev.sasikanth.rss.reader.core.model.local.UnreadSinceLastSync
@@ -105,7 +106,7 @@ class RssRepository(
             updatedAt = Clock.System.now(),
             syncedAt = Clock.System.now(),
             link = postPayload.link,
-            commnetsLink = postPayload.commentsLink,
+            commentsLink = postPayload.commentsLink,
             isDateParsedCorrectly = if (postPayload.isDateParsedCorrectly) 1 else 0,
           )
 
@@ -141,7 +142,8 @@ class RssRepository(
           pinnedPosition: Double,
           showFeedFavIcon: Boolean,
           lastUpdatedAt: Instant?,
-          refreshInterval: String ->
+          refreshInterval: String,
+          isDeleted: Boolean ->
           Feed(
             id = id,
             name = name,
@@ -157,6 +159,7 @@ class RssRepository(
             alwaysFetchSourceArticle = alwaysFetchSourceArticle,
             pinnedPosition = pinnedPosition,
             showFeedFavIcon = showFeedFavIcon,
+            isDeleted = isDeleted,
           )
         }
       )
@@ -190,6 +193,7 @@ class RssRepository(
 
   fun allPosts(
     activeSourceIds: List<String>,
+    postsSortOrder: PostsSortOrder,
     unreadOnly: Boolean? = null,
     after: Instant = Instant.DISTANT_PAST,
     lastSyncedAt: Instant = Instant.DISTANT_FUTURE,
@@ -213,6 +217,7 @@ class RssRepository(
           postsAfter = after,
           numberOfFeaturedPosts = Constants.NUMBER_OF_FEATURED_POSTS,
           lastSyncedAt = lastSyncedAt,
+          orderBy = postsSortOrder.name,
           limit = limit,
           offset = offset,
           mapper = {
@@ -222,10 +227,10 @@ class RssRepository(
             description,
             imageUrl,
             date,
+            createdAt,
             link,
             commentsLink,
-            bookmarked,
-            read,
+            flags,
             feedName,
             feedIcon,
             feedHomepageLink,
@@ -238,10 +243,10 @@ class RssRepository(
               description = description,
               imageUrl = imageUrl,
               date = date,
+              createdAt = createdAt,
               link = link,
               commentsLink = commentsLink,
-              bookmarked = bookmarked,
-              read = read,
+              flags = flags,
               feedName = feedName,
               feedIcon = feedIcon,
               feedHomepageLink = feedHomepageLink,
@@ -255,12 +260,14 @@ class RssRepository(
 
   suspend fun updateBookmarkStatus(bookmarked: Boolean, id: String) {
     withContext(dispatchersProvider.databaseWrite) {
-      postQueries.updateBookmarkStatus(bookmarked = bookmarked, id = id)
+      postQueries.updateBookmarkStatus(bookmarked = if (bookmarked) 1L else 0L, id = id)
     }
   }
 
   suspend fun updatePostReadStatus(read: Boolean, id: String) {
-    withContext(dispatchersProvider.databaseWrite) { postQueries.updateReadStatus(read, id) }
+    withContext(dispatchersProvider.databaseWrite) {
+      postQueries.updateReadStatus(read = if (read) 1L else 0L, id = id)
+    }
   }
 
   suspend fun deleteBookmark(id: String) {
@@ -285,7 +292,8 @@ class RssRepository(
             pinnedPosition: Double,
             showFeedFavIcon: Boolean,
             lastUpdatedAt: Instant?,
-            refreshInterval: String ->
+            refreshInterval: String,
+            isDeleted: Boolean ->
             Feed(
               id = id,
               name = name,
@@ -301,6 +309,7 @@ class RssRepository(
               alwaysFetchSourceArticle = alwaysFetchSourceArticle,
               pinnedPosition = pinnedPosition,
               showFeedFavIcon = showFeedFavIcon,
+              isDeleted = isDeleted,
             )
           }
         )
@@ -360,7 +369,30 @@ class RssRepository(
           postsAfter = postsAfter,
           limit = limit,
           offset = offset,
-          mapper = ::Feed
+          mapper = {
+            id,
+            name,
+            icon,
+            description,
+            link,
+            homepageLink,
+            createdAt,
+            pinnedAt,
+            lastCleanUpAt,
+            numberOfUnreadPosts ->
+            Feed(
+              id = id,
+              name = name,
+              icon = icon,
+              description = description,
+              link = link,
+              homepageLink = homepageLink,
+              createdAt = createdAt,
+              pinnedAt = pinnedAt,
+              lastCleanUpAt = lastCleanUpAt,
+              numberOfUnreadPosts = numberOfUnreadPosts,
+            )
+          }
         )
       }
     )
@@ -454,7 +486,12 @@ class RssRepository(
   }
 
   suspend fun removeFeed(feedId: String) {
-    withContext(dispatchersProvider.databaseWrite) { feedQueries.remove(feedId) }
+    withContext(dispatchersProvider.databaseWrite) {
+      feedQueries.transaction {
+        feedQueries.remove(feedId)
+        postQueries.deletePostsForFeed(feedId)
+      }
+    }
   }
 
   suspend fun updateFeedName(newFeedName: String, feedId: String) {
@@ -488,7 +525,38 @@ class RssRepository(
           sortOrder = sortOrder.value,
           limit = limit,
           offset = offset,
-          mapper = ::PostWithMetadata
+          mapper = {
+            id,
+            sourceId,
+            title,
+            description,
+            imageUrl,
+            date,
+            createdAt,
+            link,
+            commentsLink,
+            flags,
+            feedName,
+            feedIcon,
+            feedHomepageLink,
+            alwaysFetchSourceArticle ->
+            PostWithMetadata(
+              id = id,
+              sourceId = sourceId,
+              title = title,
+              description = description,
+              imageUrl = imageUrl,
+              date = date,
+              createdAt = createdAt,
+              link = link,
+              commentsLink = commentsLink,
+              flags = flags,
+              feedName = feedName,
+              feedIcon = feedIcon,
+              feedHomepageLink = feedHomepageLink,
+              alwaysFetchFullArticle = alwaysFetchSourceArticle,
+            )
+          }
         )
       }
     )
@@ -510,10 +578,10 @@ class RssRepository(
             description,
             imageUrl,
             date,
+            createdAt,
             link,
             commentsLink,
-            bookmarked,
-            read,
+            flags,
             feedName,
             feedIcon,
             feedHomepageLink ->
@@ -524,10 +592,10 @@ class RssRepository(
               description = description,
               imageUrl = imageUrl,
               date = date,
+              createdAt = createdAt,
               link = link,
               commentsLink = commentsLink,
-              bookmarked = bookmarked,
-              read = read,
+              flags = flags,
               feedName = feedName,
               feedIcon = feedIcon,
               feedHomepageLink = feedHomepageLink,
@@ -596,7 +664,7 @@ class RssRepository(
   suspend fun markPostsAsRead(postIds: Set<String>) {
     withContext(dispatchersProvider.databaseWrite) {
       transactionRunner.invoke {
-        postIds.forEach { postId -> postQueries.updateReadStatus(read = true, id = postId) }
+        postIds.forEach { postId -> postQueries.updateReadStatus(read = 1L, id = postId) }
       }
     }
   }
@@ -695,9 +763,10 @@ class RssRepository(
 
   suspend fun deleteSources(sources: Set<Source>) {
     withContext(dispatchersProvider.databaseWrite) {
-      transactionRunner.invoke {
+      feedQueries.transaction {
         sources.forEach { source ->
           feedQueries.remove(id = source.id)
+          postQueries.deletePostsForFeed(source.id)
           feedGroupQueries.deleteGroup(id = source.id)
         }
       }

@@ -168,6 +168,17 @@ internal fun HomeScreen(
   val showScrollToTop by remember { derivedStateOf { postsListState.firstVisibleItemIndex > 0 } }
   val unreadSinceLastSync = state.unreadSinceLastSync
 
+  if (state.showPostsSortFilter) {
+    PostsPreferencesSheet(
+      postsType = state.postsType,
+      postsSortOrder = state.postsSortOrder,
+      onApply = { postsType, postsSortOrder ->
+        viewModel.dispatch(HomeEvent.OnPostsSortFilterApplied(postsType, postsSortOrder))
+      },
+      onDismiss = { viewModel.dispatch(HomeEvent.ShowPostsSortFilter(show = false)) }
+    )
+  }
+
   LaunchedEffect(state.activeSource) {
     if (state.activeSource != state.prevActiveSource) {
       bottomSheetState.partialExpand()
@@ -205,7 +216,7 @@ internal fun HomeScreen(
               if (platform == Platform.Android) {
                 scaffoldPadding.calculateBottomPadding().coerceAtLeast(16.dp)
               } else {
-                8.dp
+                12.dp
               }
             BOTTOM_SHEET_PEEK_HEIGHT + scaffoldBottomPadding
           } else {
@@ -231,7 +242,7 @@ internal fun HomeScreen(
                 hasUnreadPosts = state.hasUnreadPosts,
                 scrollBehavior = appBarScrollBehaviour,
                 onMenuClicked = onMenuClicked,
-                onPostTypeChanged = { viewModel.dispatch(HomeEvent.OnPostsTypeChanged(it)) },
+                onShowPostsSortFilter = { viewModel.dispatch(HomeEvent.ShowPostsSortFilter(true)) },
                 onMarkPostsAsRead = { viewModel.dispatch(HomeEvent.MarkPostsAsRead(it)) }
               )
             },
