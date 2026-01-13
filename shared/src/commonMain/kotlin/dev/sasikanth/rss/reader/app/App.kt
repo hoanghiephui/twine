@@ -216,6 +216,10 @@ fun App(
 
     DisposableEffect(Unit) {
       ExternalUriHandler.listener = { uri ->
+        if (uri.startsWith("twine://oauth")) {
+          appViewModel.onOAuthRedirect(uri)
+        }
+
         val deepLinkRequest = NavDeepLinkRequest(uri = NavUri(uri), action = null, mimeType = null)
         if (navController.graph.hasDeepLink(deepLinkRequest)) {
           if (!navController.popBackStack(Screen.Main, inclusive = false)) {
