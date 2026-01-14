@@ -40,10 +40,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.rounded.WorkspacePremium
 import androidx.compose.material3.ButtonDefaults
@@ -51,10 +57,12 @@ import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -66,12 +74,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
@@ -79,6 +92,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import dev.sasikanth.rss.reader.app.AppIcon
 import dev.sasikanth.rss.reader.app.AppInfo
 import dev.sasikanth.rss.reader.billing.SubscriptionResult
 import dev.sasikanth.rss.reader.components.CircularIconButton
@@ -118,6 +132,7 @@ import dev.sasikanth.rss.reader.util.relativeDurationString
 import dev.sasikanth.rss.reader.utils.Constants
 import kotlin.time.Instant
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import twine.shared.generated.resources.Res
 import twine.shared.generated.resources.blockedWords
@@ -128,6 +143,7 @@ import twine.shared.generated.resources.homeViewMode
 import twine.shared.generated.resources.homeViewModeCompact
 import twine.shared.generated.resources.homeViewModeDefault
 import twine.shared.generated.resources.homeViewModeSimple
+import twine.shared.generated.resources.ic_launcher_foreground
 import twine.shared.generated.resources.markArticleAsRead
 import twine.shared.generated.resources.markArticleAsReadOnOpen
 import twine.shared.generated.resources.markArticleAsReadOnScroll
@@ -136,10 +152,13 @@ import twine.shared.generated.resources.settingsAboutSubtitle
 import twine.shared.generated.resources.settingsAboutTitle
 import twine.shared.generated.resources.settingsAmoledSubtitle
 import twine.shared.generated.resources.settingsAmoledTitle
+import twine.shared.generated.resources.settingsAppIconSubtitle
+import twine.shared.generated.resources.settingsAppIconTitle
 import twine.shared.generated.resources.settingsBlockImagesSubtitle
 import twine.shared.generated.resources.settingsBlockImagesTitle
 import twine.shared.generated.resources.settingsBrowserTypeSubtitle
 import twine.shared.generated.resources.settingsBrowserTypeTitle
+import twine.shared.generated.resources.settingsCustomisations
 import twine.shared.generated.resources.settingsDownloadFullContentSubtitle
 import twine.shared.generated.resources.settingsDownloadFullContentTitle
 import twine.shared.generated.resources.settingsDownloadFullContentWarning
@@ -194,6 +213,7 @@ internal fun SettingsScreen(
 ) {
   val coroutineScope = rememberCoroutineScope()
   val state by viewModel.state.collectAsStateWithLifecycle()
+  val appInfo = viewModel.appInfo
   val layoutDirection = LocalLayoutDirection.current
   val linkHandler = LocalLinkHandler.current
 
@@ -251,293 +271,484 @@ internal fun SettingsScreen(
       }
     },
     content = { padding ->
-      Box(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-          contentPadding =
-            PaddingValues(
-              start = padding.calculateStartPadding(layoutDirection),
-              top = padding.calculateTopPadding() + 8.dp,
-              end = padding.calculateEndPadding(layoutDirection),
-              bottom = padding.calculateBottomPadding() + 80.dp
-            ),
-        ) {
-          item {
-            AnimatedVisibility(
-              visible = !state.appInfo.isFoss && state.subscriptionResult != null,
-              enter = fadeIn() + expandVertically(),
-              exit = fadeOut() + shrinkVertically()
-            ) {
-              Column {
-                TwinePremiumBanner(
-                  modifier = Modifier.animateItem(),
-                  subscriptionResult = state.subscriptionResult,
-                  onClick = { openPaywall() }
-                )
+      if (state.showAppIconSelectionSheet) {
+        AppIconSelectionSheet(
+          currentAppIcon = state.appIcon,
+          onAppIconChange = {
+            viewModel.dispatch(SettingsEvent.OnAppIconChanged(it))
+            viewModel.dispatch(SettingsEvent.CloseAppIconSelectionSheet)
+          },
+          onDismiss = { viewModel.dispatch(SettingsEvent.CloseAppIconSelectionSheet) }
+        )
+      }
 
-                Divider()
-              }
-            }
-          }
-
-          item { SubHeader(text = stringResource(Res.string.homeViewMode)) }
-
-          item {
-            Row(modifier = Modifier.padding(horizontal = 8.dp)) {
-              LayoutIconButton(
-                modifier = Modifier.weight(1f),
-                label = stringResource(Res.string.homeViewModeDefault),
-                icon = TwineIcons.LayoutDefault,
-                selected = state.homeViewMode == HomeViewMode.Default,
-                onClick = { viewModel.dispatch(ChangeHomeViewMode(HomeViewMode.Default)) }
+      LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding =
+          PaddingValues(
+            start = padding.calculateStartPadding(layoutDirection),
+            top = padding.calculateTopPadding() + 8.dp,
+            end = padding.calculateEndPadding(layoutDirection),
+            bottom = padding.calculateBottomPadding() + 80.dp
+          ),
+      ) {
+        // region Twine Premium banner
+        item {
+          AnimatedVisibility(
+            visible = !state.appInfo.isFoss && state.subscriptionResult != null,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically()
+          ) {
+            Column {
+              TwinePremiumBanner(
+                modifier = Modifier.animateItem(),
+                subscriptionResult = state.subscriptionResult,
+                onClick = { openPaywall() }
               )
 
-              LayoutIconButton(
-                modifier = Modifier.weight(1f),
-                label = stringResource(Res.string.homeViewModeSimple),
-                icon = TwineIcons.LayoutSimple,
-                selected = state.homeViewMode == HomeViewMode.Simple,
-                onClick = { viewModel.dispatch(ChangeHomeViewMode(HomeViewMode.Simple)) }
-              )
-
-              LayoutIconButton(
-                modifier = Modifier.weight(1f),
-                label = stringResource(Res.string.homeViewModeCompact),
-                icon = TwineIcons.LayoutCompact,
-                selected = state.homeViewMode == HomeViewMode.Compact,
-                onClick = { viewModel.dispatch(ChangeHomeViewMode(HomeViewMode.Compact)) }
-              )
+              Divider()
             }
           }
-
-          item { Divider() }
-
-          item {
-            SubHeader(
-              text = stringResource(Res.string.settingsHeaderTheme),
-            )
-          }
-
-          item {
-            val appThemeMode = state.appThemeMode
-            ToggleableButtonGroup(
-              modifier =
-                Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp),
-              items =
-                listOf(
-                  ToggleableButtonItem(
-                    label = stringResource(Res.string.settingsThemeAuto),
-                    isSelected = appThemeMode == AppThemeMode.Auto,
-                    identifier = AppThemeMode.Auto,
-                  ),
-                  ToggleableButtonItem(
-                    label = stringResource(Res.string.settingsThemeLight),
-                    isSelected = appThemeMode == AppThemeMode.Light,
-                    identifier = AppThemeMode.Light
-                  ),
-                  ToggleableButtonItem(
-                    label = stringResource(Res.string.settingsThemeDark),
-                    isSelected = appThemeMode == AppThemeMode.Dark,
-                    identifier = AppThemeMode.Dark
-                  )
-                ),
-              onItemSelected = {
-                viewModel.dispatch(
-                  SettingsEvent.OnAppThemeModeChanged(it.identifier as AppThemeMode)
-                )
-              }
-            )
-          }
-
-          item {
-            AnimatedVisibility(
-              visible = AppTheme.isDark,
-              enter = fadeIn() + expandVertically(),
-              exit = fadeOut() + shrinkVertically()
-            ) {
-              AmoledSettingItem(
-                useAmoled = state.useAmoled,
-                onValueChanged = { newValue ->
-                  viewModel.dispatch(SettingsEvent.ToggleAmoled(newValue))
-                }
-              )
-            }
-          }
-
-          item { Divider() }
-
-          item {
-            SubHeader(
-              text = stringResource(Res.string.settingsHeaderBehaviour),
-            )
-          }
-
-          item {
-            ShowReaderViewSettingItem(
-              showReaderView = state.showReaderView,
-              onValueChanged = { newValue ->
-                viewModel.dispatch(SettingsEvent.ToggleShowReaderView(newValue))
-              }
-            )
-          }
-
-          item { Divider(24.dp) }
-
-          item {
-            BrowserTypeSettingItem(
-              browserType = state.browserType,
-              onBrowserTypeChanged = { newBrowserType ->
-                viewModel.dispatch(SettingsEvent.UpdateBrowserType(newBrowserType))
-              }
-            )
-          }
-
-          item { Divider(24.dp) }
-
-          item {
-            UnreadPostsCountSettingItem(
-              showUnreadCountEnabled = state.showUnreadPostsCount,
-              onValueChanged = { newValue ->
-                viewModel.dispatch(SettingsEvent.ToggleShowUnreadPostsCount(newValue))
-              }
-            )
-          }
-
-          item { Divider(24.dp) }
-
-          item {
-            AutoSyncSettingItem(
-              enableAutoSync = state.enableAutoSync,
-              onValueChanged = { newValue ->
-                viewModel.dispatch(SettingsEvent.ToggleAutoSync(newValue))
-              }
-            )
-          }
-
-          item { Divider(24.dp) }
-
-          item {
-            ShowFeedFavIconSettingItem(
-              showFeedFavIcon = state.showFeedFavIcon,
-              onValueChanged = { newValue ->
-                viewModel.dispatch(SettingsEvent.ToggleShowFeedFavIcon(newValue))
-              }
-            )
-          }
-
-          item { Divider(24.dp) }
-
-          item {
-            BlockImagesSettingItem(
-              blockImages = state.blockImages,
-              onValueChanged = { newValue ->
-                viewModel.dispatch(SettingsEvent.ToggleBlockImages(newValue))
-              }
-            )
-          }
-
-          item { Divider(24.dp) }
-
-          item {
-            NotificationsSettingItem(
-              enableNotifications = state.enableNotifications,
-              onValueChanged = { newValue ->
-                viewModel.dispatch(SettingsEvent.ToggleNotifications(newValue))
-              }
-            )
-          }
-
-          item { Divider(24.dp) }
-
-          item {
-            DownloadFullContentSettingItem(
-              downloadFullContent = state.downloadFullContent,
-              onValueChanged = { newValue ->
-                viewModel.dispatch(SettingsEvent.ToggleDownloadFullContent(newValue))
-              }
-            )
-          }
-
-          item { Divider(24.dp) }
-
-          item { BlockedWordsSettingItem { openBlockedWords() } }
-
-          item { Divider(24.dp) }
-
-          item {
-            MarkArticleAsReadOnSetting(articleMarkAsReadOn = state.markAsReadOn) {
-              viewModel.dispatch(SettingsEvent.MarkAsReadOnChanged(it))
-            }
-          }
-
-          item { Divider(24.dp) }
-
-          item {
-            PostsDeletionPeriodSettingItem(
-              postsDeletionPeriod = state.postsDeletionPeriod,
-              onValueChanged = { newValue ->
-                viewModel.dispatch(SettingsEvent.PostsDeletionPeriodChanged(newValue))
-              }
-            )
-          }
-
-          item { Divider(24.dp) }
-
-          item {
-            OPMLSettingItem(
-              opmlResult = state.opmlResult,
-              hasFeeds = state.hasFeeds,
-              onImportClicked = { viewModel.dispatch(SettingsEvent.ImportOpmlClicked) },
-              onExportClicked = { viewModel.dispatch(SettingsEvent.ExportOpmlClicked) },
-              onCancelClicked = { viewModel.dispatch(SettingsEvent.CancelOpmlImportOrExport) }
-            )
-          }
-
-          item { Divider() }
-
-          item { SubHeader(text = stringResource(Res.string.settingsHeaderSync)) }
-
-          item {
-            CloudSyncSettingItem(
-              syncProgress = state.syncProgress,
-              lastSyncedAt = state.lastSyncedAt,
-              availableProviders = viewModel.availableProviders,
-              onSyncClicked = { provider ->
-                viewModel.dispatch(SettingsEvent.SyncClicked(provider))
-              },
-              onSignOutClicked = { provider ->
-                viewModel.dispatch(SettingsEvent.SignOutClicked(provider))
-              }
-            )
-          }
-
-          item { Divider() }
-
-          item {
-            SubHeader(
-              text = stringResource(Res.string.settingsHeaderFeedback),
-            )
-          }
-
-          item {
-            ReportIssueItem(
-              appInfo = state.appInfo,
-              onClick = {
-                coroutineScope.launch { linkHandler.openLink(Constants.REPORT_ISSUE_LINK) }
-              }
-            )
-          }
-
-          item { Divider() }
-
-          item { AboutItem { openAbout() } }
-
-          item { Divider() }
         }
+        // endregion
+
+        // region Customisation settings
+        item { SubHeader(text = stringResource(Res.string.settingsCustomisations)) }
+
+        item { SubHeader(text = stringResource(Res.string.homeViewMode)) }
+
+        item {
+          HomeLayoutSelector(
+            homeViewMode = state.homeViewMode,
+            onClick = { viewModel.dispatch(ChangeHomeViewMode(it)) }
+          )
+        }
+
+        item { Divider(24.dp) }
+
+        item {
+          SubHeader(
+            text = stringResource(Res.string.settingsHeaderTheme),
+          )
+        }
+
+        item {
+          val appThemeMode = state.appThemeMode
+          ToggleableButtonGroup(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp),
+            items =
+              listOf(
+                ToggleableButtonItem(
+                  label = stringResource(Res.string.settingsThemeAuto),
+                  isSelected = appThemeMode == AppThemeMode.Auto,
+                  identifier = AppThemeMode.Auto,
+                ),
+                ToggleableButtonItem(
+                  label = stringResource(Res.string.settingsThemeLight),
+                  isSelected = appThemeMode == AppThemeMode.Light,
+                  identifier = AppThemeMode.Light
+                ),
+                ToggleableButtonItem(
+                  label = stringResource(Res.string.settingsThemeDark),
+                  isSelected = appThemeMode == AppThemeMode.Dark,
+                  identifier = AppThemeMode.Dark
+                )
+              ),
+            onItemSelected = {
+              viewModel.dispatch(SettingsEvent.OnAppThemeModeChanged(it.identifier as AppThemeMode))
+            }
+          )
+        }
+
+        item {
+          AnimatedVisibility(
+            visible = AppTheme.isDark,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically()
+          ) {
+            AmoledSettingItem(
+              useAmoled = state.useAmoled,
+              onValueChanged = { newValue ->
+                viewModel.dispatch(SettingsEvent.ToggleAmoled(newValue))
+              }
+            )
+          }
+        }
+
+        if (state.canSubscribe) {
+          item { Divider(24.dp) }
+
+          item {
+            AppIconSettingItem(
+              appIcon = state.appIcon,
+              isSubscribed = state.isSubscribed,
+              onClick = { viewModel.dispatch(SettingsEvent.AppIconClicked) }
+            )
+          }
+        }
+
+        item { Divider() }
+        // endregion
+
+        // region Sync settings
+        item { SubHeader(text = stringResource(Res.string.settingsHeaderSync)) }
+
+        item {
+          CloudSyncSettingItem(
+            syncProgress = state.syncProgress,
+            lastSyncedAt = state.lastSyncedAt,
+            availableProviders = viewModel.availableProviders,
+            onSyncClicked = { provider -> viewModel.dispatch(SettingsEvent.SyncClicked(provider)) },
+            onSignOutClicked = { provider ->
+              viewModel.dispatch(SettingsEvent.SignOutClicked(provider))
+            }
+          )
+        }
+
+        item { Divider() }
+        // endregion
+
+        // region Behaviour settings
+        item {
+          SubHeader(
+            text = stringResource(Res.string.settingsHeaderBehaviour),
+          )
+        }
+
+        item {
+          ShowReaderViewSettingItem(
+            showReaderView = state.showReaderView,
+            onValueChanged = { newValue ->
+              viewModel.dispatch(SettingsEvent.ToggleShowReaderView(newValue))
+            }
+          )
+        }
+
+        item { Divider(24.dp) }
+
+        item {
+          BrowserTypeSettingItem(
+            browserType = state.browserType,
+            onBrowserTypeChanged = { newBrowserType ->
+              viewModel.dispatch(SettingsEvent.UpdateBrowserType(newBrowserType))
+            }
+          )
+        }
+
+        item { Divider(24.dp) }
+
+        item {
+          UnreadPostsCountSettingItem(
+            showUnreadCountEnabled = state.showUnreadPostsCount,
+            onValueChanged = { newValue ->
+              viewModel.dispatch(SettingsEvent.ToggleShowUnreadPostsCount(newValue))
+            }
+          )
+        }
+
+        item { Divider(24.dp) }
+
+        item {
+          AutoSyncSettingItem(
+            enableAutoSync = state.enableAutoSync,
+            onValueChanged = { newValue ->
+              viewModel.dispatch(SettingsEvent.ToggleAutoSync(newValue))
+            }
+          )
+        }
+
+        item { Divider(24.dp) }
+
+        item {
+          ShowFeedFavIconSettingItem(
+            showFeedFavIcon = state.showFeedFavIcon,
+            onValueChanged = { newValue ->
+              viewModel.dispatch(SettingsEvent.ToggleShowFeedFavIcon(newValue))
+            }
+          )
+        }
+
+        item { Divider(24.dp) }
+
+        item {
+          BlockImagesSettingItem(
+            blockImages = state.blockImages,
+            onValueChanged = { newValue ->
+              viewModel.dispatch(SettingsEvent.ToggleBlockImages(newValue))
+            }
+          )
+        }
+
+        item { Divider(24.dp) }
+
+        item {
+          NotificationsSettingItem(
+            enableNotifications = state.enableNotifications,
+            onValueChanged = { newValue ->
+              viewModel.dispatch(SettingsEvent.ToggleNotifications(newValue))
+            }
+          )
+        }
+
+        item { Divider(24.dp) }
+
+        item {
+          DownloadFullContentSettingItem(
+            downloadFullContent = state.downloadFullContent,
+            onValueChanged = { newValue ->
+              viewModel.dispatch(SettingsEvent.ToggleDownloadFullContent(newValue))
+            }
+          )
+        }
+
+        item { Divider(24.dp) }
+
+        item { BlockedWordsSettingItem { openBlockedWords() } }
+
+        item { Divider(24.dp) }
+
+        item {
+          MarkArticleAsReadOnSetting(articleMarkAsReadOn = state.markAsReadOn) {
+            viewModel.dispatch(SettingsEvent.MarkAsReadOnChanged(it))
+          }
+        }
+
+        item { Divider(24.dp) }
+
+        item {
+          PostsDeletionPeriodSettingItem(
+            postsDeletionPeriod = state.postsDeletionPeriod,
+            onValueChanged = { newValue ->
+              viewModel.dispatch(SettingsEvent.PostsDeletionPeriodChanged(newValue))
+            }
+          )
+        }
+
+        item { Divider(24.dp) }
+
+        item {
+          OPMLSettingItem(
+            opmlResult = state.opmlResult,
+            hasFeeds = state.hasFeeds,
+            onImportClicked = { viewModel.dispatch(SettingsEvent.ImportOpmlClicked) },
+            onExportClicked = { viewModel.dispatch(SettingsEvent.ExportOpmlClicked) },
+            onCancelClicked = { viewModel.dispatch(SettingsEvent.CancelOpmlImportOrExport) }
+          )
+        }
+
+        item { Divider() }
+        // endregion
+
+        // region Feedback and about
+        item {
+          SubHeader(
+            text = stringResource(Res.string.settingsHeaderFeedback),
+          )
+        }
+
+        item {
+          ReportIssueItem(
+            appInfo = state.appInfo,
+            onClick = {
+              coroutineScope.launch { linkHandler.openLink(Constants.REPORT_ISSUE_LINK) }
+            }
+          )
+        }
+
+        item { Divider() }
+
+        item { AboutItem { openAbout() } }
+
+        item { Divider() }
+        // endregion
       }
     },
     containerColor = AppTheme.colorScheme.surfaceContainerLowest,
     contentColor = Color.Unspecified,
   )
+}
+
+@Composable
+private fun AppIconSettingItem(
+  appIcon: AppIcon,
+  isSubscribed: Boolean,
+  onClick: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Row(
+    modifier =
+      Modifier.clickable(onClick = onClick)
+        .padding(horizontal = 24.dp, vertical = 16.dp)
+        .fillMaxWidth()
+        .then(modifier),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(16.dp)
+  ) {
+    Column(Modifier.weight(1f)) {
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+          text = stringResource(Res.string.settingsAppIconTitle),
+          style = MaterialTheme.typography.titleMedium,
+          color = AppTheme.colorScheme.textEmphasisHigh
+        )
+
+        if (!isSubscribed) {
+          Spacer(Modifier.width(8.dp))
+
+          Icon(
+            modifier = Modifier.size(16.dp),
+            imageVector = Icons.Rounded.WorkspacePremium,
+            contentDescription = null,
+            tint = AppTheme.colorScheme.primary
+          )
+        }
+      }
+
+      Text(
+        text = stringResource(Res.string.settingsAppIconSubtitle),
+        style = MaterialTheme.typography.labelLarge,
+        color = AppTheme.colorScheme.textEmphasisMed
+      )
+    }
+
+    AppIconPreview(appIcon = appIcon, modifier = Modifier.size(48.dp))
+  }
+}
+
+@Composable
+private fun AppIconSelectionSheet(
+  currentAppIcon: AppIcon,
+  onAppIconChange: (AppIcon) -> Unit,
+  onDismiss: () -> Unit,
+) {
+  ModalBottomSheet(
+    onDismissRequest = onDismiss,
+    containerColor = AppTheme.colorScheme.surfaceContainerLowest,
+    contentColor = AppTheme.colorScheme.onSurface,
+    sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+  ) {
+    LazyVerticalGrid(
+      columns = GridCells.Fixed(3),
+      horizontalArrangement = Arrangement.spacedBy(16.dp),
+      verticalArrangement = Arrangement.spacedBy(16.dp),
+      modifier =
+        Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 8.dp, bottom = 48.dp),
+    ) {
+      items(AppIcon.entries) { appIcon ->
+        val isSelected = appIcon == currentAppIcon
+        Column(
+          horizontalAlignment = Alignment.CenterHorizontally,
+          modifier =
+            Modifier.clip(RoundedCornerShape(12.dp))
+              .clickable { onAppIconChange(appIcon) }
+              .padding(8.dp)
+        ) {
+          Box(contentAlignment = Alignment.Center) {
+            val shape = RoundedCornerShape(28.dp)
+
+            AppIconPreview(appIcon = appIcon, shape = shape, modifier = Modifier.size(64.dp))
+
+            if (isSelected) {
+              Box(
+                Modifier.matchParentSize().clip(shape).background(Color.Black.copy(alpha = 0.4f)),
+                contentAlignment = Alignment.Center
+              ) {
+                Icon(
+                  imageVector = Icons.Default.CheckCircle,
+                  contentDescription = null,
+                  tint = Color.White,
+                  modifier = Modifier.size(24.dp)
+                )
+              }
+            }
+          }
+
+          Spacer(Modifier.height(8.dp))
+
+          Text(
+            text = appIcon.title,
+            style = MaterialTheme.typography.labelMedium,
+            color =
+              if (isSelected) AppTheme.colorScheme.tintedForeground
+              else AppTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center,
+            maxLines = 1
+          )
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun AppIconPreview(
+  appIcon: AppIcon,
+  modifier: Modifier = Modifier,
+  shape: Shape = CircleShape,
+) {
+  val backgroundColor =
+    when (appIcon) {
+      AppIcon.AntiqueGold -> Color(0xFFC5A059)
+      AppIcon.Cranberry -> Color(0xFFF62F27)
+      AppIcon.DarkJade -> Color(0xFF006C53)
+      AppIcon.DeepIce -> Color(0xFF29B6F6)
+      AppIcon.DeepTeal -> Color(0xFF00838F)
+      AppIcon.DustyRose -> Color(0xFFC98CA7)
+      AppIcon.RoyalPlum -> Color(0xFF693764)
+      AppIcon.SlateBlue -> Color(0xFF375069)
+      AppIcon.SoftSage -> Color(0xFF9BB49D)
+      AppIcon.StormySky -> Color(0xFF607D8B)
+    }
+  val backgroundBrush =
+    Brush.radialGradient(
+      0.17f to backgroundColor.copy(alpha = 0.55f),
+      1f to backgroundColor,
+      center = Offset(20f, 24f)
+    )
+
+  Box(
+    modifier = modifier.clip(shape).background(backgroundBrush),
+    contentAlignment = Alignment.Center
+  ) {
+    Icon(
+      painter = painterResource(Res.drawable.ic_launcher_foreground),
+      contentDescription = null,
+      tint = Color.Unspecified,
+      modifier = Modifier.scale(1.2f).fillMaxSize()
+    )
+  }
+}
+
+@Composable
+private fun HomeLayoutSelector(
+  homeViewMode: HomeViewMode,
+  onClick: (HomeViewMode) -> Unit,
+) {
+  Row(modifier = Modifier.padding(horizontal = 8.dp)) {
+    LayoutIconButton(
+      modifier = Modifier.weight(1f),
+      label = stringResource(Res.string.homeViewModeDefault),
+      icon = TwineIcons.LayoutDefault,
+      selected = homeViewMode == HomeViewMode.Default,
+      onClick = { onClick(HomeViewMode.Default) }
+    )
+
+    LayoutIconButton(
+      modifier = Modifier.weight(1f),
+      label = stringResource(Res.string.homeViewModeSimple),
+      icon = TwineIcons.LayoutSimple,
+      selected = homeViewMode == HomeViewMode.Simple,
+      onClick = { onClick(HomeViewMode.Simple) }
+    )
+
+    LayoutIconButton(
+      modifier = Modifier.weight(1f),
+      label = stringResource(Res.string.homeViewModeCompact),
+      icon = TwineIcons.LayoutCompact,
+      selected = homeViewMode == HomeViewMode.Compact,
+      onClick = { onClick(HomeViewMode.Compact) }
+    )
+  }
 }
 
 @Composable

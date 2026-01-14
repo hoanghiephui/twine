@@ -57,7 +57,6 @@ data class SyncData(
   val blockedWords: List<BlockedWordSyncEntity> = emptyList(),
   val posts: List<PostSyncEntity> = emptyList(),
   val postChunks: List<String> = emptyList(),
-  val user: UserSyncEntity? = null,
   val readPosts: List<ReadPostSyncEntity> = emptyList()
 )
 
@@ -90,6 +89,7 @@ data class FeedSyncEntity(
   val description: String = "",
   val link: String,
   val homepageLink: String,
+  val pinnedPosition: Double = 0.0,
   val pinnedAt: Long? = null,
   val lastCleanUpAt: Long? = null,
   val alwaysFetchSourceArticle: Boolean = false,
@@ -102,6 +102,7 @@ data class GroupSyncEntity(
   val id: String,
   val name: String,
   val feedIds: List<String> = emptyList(),
+  val pinnedPosition: Double = 0.0,
   val pinnedAt: Long? = null,
   val updatedAt: Long? = null,
   val isDeleted: Boolean = false
