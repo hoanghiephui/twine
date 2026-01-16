@@ -63,8 +63,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -122,7 +124,9 @@ import dev.sasikanth.rss.reader.resources.icons.ArrowBack
 import dev.sasikanth.rss.reader.resources.icons.LayoutCompact
 import dev.sasikanth.rss.reader.resources.icons.LayoutDefault
 import dev.sasikanth.rss.reader.resources.icons.LayoutSimple
+import dev.sasikanth.rss.reader.resources.icons.Platform
 import dev.sasikanth.rss.reader.resources.icons.TwineIcons
+import dev.sasikanth.rss.reader.resources.icons.platform
 import dev.sasikanth.rss.reader.settings.SettingsEvent
 import dev.sasikanth.rss.reader.settings.SettingsEvent.ChangeHomeViewMode
 import dev.sasikanth.rss.reader.settings.SettingsState
@@ -131,6 +135,8 @@ import dev.sasikanth.rss.reader.ui.AppTheme
 import dev.sasikanth.rss.reader.ui.LocalTranslucentStyles
 import dev.sasikanth.rss.reader.util.relativeDurationString
 import dev.sasikanth.rss.reader.utils.Constants
+import dev.sasikanth.rss.reader.utils.LocalWindowSizeClass
+import dev.sasikanth.rss.reader.utils.ignoreHorizontalParentPadding
 import kotlin.time.Instant
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
@@ -170,6 +176,7 @@ import twine.shared.generated.resources.settingsHeaderFeedback
 import twine.shared.generated.resources.settingsHeaderOpml
 import twine.shared.generated.resources.settingsHeaderSync
 import twine.shared.generated.resources.settingsHeaderTheme
+import twine.shared.generated.resources.settingsNotificationWarningAndroid
 import twine.shared.generated.resources.settingsOpmlCancel
 import twine.shared.generated.resources.settingsOpmlExport
 import twine.shared.generated.resources.settingsOpmlExporting
@@ -202,6 +209,15 @@ import twine.shared.generated.resources.showFeedFavIconTitle
 import twine.shared.generated.resources.twinePremium
 import twine.shared.generated.resources.twinePremiumDesc
 import twine.shared.generated.resources.twinePremiumSubscribedDesc
+
+private val settingsItemPadding
+  @Composable
+  @ReadOnlyComposable
+  get() =
+    when (LocalWindowSizeClass.current.widthSizeClass) {
+      WindowWidthSizeClass.Expanded -> PaddingValues(horizontal = 128.dp)
+      else -> PaddingValues(0.dp)
+    }
 
 @Composable
 internal fun SettingsScreen(
@@ -256,6 +272,7 @@ internal fun SettingsScreen(
               onClick = goBack,
             )
           },
+          contentPadding = PaddingValues(vertical = 8.dp),
           colors =
             TopAppBarDefaults.topAppBarColors(
               containerColor = AppTheme.colorScheme.surface,
@@ -287,9 +304,13 @@ internal fun SettingsScreen(
         modifier = Modifier.fillMaxSize(),
         contentPadding =
           PaddingValues(
-            start = padding.calculateStartPadding(layoutDirection),
+            start =
+              padding.calculateStartPadding(layoutDirection) +
+                settingsItemPadding.calculateStartPadding(layoutDirection),
             top = padding.calculateTopPadding() + 8.dp,
-            end = padding.calculateEndPadding(layoutDirection),
+            end =
+              padding.calculateEndPadding(layoutDirection) +
+                settingsItemPadding.calculateEndPadding(layoutDirection),
             bottom = padding.calculateBottomPadding() + 80.dp
           ),
       ) {
@@ -1246,7 +1267,11 @@ private fun NotificationsSettingItem(
   enableNotifications: Boolean,
   onValueChanged: (Boolean) -> Unit
 ) {
-  Box(
+  val translucentStyles = LocalTranslucentStyles.current
+  val linkHandler = LocalLinkHandler.current
+  val coroutineScope = rememberCoroutineScope()
+
+  Column(
     modifier =
       Modifier.clickable { onValueChanged(!enableNotifications) }
         .padding(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 20.dp),
@@ -1272,6 +1297,29 @@ private fun NotificationsSettingItem(
         onCheckedChange = onValueChanged,
       )
     }
+
+    AnimatedVisibility(
+      modifier = Modifier.ignoreHorizontalParentPadding(horizontal = 12.dp),
+      visible = platform == Platform.Android && enableNotifications
+    ) {
+      Column {
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+          modifier =
+            Modifier.clip(MaterialTheme.shapes.small)
+              .clickable {
+                coroutineScope.launch { linkHandler.openLink(Constants.DONT_KILL_MY_APP_LINK) }
+              }
+              .background(translucentStyles.default.background, MaterialTheme.shapes.small)
+              .border(1.dp, AppTheme.colorScheme.secondary, MaterialTheme.shapes.small)
+              .padding(horizontal = 12.dp, vertical = 8.dp),
+          text = stringResource(Res.string.settingsNotificationWarningAndroid),
+          style = MaterialTheme.typography.labelLarge,
+          color = AppTheme.colorScheme.secondary
+        )
+      }
+    }
   }
 }
 
@@ -1280,11 +1328,13 @@ private fun DownloadFullContentSettingItem(
   downloadFullContent: Boolean,
   onValueChanged: (Boolean) -> Unit
 ) {
-  Box(modifier = Modifier.clickable { onValueChanged(!downloadFullContent) }) {
-    Row(
-      modifier = Modifier.padding(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 20.dp),
-      verticalAlignment = Alignment.CenterVertically
-    ) {
+  val translucentStyles = LocalTranslucentStyles.current
+  Column(
+    modifier =
+      Modifier.clickable { onValueChanged(!downloadFullContent) }
+        .padding(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 20.dp)
+  ) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
       Column(modifier = Modifier.weight(1f)) {
         Text(
           stringResource(Res.string.settingsDownloadFullContentTitle),
@@ -1296,13 +1346,6 @@ private fun DownloadFullContentSettingItem(
           style = MaterialTheme.typography.labelLarge,
           color = AppTheme.colorScheme.textEmphasisMed
         )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-          stringResource(Res.string.settingsDownloadFullContentWarning),
-          style = MaterialTheme.typography.labelLarge,
-          color = AppTheme.colorScheme.error
-        )
       }
 
       Spacer(Modifier.width(16.dp))
@@ -1312,6 +1355,22 @@ private fun DownloadFullContentSettingItem(
         onCheckedChange = { checked -> onValueChanged(checked) },
       )
     }
+
+    Spacer(modifier = Modifier.height(16.dp))
+
+    Text(
+      modifier =
+        Modifier.ignoreHorizontalParentPadding(horizontal = 12.dp)
+          .background(
+            AppTheme.colorScheme.error.copy(alpha = translucentStyles.default.background.alpha),
+            MaterialTheme.shapes.small
+          )
+          .border(1.dp, AppTheme.colorScheme.error, MaterialTheme.shapes.small)
+          .padding(horizontal = 12.dp, vertical = 8.dp),
+      text = stringResource(Res.string.settingsDownloadFullContentWarning),
+      style = MaterialTheme.typography.labelLarge,
+      color = AppTheme.colorScheme.error
+    )
   }
 }
 
@@ -1651,11 +1710,7 @@ private fun CloudSyncSettingItem(
 
     Box(
       modifier =
-        Modifier.clickable(
-            enabled = provider.isSupported && syncProgress != SettingsState.SyncProgress.Syncing
-          ) {
-            onSyncClicked(provider)
-          }
+        Modifier.clickable(enabled = provider.isSupported) { onSyncClicked(provider) }
           .fillMaxWidth()
           .padding(horizontal = 24.dp, vertical = 12.dp)
     ) {
