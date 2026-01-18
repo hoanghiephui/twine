@@ -99,6 +99,7 @@ import dev.sasikanth.rss.reader.ui.rememberDynamicColorState
 import dev.sasikanth.rss.reader.utils.ExternalUriHandler
 import dev.sasikanth.rss.reader.utils.LocalAmoledSetting
 import dev.sasikanth.rss.reader.utils.LocalBlockImage
+import dev.sasikanth.rss.reader.utils.LocalDynamicColorEnabled
 import dev.sasikanth.rss.reader.utils.LocalShowFeedFavIconSetting
 import dev.sasikanth.rss.reader.utils.LocalWindowSizeClass
 import kotlin.reflect.typeOf
@@ -161,6 +162,7 @@ fun App(
     LocalShareHandler provides shareHandler,
     LocalLinkHandler provides linkHandler,
     LocalDynamicColorState provides dynamicColorState,
+    LocalDynamicColorEnabled provides appState.dynamicColorEnabled,
     LocalShowFeedFavIconSetting provides appState.showFeedFavIcon,
     LocalSeedColorExtractor provides seedColorExtractor,
     LocalBlockImage provides appState.blockImages,
@@ -204,8 +206,8 @@ fun App(
 
     LaunchedEffect(useDarkTheme) { onThemeChange(useDarkTheme) }
 
-    LaunchedEffect(appState.homeViewMode) {
-      if (appState.homeViewMode == HomeViewMode.Default) {
+    LaunchedEffect(appState.homeViewMode, appState.dynamicColorEnabled) {
+      if (appState.homeViewMode == HomeViewMode.Default && appState.dynamicColorEnabled) {
         dynamicColorState.refresh()
       } else {
         dynamicColorState.reset()
@@ -216,18 +218,19 @@ fun App(
       ExternalUriHandler.listener = { uri ->
         if (uri.startsWith("twine://oauth")) {
           appViewModel.onOAuthRedirect(uri)
-        }
-
-        val deepLinkRequest = NavDeepLinkRequest(uri = NavUri(uri), action = null, mimeType = null)
-        if (navController.graph.hasDeepLink(deepLinkRequest)) {
-          if (!navController.popBackStack(Screen.Main, inclusive = false)) {
-            navController.navigate(Screen.Main) {
-              popUpTo(Screen.Placeholder) { inclusive = true }
-              launchSingleTop = true
+        } else {
+          val deepLinkRequest =
+            NavDeepLinkRequest(uri = NavUri(uri), action = null, mimeType = null)
+          if (navController.graph.hasDeepLink(deepLinkRequest)) {
+            if (!navController.popBackStack(Screen.Main, inclusive = false)) {
+              navController.navigate(Screen.Main) {
+                popUpTo(Screen.Placeholder) { inclusive = true }
+                launchSingleTop = true
+              }
             }
-          }
 
-          navController.navigate(NavUri(uri))
+            navController.navigate(NavUri(uri))
+          }
         }
       }
 
@@ -287,7 +290,10 @@ fun App(
                   .getStateFlow<Set<String>>(SELECTED_GROUPS_KEY, emptySet())
                   .filterNotNull()
                   .onEach { selectedGroupIds ->
-                    feedsViewModel.dispatch(FeedsEvent.OnGroupsSelected(selectedGroupIds))
+                    if (selectedGroupIds.isNotEmpty()) {
+                      feedsViewModel.dispatch(FeedsEvent.OnGroupsSelected(selectedGroupIds))
+                      it.savedStateHandle[SELECTED_GROUPS_KEY] = emptySet<String>()
+                    }
                   }
                   .launchIn(this)
               }
@@ -397,9 +403,17 @@ fun App(
               .getStateFlow<Set<String>>(SELECTED_GROUPS_KEY, emptySet())
               .filterNotNull()
               .onEach { selectedGroupIds ->
-                viewModel.dispatch(AddFeedEvent.OnGroupsSelected(selectedGroupIds))
+                if (selectedGroupIds.isNotEmpty()) {
+                  viewModel.dispatch(AddFeedEvent.OnGroupsSelected(selectedGroupIds))
+                  it.savedStateHandle[SELECTED_GROUPS_KEY] = emptySet<String>()
+                }
               }
               .launchIn(this)
+          }
+
+          LaunchedEffect(Unit) {
+            toggleLightStatusBar(!useDarkTheme)
+            toggleLightNavBar(!useDarkTheme)
           }
 
           AddFeedScreen(
@@ -425,7 +439,10 @@ fun App(
               .getStateFlow<Set<String>>(SELECTED_GROUPS_KEY, emptySet())
               .filterNotNull()
               .onEach { selectedGroupIds ->
-                viewModel.dispatch(GroupEvent.OnGroupsSelected(selectedGroupIds))
+                if (selectedGroupIds.isNotEmpty()) {
+                  viewModel.dispatch(GroupEvent.OnGroupsSelected(selectedGroupIds))
+                  it.savedStateHandle[SELECTED_GROUPS_KEY] = emptySet<String>()
+                }
               }
               .launchIn(this)
           }

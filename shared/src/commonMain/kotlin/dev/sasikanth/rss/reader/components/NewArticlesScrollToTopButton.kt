@@ -47,7 +47,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -56,16 +55,10 @@ import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import dev.sasikanth.rss.reader.components.image.FeedIcon
 import dev.sasikanth.rss.reader.core.model.local.UnreadSinceLastSync
 import dev.sasikanth.rss.reader.ui.AppTheme
-import dev.sasikanth.rss.reader.ui.LocalDynamicColorState
-import dev.sasikanth.rss.reader.ui.darkAppColorScheme
-import dev.sasikanth.rss.reader.ui.lightAppColorScheme
-import dev.sasikanth.rss.reader.ui.rememberDynamicColorState
-import dev.sasikanth.rss.reader.utils.LocalShowFeedFavIconSetting
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import twine.shared.generated.resources.Res
@@ -131,12 +124,13 @@ internal fun BoxScope.NewArticlesScrollToTopButton(
                       bottom = 8.dp,
                     ),
                   content = {
-                    val showFeedFavIcon = LocalShowFeedFavIconSetting.current
-                    val icons =
-                      if (showFeedFavIcon) unreadSinceLastSync.feedHomepageLinks
-                      else unreadSinceLastSync.feedIcons
-
-                    OverlappedFeedIcons(icons = icons)
+                    unreadSinceLastSync.apply {
+                      OverlappedFeedIcons(
+                        feedHomepageLinks = feedHomepageLinks,
+                        feedIcons = feedIcons,
+                        feedShowFavIconSettings = feedShowFavIconSettings,
+                      )
+                    }
 
                     Spacer(modifier = Modifier.requiredWidth(12.dp))
 
@@ -190,24 +184,35 @@ internal fun BoxScope.NewArticlesScrollToTopButton(
 
 @Composable
 private fun OverlappedFeedIcons(
-  icons: List<String>,
+  feedHomepageLinks: List<String>,
+  feedIcons: List<String>,
+  feedShowFavIconSettings: List<Boolean>,
   modifier: Modifier = Modifier,
 ) {
   Layout(
     modifier = modifier,
     content = {
-      icons.forEach { icon ->
-        Box(
-          modifier =
-            Modifier.background(AppTheme.colorScheme.bottomSheet, MaterialTheme.shapes.extraSmall)
-              .padding(horizontal = 2.dp, vertical = 1.dp)
-        ) {
-          FeedIcon(
-            url = icon,
-            contentDescription = null,
-            shape = MaterialTheme.shapes.extraSmall,
-            modifier = Modifier.requiredSize(20.dp)
-          )
+      val iconsCount = maxOf(feedHomepageLinks.size, feedIcons.size)
+      for (index in 0 until iconsCount) {
+        val homepageLink = feedHomepageLinks.getOrNull(index)
+        val icon = feedIcons.getOrNull(index)
+        val showFeedFavIcon = feedShowFavIconSettings.getOrNull(index) ?: true
+
+        if (!homepageLink.isNullOrBlank() || !icon.isNullOrBlank()) {
+          Box(
+            modifier =
+              Modifier.background(AppTheme.colorScheme.bottomSheet, MaterialTheme.shapes.extraSmall)
+                .padding(horizontal = 2.dp, vertical = 1.dp)
+          ) {
+            FeedIcon(
+              icon = icon.orEmpty(),
+              homepageLink = homepageLink.orEmpty(),
+              showFeedFavIcon = showFeedFavIcon,
+              contentDescription = null,
+              shape = MaterialTheme.shapes.extraSmall,
+              modifier = Modifier.requiredSize(20.dp)
+            )
+          }
         }
       }
     }
@@ -231,80 +236,6 @@ private fun OverlappedFeedIcons(
         placeable.placeRelative(x = x, y = 0, zIndex = index.toFloat())
         x += placeable.width - 12.dp.roundToPx()
       }
-    }
-  }
-}
-
-@Preview
-@Composable
-internal fun NewArticlesScrollToTopButtonPreview_OnlyNewArticles() {
-  CompositionLocalProvider(
-    LocalDynamicColorState provides
-      rememberDynamicColorState(lightAppColorScheme(), darkAppColorScheme())
-  ) {
-    AppTheme {
-      Box(modifier = Modifier.padding(16.dp)) {
-        NewArticlesScrollToTopButton(
-          unreadSinceLastSync =
-            UnreadSinceLastSync(
-              newArticleCount = 0,
-              hasNewArticles = true,
-              feedHomepageLinks = listOf("https://theverge.com", "https://wired.com"),
-              feedIcons = listOf("https://icon.horse/theverge.com", "https://icon.horse/wired.com")
-            ),
-          canShowScrollToTop = false,
-          onLoadNewArticlesClick = {},
-          onScrollToTopClick = {}
-        )
-      }
-    }
-  }
-}
-
-@Preview
-@Composable
-internal fun NewArticlesScrollToTopButtonPreview_OnlyScrollToTop() {
-  CompositionLocalProvider(
-    LocalDynamicColorState provides
-      rememberDynamicColorState(lightAppColorScheme(), darkAppColorScheme())
-  ) {
-    Box(modifier = Modifier.padding(16.dp)) {
-      NewArticlesScrollToTopButton(
-        unreadSinceLastSync =
-          UnreadSinceLastSync(
-            newArticleCount = 0,
-            hasNewArticles = false,
-            feedHomepageLinks = emptyList(),
-            feedIcons = emptyList()
-          ),
-        canShowScrollToTop = true,
-        onLoadNewArticlesClick = {},
-        onScrollToTopClick = {}
-      )
-    }
-  }
-}
-
-@Preview
-@Composable
-internal fun NewArticlesScrollToTopButtonPreview_Both() {
-  CompositionLocalProvider(
-    LocalDynamicColorState provides
-      rememberDynamicColorState(lightAppColorScheme(), darkAppColorScheme())
-  ) {
-    Box(modifier = Modifier.padding(16.dp)) {
-      NewArticlesScrollToTopButton(
-        unreadSinceLastSync =
-          UnreadSinceLastSync(
-            newArticleCount = 0,
-            hasNewArticles = true,
-            feedHomepageLinks = listOf("https://theverge.com", "https://wired.com"),
-            feedIcons = listOf("https://icon.horse/theverge.com", "https://icon.horse/wired.com")
-          ),
-        canShowScrollToTop = true,
-        onLoadNewArticlesClick = {},
-        onScrollToTopClick = {}
-      )
     }
   }
 }

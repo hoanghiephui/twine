@@ -43,7 +43,7 @@
     <string name="settingsHeaderFeedback">Feedback &amp; bug reports</string>
     <string name="settingsHeaderTheme">Theme</string>
     <string name="settingsBrowserTypeTitle">Use in-app browser</string>
-    <string name="settingsBrowserTypeSubtitle">When turned off, links will open in your default browser.</string>
+    <string name="settingsBrowserTypeSubtitle">When turned off, links will open in your default browser</string>
     <string name="settingsEnableBlurTitle">Enable blur in homepage</string>
     <string name="settingsEnableBlurSubtitle">When disabled, displays gradients instead of blurred images. May improve performance.</string>
     <string name="settingsShowUnreadCountTitle">Show unread posts count</string>
@@ -71,6 +71,8 @@
     <string name="settingsThemeDark">Dark</string>
     <string name="settingsAmoledTitle">Amoled mode</string>
     <string name="settingsAmoledSubtitle">Use pure black backgrounds</string>
+    <string name="settingsDynamicColorTitle">Dynamic color</string>
+    <string name="settingsDynamicColorSubtitle">App colors will be derived from the current article/feed</string>
     <string name="settingsBlockImagesTitle">Block images</string>
     <string name="settingsBlockImagesSubtitle">When turned-on, images will not be downloaded or shown. This may improve performance and save data.</string>
     <string name="feeds">Feeds</string>
@@ -133,7 +135,7 @@
     <string name="groupAddNew">Add new</string>
     <string name="appBarAllFeeds">All feeds</string>
     <string name="edit">Edit</string>
-    <string name="buttonAddToGroup">Add to group...</string>
+    <string name="addToGroup">Add to group</string>
     <string name="removeSources">Delete sources</string>
     <string name="removeSourcesDesc">Do you want to delete selected sources?</string>
     <string name="noPinnedSources">No pinned feeds/groups</string>
@@ -142,8 +144,9 @@
     <string name="cdLoadFullArticle">Load full article</string>
     <string name="enableAutoSyncTitle">Enable auto sync</string>
     <string name="enableAutoSyncDesc">When turned-on, feeds will be updated in the background</string>
-    <string name="showFeedFavIconTitle">Show feed fav icon</string>
-    <string name="showFeedFavIconDesc">When turned-off, the feed icon will be displayed instead of the website's favicon</string>
+    <string name="showFeedFavIconTitle">Show website fav icon</string>
+    <string name="showFeedFavIconDesc">When turned-on, the website's favicon will be displayed instead of feed icon</string>
+    <string name="hidePostsFromHome">Hide from "Home"</string>
     <string name="blockedWords">Blocked words</string>
     <string name="blockedWordsHint">Enter a word</string>
     <string name="blockedWordsDesc">Post can be hidden from the home screen based on their text. We recommend avoiding common words that appear in many posts, since it can result in no posts being shown or negatively impacting app performance. \n\nHidden posts will still be displayed in search &amp; bookmarks.</string>
@@ -174,8 +177,8 @@
     <string name="settingsEnableNotificationsTitle">Enable notifications</string>
     <string name="settingsEnableNotificationsSubtitle">When turned on, you will receive notifications when new articles are found during background sync</string>
     <string name="settingsDownloadFullContentTitle">Download full articles</string>
-    <string name="settingsDownloadFullContentSubtitle">When enabled, the app will try and download full articles during sync.</string>
-    <string name="settingsDownloadFullContentWarning">Warning!: This can increase feed loading times, data usage, memory and storage consumption. It can potentially impact your user experience.</string>
+    <string name="settingsDownloadFullContentSubtitle">When enabled, the app will try and download full articles during sync</string>
+    <string name="settingsDownloadFullContentWarning">Warning!: This can increase feed loading times, data usage, memory and storage consumption. It can potentially impact your user experience</string>
     <string name="sort">Sort</string>
     <string name="settingsHeaderSync">Cloud sync (Alpha ⚠)</string>
     <string name="settingsSyncDropbox" translatable="false">Dropbox</string>

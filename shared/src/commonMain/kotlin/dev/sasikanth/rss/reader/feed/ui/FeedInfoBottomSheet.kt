@@ -31,7 +31,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.requiredWidth
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
@@ -68,7 +67,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.compositeOver
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
@@ -78,6 +76,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.sasikanth.rss.reader.components.ConfirmFeedDeleteDialog
+import dev.sasikanth.rss.reader.components.ContextActionItem
 import dev.sasikanth.rss.reader.components.Switch
 import dev.sasikanth.rss.reader.components.image.FeedIcon
 import dev.sasikanth.rss.reader.core.model.local.Feed
@@ -91,7 +90,6 @@ import dev.sasikanth.rss.reader.resources.icons.Website
 import dev.sasikanth.rss.reader.ui.AppTheme
 import dev.sasikanth.rss.reader.ui.LocalTranslucentStyles
 import dev.sasikanth.rss.reader.utils.KeyboardState
-import dev.sasikanth.rss.reader.utils.LocalShowFeedFavIconSetting
 import dev.sasikanth.rss.reader.utils.keyboardVisibilityAsState
 import dev.sasikanth.rss.reader.utils.toClipEntry
 import kotlin.time.Duration.Companion.milliseconds
@@ -105,9 +103,11 @@ import twine.shared.generated.resources.alwaysFetchSourceArticle
 import twine.shared.generated.resources.feedOptionCopyLink
 import twine.shared.generated.resources.feedOptionWebsite
 import twine.shared.generated.resources.feedTitleHint
+import twine.shared.generated.resources.hidePostsFromHome
 import twine.shared.generated.resources.markAsRead
 import twine.shared.generated.resources.noUnreadPostsInFeed
 import twine.shared.generated.resources.numberOfUnreadPostsInFeed
+import twine.shared.generated.resources.showFeedFavIconTitle
 
 private val HORIZONTAL_PADDING = 24.dp
 
@@ -164,7 +164,7 @@ fun FeedInfoBottomSheet(
             onMarkPostsAsRead = { feedViewModel.dispatch(FeedEvent.OnMarkPostsAsRead(feed.id)) }
           )
 
-          Divider(horizontalInsets = HORIZONTAL_PADDING)
+          Divider()
 
           AlwaysFetchSourceArticleSwitch(
             feed = feed,
@@ -174,6 +174,24 @@ fun FeedInfoBottomSheet(
           )
 
           Divider(horizontalInsets = HORIZONTAL_PADDING)
+
+          ShowFeedFavIconSwitch(
+            feed = feed,
+            onValueChanged = { newValue, feedId ->
+              feedViewModel.dispatch(FeedEvent.OnShowFeedFavIconChanged(newValue, feedId))
+            }
+          )
+
+          Divider(horizontalInsets = HORIZONTAL_PADDING)
+
+          HidePostsFromAllFeedsSwitch(
+            feed = feed,
+            onValueChanged = { newValue, feedId ->
+              feedViewModel.dispatch(FeedEvent.OnHideFromAllFeedsChanged(newValue, feedId))
+            }
+          )
+
+          Divider()
 
           FeedOptions(
             modifier = Modifier.padding(horizontal = HORIZONTAL_PADDING),
@@ -265,11 +283,10 @@ private fun FeedLabelInput(
       .padding(8.dp)
       .fillMaxWidth()
   ) {
-    val showFeedFavIcon = LocalShowFeedFavIconSetting.current
-    val feedIcon = if (showFeedFavIcon) feed.homepageLink else feed.icon
-
     FeedIcon(
-      url = feedIcon,
+      icon = feed.icon,
+      homepageLink = feed.homepageLink,
+      showFeedFavIcon = feed.showFeedFavIcon,
       contentDescription = feed.name,
       shape = MaterialTheme.shapes.large,
       modifier = Modifier.requiredSize(56.dp),
@@ -333,6 +350,7 @@ private fun FeedLabelInput(
       )
 
       Text(
+        modifier = Modifier.padding(end = 8.dp),
         text = feed.link,
         maxLines = 2,
         overflow = TextOverflow.MiddleEllipsis,
@@ -351,25 +369,25 @@ private fun FeedOptions(feed: Feed, onRemoveFeedClick: () -> Unit, modifier: Mod
   var showConfirmDialog by remember { mutableStateOf(false) }
 
   Row(modifier = modifier) {
-    FeedOptionItem(
+    ContextActionItem(
       icon = TwineIcons.CopyLink,
-      text = stringResource(Res.string.feedOptionCopyLink),
+      label = stringResource(Res.string.feedOptionCopyLink),
       modifier = Modifier.weight(1f),
-      onOptionClick = { coroutineScope.launch { clipboard.setClipEntry(feed.link.toClipEntry()) } }
+      onClick = { coroutineScope.launch { clipboard.setClipEntry(feed.link.toClipEntry()) } }
     )
 
-    FeedOptionItem(
+    ContextActionItem(
       icon = TwineIcons.Website,
-      text = stringResource(Res.string.feedOptionWebsite),
+      label = stringResource(Res.string.feedOptionWebsite),
       modifier = Modifier.weight(1f),
-      onOptionClick = { coroutineScope.launch { linkHandler.openLink(feed.link) } }
+      onClick = { coroutineScope.launch { linkHandler.openLink(feed.link) } }
     )
 
-    FeedOptionItem(
+    ContextActionItem(
       icon = TwineIcons.DeleteOutline,
-      text = stringResource(Res.string.actionDelete),
+      label = stringResource(Res.string.actionDelete),
       modifier = Modifier.weight(1f),
-      onOptionClick = { showConfirmDialog = true }
+      onClick = { showConfirmDialog = true }
     )
   }
 
@@ -388,21 +406,63 @@ private fun AlwaysFetchSourceArticleSwitch(
   modifier: Modifier = Modifier,
   onValueChanged: (newValue: Boolean, feedId: String) -> Unit,
 ) {
-  var checked by
-    remember(feed.alwaysFetchSourceArticle) { mutableStateOf(feed.alwaysFetchSourceArticle) }
+  FeedOptionSwitch(
+    title = stringResource(Res.string.alwaysFetchSourceArticle),
+    checked = feed.alwaysFetchSourceArticle,
+    modifier = modifier,
+    onValueChanged = { newValue -> onValueChanged(newValue, feed.id) }
+  )
+}
+
+@Composable
+private fun ShowFeedFavIconSwitch(
+  feed: Feed,
+  modifier: Modifier = Modifier,
+  onValueChanged: (newValue: Boolean, feedId: String) -> Unit,
+) {
+  FeedOptionSwitch(
+    title = stringResource(Res.string.showFeedFavIconTitle),
+    checked = feed.showFeedFavIcon,
+    modifier = modifier,
+    onValueChanged = { newValue -> onValueChanged(newValue, feed.id) }
+  )
+}
+
+@Composable
+private fun HidePostsFromAllFeedsSwitch(
+  feed: Feed,
+  modifier: Modifier = Modifier,
+  onValueChanged: (newValue: Boolean, feedId: String) -> Unit,
+) {
+  FeedOptionSwitch(
+    title = stringResource(Res.string.hidePostsFromHome),
+    checked = feed.hideFromAllFeeds,
+    modifier = modifier,
+    onValueChanged = { newValue -> onValueChanged(newValue, feed.id) }
+  )
+}
+
+@Composable
+private fun FeedOptionSwitch(
+  title: String,
+  checked: Boolean,
+  onValueChanged: (Boolean) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  var checkedState by remember(checked) { mutableStateOf(checked) }
 
   Row(
     modifier =
       Modifier.clickable {
-          checked = !checked
-          onValueChanged(checked, feed.id)
+          checkedState = !checkedState
+          onValueChanged(checkedState)
         }
-        .padding(vertical = 16.dp, horizontal = HORIZONTAL_PADDING),
+        .padding(vertical = 4.dp, horizontal = HORIZONTAL_PADDING),
     verticalAlignment = Alignment.CenterVertically
   ) {
     Text(
       modifier = Modifier.weight(1f),
-      text = stringResource(Res.string.alwaysFetchSourceArticle),
+      text = title,
       color = AppTheme.colorScheme.textEmphasisHigh,
       style = MaterialTheme.typography.titleMedium
     )
@@ -411,39 +471,8 @@ private fun AlwaysFetchSourceArticleSwitch(
 
     Switch(
       modifier = modifier,
-      checked = checked,
-      onCheckedChange = { newValue -> onValueChanged(newValue, feed.id) }
-    )
-  }
-}
-
-@Composable
-private fun FeedOptionItem(
-  icon: ImageVector,
-  text: String,
-  modifier: Modifier = Modifier,
-  onOptionClick: () -> Unit,
-) {
-  Column(
-    modifier =
-      Modifier.clip(RoundedCornerShape(8.dp))
-        .clickable { onOptionClick() }
-        .padding(vertical = 12.dp)
-        .then(modifier),
-    horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(4.dp)
-  ) {
-    Icon(
-      imageVector = icon,
-      contentDescription = null,
-      tint = AppTheme.colorScheme.tintedForeground,
-      modifier = Modifier.size(24.dp)
-    )
-
-    Text(
-      text = text,
-      style = MaterialTheme.typography.labelMedium,
-      color = AppTheme.colorScheme.tintedForeground
+      checked = checkedState,
+      onCheckedChange = { newValue -> onValueChanged(newValue) }
     )
   }
 }
@@ -452,6 +481,6 @@ private fun FeedOptionItem(
 private fun Divider(horizontalInsets: Dp = 0.dp) {
   HorizontalDivider(
     modifier = Modifier.padding(vertical = 8.dp, horizontal = horizontalInsets),
-    color = AppTheme.colorScheme.tintedSurface
+    color = AppTheme.colorScheme.outlineVariant
   )
 }

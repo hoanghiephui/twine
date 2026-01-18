@@ -16,14 +16,17 @@
 
 package dev.sasikanth.rss.reader.core.model.local
 
+import androidx.compose.runtime.Immutable
 import kotlin.time.Instant
 
+@Immutable
 data class FeedGroup(
   override val id: String,
   val name: String,
   val feedIds: List<String>,
   val feedHomepageLinks: List<String>,
   val feedIconLinks: List<String>,
+  val feedShowFavIconSettings: List<Boolean>,
   val numberOfUnreadPosts: Long = 0,
   val createdAt: Instant,
   val updatedAt: Instant,

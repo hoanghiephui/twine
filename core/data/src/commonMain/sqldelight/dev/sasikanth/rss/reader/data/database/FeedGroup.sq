@@ -22,20 +22,25 @@ groups:
 SELECT
   id,
   name,
-  (SELECT GROUP_CONCAT(gf.feedId)
+  (SELECT GROUP_CONCAT(gf.feedId, '::')
        FROM feedGroupFeed gf
        JOIN feed f ON gf.feedId = f.id
        WHERE gf.feedGroupId = fg.id AND f.isDeleted = 0) AS feedIds,
-  COALESCE((SELECT GROUP_CONCAT(f.homepageLink)
+  COALESCE((SELECT GROUP_CONCAT(f.homepageLink, '::')
      FROM feedGroupFeed gf
      JOIN feed f ON gf.feedId = f.id
      WHERE gf.feedGroupId = fg.id AND f.isDeleted = 0
      LIMIT 4), '') AS feedHomepageLinks,
-  COALESCE((SELECT GROUP_CONCAT(f.icon)
+  COALESCE((SELECT GROUP_CONCAT(f.icon, '::')
      FROM feedGroupFeed gf
      JOIN feed f ON gf.feedId = f.id
      WHERE gf.feedGroupId = fg.id AND f.isDeleted = 0
      LIMIT 4), '') AS feedIconLinks,
+  COALESCE((SELECT GROUP_CONCAT(CASE WHEN f.showFeedFavIcon IS NULL THEN 'null' WHEN f.showFeedFavIcon = 1 THEN 'true' ELSE 'false' END, '::')
+     FROM feedGroupFeed gf
+     JOIN feed f ON gf.feedId = f.id
+     WHERE gf.feedGroupId = fg.id AND f.isDeleted = 0
+     LIMIT 4), '') AS feedShowFavIconSettings,
   createdAt,
   updatedAt,
   pinnedAt,
@@ -49,20 +54,25 @@ groupsBlocking:
 SELECT
   id,
   name,
-  (SELECT GROUP_CONCAT(gf.feedId)
+  (SELECT GROUP_CONCAT(gf.feedId, '::')
        FROM feedGroupFeed gf
        JOIN feed f ON gf.feedId = f.id
        WHERE gf.feedGroupId = fg.id AND f.isDeleted = 0) AS feedIds,
-  COALESCE((SELECT GROUP_CONCAT(f.homepageLink)
+  COALESCE((SELECT GROUP_CONCAT(f.homepageLink, '::')
      FROM feedGroupFeed gf
      JOIN feed f ON gf.feedId = f.id
      WHERE gf.feedGroupId = fg.id AND f.isDeleted = 0
      LIMIT 4), '') AS feedHomepageLinks,
-  COALESCE((SELECT GROUP_CONCAT(f.icon)
+  COALESCE((SELECT GROUP_CONCAT(f.icon, '::')
      FROM feedGroupFeed gf
      JOIN feed f ON gf.feedId = f.id
      WHERE gf.feedGroupId = fg.id AND f.isDeleted = 0
      LIMIT 4), '') AS feedIconLinks,
+  COALESCE((SELECT GROUP_CONCAT(CASE WHEN f.showFeedFavIcon IS NULL THEN 'null' WHEN f.showFeedFavIcon = 1 THEN 'true' ELSE 'false' END, '::')
+     FROM feedGroupFeed gf
+     JOIN feed f ON gf.feedId = f.id
+     WHERE gf.feedGroupId = fg.id AND f.isDeleted = 0
+     LIMIT 4), '') AS feedShowFavIconSettings,
   createdAt,
   updatedAt,
   pinnedAt,
@@ -72,8 +82,12 @@ WHERE isDeleted = 0
 GROUP BY fg.id;
 
 createGroup:
-INSERT OR IGNORE INTO feedGroup(id, name, createdAt, updatedAt)
-VALUES (:id,  :name, :createdAt, :updatedAt);
+INSERT INTO feedGroup(id, name, createdAt, updatedAt)
+VALUES (:id, :name, :createdAt, :updatedAt)
+ON CONFLICT(id) DO UPDATE SET
+  name = excluded.name,
+  updatedAt = excluded.updatedAt,
+  isDeleted = 0;
 
 updateGroupName:
 UPDATE feedGroup SET name = :name, updatedAt = :updatedAt WHERE id = :id;
@@ -91,10 +105,25 @@ group:
 SELECT
   id,
   name,
-  (SELECT GROUP_CONCAT(gf.feedId)
+  (SELECT GROUP_CONCAT(gf.feedId, '::')
        FROM feedGroupFeed gf
        JOIN feed f ON gf.feedId = f.id
        WHERE gf.feedGroupId = fg.id AND f.isDeleted = 0) AS feedIds,
+  COALESCE((SELECT GROUP_CONCAT(f.homepageLink, '::')
+     FROM feedGroupFeed gf
+     JOIN feed f ON gf.feedId = f.id
+     WHERE gf.feedGroupId = fg.id AND f.isDeleted = 0
+     LIMIT 4), '') AS feedHomepageLinks,
+  COALESCE((SELECT GROUP_CONCAT(f.icon, '::')
+     FROM feedGroupFeed gf
+     JOIN feed f ON gf.feedId = f.id
+     WHERE gf.feedGroupId = fg.id AND f.isDeleted = 0
+     LIMIT 4), '') AS feedIconLinks,
+  COALESCE((SELECT GROUP_CONCAT(CASE WHEN f.showFeedFavIcon IS NULL THEN 'null' WHEN f.showFeedFavIcon = 1 THEN 'true' ELSE 'false' END, '::')
+     FROM feedGroupFeed gf
+     JOIN feed f ON gf.feedId = f.id
+     WHERE gf.feedGroupId = fg.id AND f.isDeleted = 0
+     LIMIT 4), '') AS feedShowFavIconSettings,
   createdAt,
   updatedAt,
   pinnedAt,
@@ -107,20 +136,25 @@ groupsByIds:
 SELECT
   id,
   name,
-  (SELECT GROUP_CONCAT(gf.feedId)
+  (SELECT GROUP_CONCAT(gf.feedId, '::')
        FROM feedGroupFeed gf
        JOIN feed f ON gf.feedId = f.id
        WHERE gf.feedGroupId = fg.id AND f.isDeleted = 0) AS feedIds,
-  COALESCE((SELECT GROUP_CONCAT(f.homepageLink)
+  COALESCE((SELECT GROUP_CONCAT(f.homepageLink, '::')
      FROM feedGroupFeed gf
      JOIN feed f ON gf.feedId = f.id
      WHERE gf.feedGroupId = fg.id AND f.isDeleted = 0
      LIMIT 4), '') AS feedHomepageLinks,
-  COALESCE((SELECT GROUP_CONCAT(f.icon)
+  COALESCE((SELECT GROUP_CONCAT(f.icon, '::')
      FROM feedGroupFeed gf
      JOIN feed f ON gf.feedId = f.id
      WHERE gf.feedGroupId = fg.id AND f.isDeleted = 0
      LIMIT 4), '') AS feedIconLinks,
+  COALESCE((SELECT GROUP_CONCAT(CASE WHEN f.showFeedFavIcon IS NULL THEN 'null' WHEN f.showFeedFavIcon = 1 THEN 'true' ELSE 'false' END, '::')
+     FROM feedGroupFeed gf
+     JOIN feed f ON gf.feedId = f.id
+     WHERE gf.feedGroupId = fg.id AND f.isDeleted = 0
+     LIMIT 4), '') AS feedShowFavIconSettings,
   createdAt,
   updatedAt,
   pinnedAt
@@ -135,10 +169,25 @@ allGroupsBlocking:
 SELECT
   id,
   name,
-  (SELECT GROUP_CONCAT(gf.feedId)
+  (SELECT GROUP_CONCAT(gf.feedId, '::')
        FROM feedGroupFeed gf
        JOIN feed f ON gf.feedId = f.id
        WHERE gf.feedGroupId = fg.id AND f.isDeleted = 0) AS feedIds,
+  COALESCE((SELECT GROUP_CONCAT(f.homepageLink, '::')
+     FROM feedGroupFeed gf
+     JOIN feed f ON gf.feedId = f.id
+     WHERE gf.feedGroupId = fg.id AND f.isDeleted = 0
+     LIMIT 4), '') AS feedHomepageLinks,
+  COALESCE((SELECT GROUP_CONCAT(f.icon, '::')
+     FROM feedGroupFeed gf
+     JOIN feed f ON gf.feedId = f.id
+     WHERE gf.feedGroupId = fg.id AND f.isDeleted = 0
+     LIMIT 4), '') AS feedIconLinks,
+  COALESCE((SELECT GROUP_CONCAT(CASE WHEN f.showFeedFavIcon IS NULL THEN 'null' WHEN f.showFeedFavIcon = 1 THEN 'true' ELSE 'false' END, '::')
+     FROM feedGroupFeed gf
+     JOIN feed f ON gf.feedId = f.id
+     WHERE gf.feedGroupId = fg.id AND f.isDeleted = 0
+     LIMIT 4), '') AS feedShowFavIconSettings,
   createdAt,
   updatedAt,
   pinnedAt,

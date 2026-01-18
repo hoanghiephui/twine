@@ -93,6 +93,8 @@ data class FeedSyncEntity(
   val pinnedAt: Long? = null,
   val lastCleanUpAt: Long? = null,
   val alwaysFetchSourceArticle: Boolean = false,
+  val showFeedFavIcon: Boolean = true,
+  val hideFromAllFeeds: Boolean = false,
   val lastUpdatedAt: Long? = null,
   val isDeleted: Boolean = false
 )

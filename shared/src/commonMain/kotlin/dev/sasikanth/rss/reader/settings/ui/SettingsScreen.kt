@@ -87,7 +87,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
@@ -169,6 +171,8 @@ import twine.shared.generated.resources.settingsCustomisations
 import twine.shared.generated.resources.settingsDownloadFullContentSubtitle
 import twine.shared.generated.resources.settingsDownloadFullContentTitle
 import twine.shared.generated.resources.settingsDownloadFullContentWarning
+import twine.shared.generated.resources.settingsDynamicColorSubtitle
+import twine.shared.generated.resources.settingsDynamicColorTitle
 import twine.shared.generated.resources.settingsEnableNotificationsSubtitle
 import twine.shared.generated.resources.settingsEnableNotificationsTitle
 import twine.shared.generated.resources.settingsHeaderBehaviour
@@ -195,6 +199,7 @@ import twine.shared.generated.resources.settingsShowReaderViewTitle
 import twine.shared.generated.resources.settingsShowUnreadCountSubtitle
 import twine.shared.generated.resources.settingsShowUnreadCountTitle
 import twine.shared.generated.resources.settingsSyncDropbox
+import twine.shared.generated.resources.settingsSyncSignIn
 import twine.shared.generated.resources.settingsSyncSignOut
 import twine.shared.generated.resources.settingsSyncStatusFailure
 import twine.shared.generated.resources.settingsSyncStatusIdle
@@ -395,6 +400,15 @@ internal fun SettingsScreen(
               }
             )
           }
+        }
+
+        item {
+          DynamicColorSettingItem(
+            dynamicColorEnabled = state.dynamicColorEnabled,
+            onValueChanged = { newValue ->
+              viewModel.dispatch(SettingsEvent.ToggleDynamicColor(newValue))
+            }
+          )
         }
 
         if (state.canSubscribe) {
@@ -1085,6 +1099,46 @@ private fun AmoledSettingItem(useAmoled: Boolean, onValueChanged: (Boolean) -> U
 }
 
 @Composable
+private fun DynamicColorSettingItem(
+  dynamicColorEnabled: Boolean,
+  onValueChanged: (Boolean) -> Unit
+) {
+  var checked by remember(dynamicColorEnabled) { mutableStateOf(dynamicColorEnabled) }
+  Box(
+    modifier =
+      Modifier.clickable {
+        checked = !checked
+        onValueChanged(!dynamicColorEnabled)
+      }
+  ) {
+    Row(
+      modifier = Modifier.padding(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 20.dp),
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      Column(modifier = Modifier.weight(1f)) {
+        Text(
+          stringResource(Res.string.settingsDynamicColorTitle),
+          style = MaterialTheme.typography.titleMedium,
+          color = AppTheme.colorScheme.textEmphasisHigh
+        )
+        Text(
+          stringResource(Res.string.settingsDynamicColorSubtitle),
+          style = MaterialTheme.typography.labelLarge,
+          color = AppTheme.colorScheme.textEmphasisMed
+        )
+      }
+
+      Spacer(Modifier.width(16.dp))
+
+      Switch(
+        checked = checked,
+        onCheckedChange = { checked -> onValueChanged(checked) },
+      )
+    }
+  }
+}
+
+@Composable
 private fun PostsDeletionPeriodSettingItem(
   postsDeletionPeriod: Period?,
   onValueChanged: (Period) -> Unit
@@ -1554,7 +1608,11 @@ private fun OPMLSettingItem(
                 }
               }
 
-            Text(string)
+            Text(
+              text = string,
+              maxLines = 1,
+              overflow = TextOverflow.MiddleEllipsis,
+            )
           }
 
           OutlinedButton(
@@ -1752,16 +1810,25 @@ private fun CloudSyncSettingItem(
         }
 
         if (provider.isSupported) {
-          if (isSignedIn) {
-            TextButton(
-              onClick = { onSignOutClicked(provider) },
-            ) {
-              Text(
-                text = stringResource(Res.string.settingsSyncSignOut),
-                style = MaterialTheme.typography.bodyMedium,
-                color = AppTheme.colorScheme.primary
-              )
-            }
+          val label =
+            if (isSignedIn) stringResource(Res.string.settingsSyncSignOut)
+            else stringResource(Res.string.settingsSyncSignIn)
+
+          TextButton(
+            onClick = {
+              if (isSignedIn) {
+                onSignOutClicked(provider)
+              } else {
+                onSyncClicked(provider)
+              }
+            },
+          ) {
+            Text(
+              text = label,
+              style = MaterialTheme.typography.bodyMedium,
+              fontWeight = FontWeight.SemiBold,
+              color = AppTheme.colorScheme.primary
+            )
           }
         }
       }

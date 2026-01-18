@@ -115,6 +115,8 @@ class PostSyncTest {
               pinnedAt = 123456789L,
               lastCleanUpAt = 123456789L,
               alwaysFetchSourceArticle = true,
+              showFeedFavIcon = false,
+              hideFromAllFeeds = false,
               lastUpdatedAt = 123456789L,
               isDeleted = false
             )
