@@ -9,9 +9,11 @@
  *
  */
 
-package dev.sasikanth.rss.reader.data.sync
+package dev.sasikanth.rss.reader.data.sync.auth
 
 import co.touchlab.kermit.Logger
+import dev.sasikanth.rss.reader.core.model.local.ServiceType
+import dev.sasikanth.rss.reader.data.repository.UserRepository
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.forms.submitForm
@@ -28,15 +30,18 @@ internal const val DROPBOX_CLIENT_ID = "qtxdwxyzi69tuxp"
 
 class RealOAuthManager(
   private val httpClient: HttpClient,
-  private val tokenProvider: OAuthTokenProvider
+  private val tokenProvider: OAuthTokenProvider,
+  private val userRepository: UserRepository,
 ) : OAuthManager {
 
   private val redirectUri = "twine://oauth"
   private var codeVerifier: String? = null
 
-  override fun getAuthUrl(providerId: String): String {
-    return when (providerId) {
-      "dropbox" -> {
+  private var pendingServiceType: ServiceType? = null
+
+  override fun getAuthUrl(serviceType: ServiceType): String {
+    return when (serviceType) {
+      ServiceType.DROPBOX -> {
         codeVerifier = generateCodeVerifier()
         val codeChallenge = generateCodeChallenge(codeVerifier!!)
         URLBuilder("https://www.dropbox.com/oauth2/authorize")
@@ -55,17 +60,15 @@ class RealOAuthManager(
     }
   }
 
-  private var pendingProviderId: String? = null
-
-  override fun setPendingProvider(providerId: String) {
-    pendingProviderId = providerId
+  override fun setPendingProvider(serviceType: ServiceType) {
+    pendingServiceType = serviceType
   }
 
-  override suspend fun handleRedirect(uri: String): String? {
+  override suspend fun handleRedirect(uri: String): Boolean {
     val url = Url(uri.replace("#", "?"))
     val code = url.parameters["code"]
-    if (code != null && pendingProviderId != null && codeVerifier != null) {
-      val providerId = pendingProviderId!!
+    if (code != null && pendingServiceType != null && codeVerifier != null) {
+      val serviceType = pendingServiceType!!
       val verifier = codeVerifier!!
       try {
         val response: DropboxTokenResponse =
@@ -83,20 +86,31 @@ class RealOAuthManager(
             )
             .body()
 
-        tokenProvider.saveAccessToken(providerId, response.accessToken)
+        // Placeholder user data, replace if Dropbox approves getting user info via API
+        userRepository.saveUser(
+          id = "1",
+          name = "Dropbox User",
+          email = "user@dropbox",
+          avatarUrl = "",
+          token = response.accessToken,
+          refreshToken = response.refreshToken ?: "",
+          serviceType = serviceType,
+        )
+
+        tokenProvider.saveAccessToken(serviceType, response.accessToken)
         if (response.refreshToken != null) {
-          tokenProvider.saveRefreshToken(providerId, response.refreshToken)
+          tokenProvider.saveRefreshToken(serviceType, response.refreshToken)
         }
-        pendingProviderId = null
+        pendingServiceType = null
         codeVerifier = null
 
-        return providerId
+        return true
       } catch (e: Exception) {
         Logger.e("AuthError", e)
       }
     }
 
-    return null
+    return false
   }
 
   @OptIn(ExperimentalEncodingApi::class)
@@ -114,4 +128,9 @@ class RealOAuthManager(
 internal data class DropboxTokenResponse(
   @SerialName("access_token") val accessToken: String,
   @SerialName("refresh_token") val refreshToken: String? = null,
+)
+
+@Serializable
+internal data class DropboxName(
+  @SerialName("display_name") val displayName: String,
 )

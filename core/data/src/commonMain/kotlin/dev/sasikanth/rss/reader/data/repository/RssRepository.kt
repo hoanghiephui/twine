@@ -31,6 +31,8 @@ import dev.sasikanth.rss.reader.core.model.local.SearchSortOrder
 import dev.sasikanth.rss.reader.core.model.local.Source
 import dev.sasikanth.rss.reader.core.model.local.UnreadSinceLastSync
 import dev.sasikanth.rss.reader.core.model.remote.FeedPayload
+import dev.sasikanth.rss.reader.data.database.AppConfigQueries
+import dev.sasikanth.rss.reader.data.database.BlockedWordsQueries
 import dev.sasikanth.rss.reader.data.database.BookmarkQueries
 import dev.sasikanth.rss.reader.data.database.FeedGroupFeedQueries
 import dev.sasikanth.rss.reader.data.database.FeedGroupQueries
@@ -50,8 +52,9 @@ import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Instant
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.withContext
 import me.tatarka.inject.annotations.Inject
 
@@ -67,9 +70,25 @@ class RssRepository(
   private val feedSearchFTSQueries: FeedSearchFTSQueries,
   private val feedGroupQueries: FeedGroupQueries,
   private val feedGroupFeedQueries: FeedGroupFeedQueries,
+  private val blockedWordsQueries: BlockedWordsQueries,
+  private val appConfigQueries: AppConfigQueries,
   private val sourceQueries: SourceQueries,
   private val dispatchersProvider: DispatchersProvider
 ) {
+
+  suspend fun deleteAllLocalData() {
+    withContext(dispatchersProvider.databaseWrite) {
+      transactionRunner.invoke {
+        postQueries.deleteAll()
+        postContentQueries.deleteAll()
+        feedGroupFeedQueries.deleteAll()
+        feedQueries.deleteAll()
+        feedGroupQueries.deleteAll()
+        blockedWordsQueries.deleteAll()
+        appConfigQueries.deleteAll()
+      }
+    }
+  }
 
   suspend fun upsertFeedWithPosts(
     feedPayload: FeedPayload,
@@ -103,11 +122,15 @@ class RssRepository(
     val feedLastCleanUpAtEpochMilli =
       feedLastCleanUpAt?.toEpochMilliseconds() ?: Instant.DISTANT_PAST.toEpochMilliseconds()
 
-    feedPayload.posts.collect { postPayload ->
-      if (postPayload.date < feedLastCleanUpAtEpochMilli) return@collect
+    val posts =
+      feedPayload.posts
+        .filter { it.date >= feedLastCleanUpAtEpochMilli }
+        .toList()
+        .sortedBy { it.date }
 
-      val postId = nameBasedUuidOf(postPayload.link).toString()
-      withContext(dispatchersProvider.databaseWrite) {
+    withContext(dispatchersProvider.databaseWrite) {
+      posts.forEach { postPayload ->
+        val postId = nameBasedUuidOf(postPayload.link).toString()
         transactionRunner.invoke {
           postQueries.upsert(
             id = postId,
@@ -158,7 +181,8 @@ class RssRepository(
           lastUpdatedAt: Instant?,
           refreshInterval: String,
           isDeleted: Boolean,
-          hideFromAllFeeds: Boolean ->
+          hideFromAllFeeds: Boolean,
+          remoteId: String? ->
           Feed(
             id = id,
             name = name,
@@ -176,6 +200,7 @@ class RssRepository(
             showFeedFavIcon = showFeedFavIcon,
             hideFromAllFeeds = hideFromAllFeeds,
             isDeleted = isDeleted,
+            remoteId = remoteId,
           )
         }
       )
@@ -247,6 +272,7 @@ class RssRepository(
             link: String,
             commentsLink: String?,
             flags: Set<PostFlag>,
+            remoteId: String?,
             feedName: String,
             feedIcon: String,
             feedHomepageLink: String,
@@ -269,6 +295,7 @@ class RssRepository(
               feedHomepageLink = feedHomepageLink,
               alwaysFetchFullArticle = alwaysFetchFullArticle,
               showFeedFavIcon = showFeedFavIcon,
+              remoteId = remoteId,
             )
           }
         )
@@ -336,7 +363,8 @@ class RssRepository(
             lastUpdatedAt: Instant?,
             refreshInterval: String,
             isDeleted: Boolean,
-            hideFromAllFeeds: Boolean ->
+            hideFromAllFeeds: Boolean,
+            remoteId: String? ->
             Feed(
               id = id,
               name = name,
@@ -354,6 +382,7 @@ class RssRepository(
               showFeedFavIcon = showFeedFavIcon,
               hideFromAllFeeds = hideFromAllFeeds,
               isDeleted = isDeleted,
+              remoteId = remoteId,
             )
           }
         )
@@ -376,7 +405,8 @@ class RssRepository(
             updatedAt: Instant,
             pinnedAt: Instant?,
             pinnedPosition: Double,
-            isDeleted: Boolean ->
+            isDeleted: Boolean,
+            remoteId: String? ->
             FeedGroup(
               id = id,
               name = name,
@@ -394,6 +424,7 @@ class RssRepository(
               pinnedAt = pinnedAt,
               pinnedPosition = pinnedPosition,
               isDeleted = isDeleted,
+              remoteId = remoteId,
             )
           }
         )
@@ -432,6 +463,12 @@ class RssRepository(
             createdAt,
             pinnedAt,
             lastCleanUpAt,
+            alwaysFetchSourceArticle,
+            pinnedPosition,
+            lastUpdatedAt,
+            refreshInterval,
+            isDeleted,
+            remoteId,
             numberOfUnreadPosts,
             showFeedFavIcon,
             hideFromAllFeeds ->
@@ -445,6 +482,12 @@ class RssRepository(
               createdAt = createdAt,
               pinnedAt = pinnedAt,
               lastCleanUpAt = lastCleanUpAt,
+              alwaysFetchSourceArticle = alwaysFetchSourceArticle,
+              pinnedPosition = pinnedPosition,
+              lastUpdatedAt = lastUpdatedAt,
+              refreshInterval = Duration.parse(refreshInterval),
+              isDeleted = isDeleted,
+              remoteId = remoteId,
               numberOfUnreadPosts = numberOfUnreadPosts,
               showFeedFavIcon = showFeedFavIcon,
               hideFromAllFeeds = hideFromAllFeeds,
@@ -476,9 +519,12 @@ class RssRepository(
           pinnedAt: Instant?,
           lastCleanUpAt: Instant?,
           alwaysFetchSourceArticle: Boolean,
+          pinnedPosition: Double,
           numberOfUnreadPosts: Long,
           showFeedFavIcon: Boolean,
-          hideFromAllFeeds: Boolean ->
+          hideFromAllFeeds: Boolean,
+          isDeleted: Boolean,
+          remoteId: String? ->
           Feed(
             id = id,
             name = name,
@@ -490,9 +536,12 @@ class RssRepository(
             pinnedAt = pinnedAt,
             lastCleanUpAt = lastCleanUpAt,
             alwaysFetchSourceArticle = alwaysFetchSourceArticle,
+            pinnedPosition = pinnedPosition,
             numberOfUnreadPosts = numberOfUnreadPosts,
             showFeedFavIcon = showFeedFavIcon,
             hideFromAllFeeds = hideFromAllFeeds,
+            isDeleted = isDeleted,
+            remoteId = remoteId,
           )
         }
       )
@@ -522,9 +571,12 @@ class RssRepository(
             pinnedAt: Instant?,
             lastCleanUpAt: Instant?,
             alwaysFetchSourceArticle: Boolean,
+            pinnedPosition: Double,
             numberOfUnreadPosts: Long,
             showFeedFavIcon: Boolean,
-            hideFromAllFeeds: Boolean ->
+            hideFromAllFeeds: Boolean,
+            isDeleted: Boolean,
+            remoteId: String? ->
             Feed(
               id = id,
               name = name,
@@ -536,9 +588,12 @@ class RssRepository(
               pinnedAt = pinnedAt,
               lastCleanUpAt = lastCleanUpAt,
               alwaysFetchSourceArticle = alwaysFetchSourceArticle,
+              pinnedPosition = pinnedPosition,
               numberOfUnreadPosts = numberOfUnreadPosts,
               showFeedFavIcon = showFeedFavIcon,
               hideFromAllFeeds = hideFromAllFeeds,
+              isDeleted = isDeleted,
+              remoteId = remoteId,
             )
           }
         )
@@ -549,7 +604,7 @@ class RssRepository(
   suspend fun removeFeed(feedId: String) {
     withContext(dispatchersProvider.databaseWrite) {
       feedQueries.transaction {
-        feedQueries.remove(id = feedId, lastUpdatedAt = Clock.System.now())
+        feedQueries.markAsDeleted(id = feedId, lastUpdatedAt = Clock.System.now())
         postQueries.deletePostsForFeed(feedId)
       }
     }
@@ -799,6 +854,154 @@ class RssRepository(
     }
   }
 
+  suspend fun updateFeedRemoteId(
+    remoteId: String,
+    feedId: String,
+    lastUpdatedAt: Instant = Clock.System.now(),
+  ) {
+    withContext(dispatchersProvider.databaseWrite) {
+      feedQueries.updateFeedRemoteId(
+        remoteId = remoteId,
+        lastUpdatedAt = lastUpdatedAt,
+        id = feedId,
+      )
+    }
+  }
+
+  suspend fun updatePostRemoteId(remoteId: String, postId: String) {
+    withContext(dispatchersProvider.databaseWrite) {
+      postQueries.updatePostRemoteId(
+        remoteId = remoteId,
+        updatedAt = Clock.System.now(),
+        id = postId,
+      )
+    }
+  }
+
+  suspend fun updatePostSyncedAt(postId: String, syncedAt: Instant) {
+    withContext(dispatchersProvider.databaseWrite) {
+      postQueries.updatePostSyncedAt(syncedAt = syncedAt, id = postId)
+    }
+  }
+
+  suspend fun updateFeedGroupRemoteId(
+    remoteId: String,
+    groupId: String,
+    updatedAt: Instant = Clock.System.now(),
+  ) {
+    withContext(dispatchersProvider.databaseWrite) {
+      feedGroupQueries.updateFeedGroupRemoteId(
+        remoteId = remoteId,
+        updatedAt = updatedAt,
+        id = groupId,
+      )
+    }
+  }
+
+  suspend fun feedGroupByRemoteId(remoteId: String): FeedGroup? {
+    return withContext(dispatchersProvider.databaseRead) {
+      feedGroupQueries
+        .feedGroupByRemoteId(
+          remoteId = remoteId,
+          mapper = {
+            id: String,
+            name: String,
+            createdAt: Instant,
+            updatedAt: Instant,
+            pinnedAt: Instant?,
+            pinnedPosition: Double,
+            isDeleted: Boolean,
+            remoteId: String? ->
+            FeedGroup(
+              id = id,
+              name = name,
+              feedIds = emptyList(),
+              feedHomepageLinks = emptyList(),
+              feedIconLinks = emptyList(),
+              feedShowFavIconSettings = emptyList(),
+              createdAt = createdAt,
+              updatedAt = updatedAt,
+              pinnedAt = pinnedAt,
+              pinnedPosition = pinnedPosition,
+              isDeleted = isDeleted,
+              remoteId = remoteId,
+            )
+          }
+        )
+        .executeAsOneOrNull()
+    }
+  }
+
+  suspend fun postsWithRemoteId(): List<Post> {
+    return withContext(dispatchersProvider.databaseRead) {
+      postQueries.postsWithRemoteId(::Post).executeAsList()
+    }
+  }
+
+  suspend fun postsWithLocalChanges(): List<Post> {
+    return withContext(dispatchersProvider.databaseRead) {
+      postQueries.postsWithLocalChanges(::Post).executeAsList()
+    }
+  }
+
+  suspend fun postByRemoteId(remoteId: String): Post? {
+    return withContext(dispatchersProvider.databaseRead) {
+      postQueries.postByRemoteId(remoteId, ::Post).executeAsOneOrNull()
+    }
+  }
+
+  suspend fun postByLink(link: String): Post? {
+    return withContext(dispatchersProvider.databaseRead) {
+      postQueries.postByLink(link, ::Post).executeAsOneOrNull()
+    }
+  }
+
+  fun feedByRemoteId(remoteId: String): Feed? {
+    return feedQueries
+      .feedByRemoteId(
+        remoteId,
+        mapper = {
+          id: String,
+          name: String,
+          icon: String,
+          description: String,
+          link: String,
+          homepageLink: String,
+          createdAt: Instant,
+          pinnedAt: Instant?,
+          lastCleanUpAt: Instant?,
+          alwaysFetchSourceArticle: Boolean,
+          pinnedPosition: Double,
+          showFeedFavIcon: Boolean,
+          lastUpdatedAt: Instant?,
+          refreshInterval: String,
+          isDeleted: Boolean,
+          hideFromAllFeeds: Boolean,
+          remoteId: String? ->
+          Feed(
+            id = id,
+            name = name,
+            icon = icon,
+            description = description,
+            homepageLink = homepageLink,
+            createdAt = createdAt,
+            link = link,
+            pinnedAt = pinnedAt,
+            lastCleanUpAt = lastCleanUpAt,
+            lastUpdatedAt = lastUpdatedAt,
+            refreshInterval = Duration.parse(refreshInterval),
+            alwaysFetchSourceArticle = alwaysFetchSourceArticle,
+            pinnedPosition = pinnedPosition,
+            showFeedFavIcon = showFeedFavIcon,
+            hideFromAllFeeds = hideFromAllFeeds,
+            isDeleted = isDeleted,
+            remoteId = remoteId,
+          )
+        }
+      )
+      .executeAsOneOrNull()
+  }
+
   suspend fun upsertPosts(posts: List<Post>) {
     val postsSnapshot = posts.toList()
     withContext(dispatchersProvider.databaseWrite) {
@@ -816,7 +1019,8 @@ class RssRepository(
             syncedAt = post.syncedAt,
             link = post.link,
             commentsLink = post.commentsLink,
-            flags = post.flags
+            flags = post.flags,
+            remoteId = post.remoteId,
           )
         }
       }
@@ -841,7 +1045,8 @@ class RssRepository(
             alwaysFetchSourceArticle = feed.alwaysFetchSourceArticle,
             lastUpdatedAt = feed.lastUpdatedAt,
             isDeleted = feed.isDeleted,
-            hideFromAllFeeds = feed.hideFromAllFeeds
+            hideFromAllFeeds = feed.hideFromAllFeeds,
+            remoteId = feed.remoteId,
           )
         }
       }
@@ -853,7 +1058,8 @@ class RssRepository(
     name: String,
     pinnedAt: Instant?,
     updatedAt: Instant,
-    isDeleted: Boolean
+    isDeleted: Boolean,
+    remoteId: String? = null,
   ) {
     withContext(dispatchersProvider.databaseWrite) {
       feedGroupQueries.upsertSyncGroup(
@@ -862,7 +1068,8 @@ class RssRepository(
         createdAt = Clock.System.now(),
         updatedAt = updatedAt,
         pinnedAt = pinnedAt,
-        isDeleted = isDeleted
+        isDeleted = isDeleted,
+        remoteId = remoteId,
       )
     }
   }
@@ -883,7 +1090,8 @@ class RssRepository(
             updatedAt: Instant,
             pinnedAt: Instant?,
             pinnedPosition: Double,
-            isDeleted: Boolean ->
+            isDeleted: Boolean,
+            remoteId: String? ->
             FeedGroup(
               id = id,
               name = name,
@@ -901,6 +1109,7 @@ class RssRepository(
               pinnedAt = pinnedAt,
               pinnedPosition = pinnedPosition,
               isDeleted = isDeleted,
+              remoteId = remoteId,
             )
           }
         )
@@ -1023,15 +1232,29 @@ class RssRepository(
     }
   }
 
+  suspend fun markSourcesAsDeleted(sources: Set<Source>) {
+    val sourcesSnapshot = sources.toList()
+    withContext(dispatchersProvider.databaseWrite) {
+      transactionRunner.invoke {
+        val now = Clock.System.now()
+        sourcesSnapshot.forEach { source ->
+          feedQueries.markAsDeleted(id = source.id, lastUpdatedAt = now)
+          postQueries.deletePostsForFeed(source.id)
+          feedGroupQueries.markAsDeleted(id = source.id, updatedAt = now)
+        }
+      }
+    }
+  }
+
   suspend fun deleteSources(sources: Set<Source>) {
     val sourcesSnapshot = sources.toList()
     withContext(dispatchersProvider.databaseWrite) {
       transactionRunner.invoke {
         val now = Clock.System.now()
         sourcesSnapshot.forEach { source ->
-          feedQueries.remove(id = source.id, lastUpdatedAt = now)
+          feedQueries.remove(id = source.id)
           postQueries.deletePostsForFeed(source.id)
-          feedGroupQueries.deleteGroup(id = source.id, updatedAt = now)
+          feedGroupQueries.remove(id = source.id)
         }
       }
     }
@@ -1063,7 +1286,8 @@ class RssRepository(
           feedShowFavIconSettings: String?,
           updatedAt: Instant?,
           pinnedPosition: Double,
-          showFeedFavIcon: Boolean? ->
+          showFeedFavIcon: Boolean?,
+          remoteId: String? ->
           if (type == "group") {
             FeedGroup(
               id = id,
@@ -1102,7 +1326,8 @@ class RssRepository(
               lastCleanUpAt = lastCleanUpAt,
               numberOfUnreadPosts = numberOfUnreadPosts,
               pinnedPosition = pinnedPosition,
-              showFeedFavIcon = showFeedFavIcon ?: true
+              showFeedFavIcon = showFeedFavIcon ?: true,
+              remoteId = remoteId
             )
           }
         }
@@ -1145,7 +1370,8 @@ class RssRepository(
             feedShowFavIconSettings: String?,
             updatedAt: Instant?,
             pinnedPosition: Double,
-            showFeedFavIcon: Boolean? ->
+            showFeedFavIcon: Boolean?,
+            remoteId: String? ->
             if (type == "group") {
               FeedGroup(
                 id = id,
@@ -1184,7 +1410,8 @@ class RssRepository(
                 lastCleanUpAt = lastCleanUpAt,
                 numberOfUnreadPosts = numberOfUnreadPosts,
                 pinnedPosition = pinnedPosition,
-                showFeedFavIcon = showFeedFavIcon ?: true
+                showFeedFavIcon = showFeedFavIcon ?: true,
+                remoteId = remoteId
               )
             }
           }
@@ -1221,7 +1448,8 @@ class RssRepository(
           feedShowFavIconSettings: String?,
           updatedAt: Instant?,
           pinnedPosition: Double,
-          showFeedFavIcon: Boolean? ->
+          showFeedFavIcon: Boolean?,
+          remoteId: String? ->
           if (type == "group") {
             FeedGroup(
               id = id,
@@ -1260,7 +1488,8 @@ class RssRepository(
               lastCleanUpAt = lastCleanUpAt,
               numberOfUnreadPosts = numberOfUnreadPosts,
               pinnedPosition = pinnedPosition,
-              showFeedFavIcon = showFeedFavIcon ?: true
+              showFeedFavIcon = showFeedFavIcon ?: true,
+              remoteId = remoteId
             )
           }
         }
@@ -1288,7 +1517,8 @@ class RssRepository(
             createdAt: Instant,
             updatedAt: Instant,
             pinnedAt: Instant?,
-            pinnedPosition: Double ->
+            pinnedPosition: Double,
+            remoteId: String? ->
             FeedGroup(
               id = id,
               name = name,
@@ -1306,7 +1536,8 @@ class RssRepository(
               createdAt = createdAt,
               updatedAt = updatedAt,
               pinnedAt = pinnedAt,
-              pinnedPosition = pinnedPosition
+              pinnedPosition = pinnedPosition,
+              remoteId = remoteId
             )
           }
         )
@@ -1332,7 +1563,8 @@ class RssRepository(
             feedShowFavIconSettings: String,
             createdAt: Instant,
             updatedAt: Instant,
-            pinnedAt: Instant? ->
+            pinnedAt: Instant?,
+            remoteId: String? ->
             FeedGroup(
               id = id,
               name = name,
@@ -1350,6 +1582,7 @@ class RssRepository(
               createdAt = createdAt,
               updatedAt = updatedAt,
               pinnedAt = pinnedAt,
+              remoteId = remoteId,
             )
           }
         )
@@ -1370,7 +1603,8 @@ class RssRepository(
           feedShowFavIconSettings: String,
           createdAt: Instant,
           updatedAt: Instant,
-          pinnedAt: Instant? ->
+          pinnedAt: Instant?,
+          remoteId: String? ->
           FeedGroup(
             id = id,
             name = name,
@@ -1384,6 +1618,7 @@ class RssRepository(
             createdAt = createdAt,
             updatedAt = updatedAt,
             pinnedAt = pinnedAt,
+            remoteId = remoteId,
           )
         }
       )
@@ -1415,9 +1650,13 @@ class RssRepository(
             createdAt: Instant,
             pinnedAt: Instant?,
             lastCleanUpAt: Instant?,
+            alwaysFetchSourceArticle: Boolean,
+            pinnedPosition: Double,
             numberOfUnreadPosts: Long,
             showFeedFavIcon: Boolean,
-            hideFromAllFeeds: Boolean ->
+            hideFromAllFeeds: Boolean,
+            isDeleted: Boolean,
+            remoteId: String? ->
             Feed(
               id = id,
               name = name,
@@ -1428,9 +1667,13 @@ class RssRepository(
               createdAt = createdAt,
               pinnedAt = pinnedAt,
               lastCleanUpAt = lastCleanUpAt,
+              alwaysFetchSourceArticle = alwaysFetchSourceArticle,
+              pinnedPosition = pinnedPosition,
               numberOfUnreadPosts = numberOfUnreadPosts,
               showFeedFavIcon = showFeedFavIcon,
               hideFromAllFeeds = hideFromAllFeeds,
+              isDeleted = isDeleted,
+              remoteId = remoteId,
             )
           }
         )

@@ -13,6 +13,7 @@ package dev.sasikanth.rss.reader.data.repository
 
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToOneOrNull
+import dev.sasikanth.rss.reader.core.model.local.ServiceType
 import dev.sasikanth.rss.reader.core.model.local.User
 import dev.sasikanth.rss.reader.data.database.UserQueries
 import dev.sasikanth.rss.reader.util.DispatchersProvider
@@ -26,31 +27,104 @@ class UserRepository(
   private val dispatchersProvider: DispatchersProvider,
 ) {
 
-  suspend fun createUser(
+  suspend fun saveUser(
     id: String,
     name: String,
-    profileId: String,
     email: String,
+    avatarUrl: String?,
     token: String,
-    serverUrl: String,
+    refreshToken: String,
+    serverUrl: String? = null,
+    serviceType: ServiceType,
   ) {
     withContext(dispatchersProvider.databaseWrite) {
-      val user = userBlocking()
-      if (user != null) return@withContext
-
-      userQueries.insert(id, name, profileId, email, token, serverUrl)
+      userQueries.insert(
+        id = id,
+        name = name,
+        email = email,
+        avatarUrl = avatarUrl,
+        token = token,
+        refreshToken = refreshToken,
+        serverUrl = serverUrl,
+        lastSyncStatus = "IDLE",
+        serviceType = serviceType
+      )
     }
+  }
+
+  suspend fun updateLastSyncStatus(lastSyncStatus: String) {
+    withContext(dispatchersProvider.databaseWrite) {
+      userQueries.updateLastSyncStatus(lastSyncStatus)
+    }
+  }
+
+  suspend fun updateToken(token: String) {
+    withContext(dispatchersProvider.databaseWrite) { userQueries.updateToken(token) }
+  }
+
+  suspend fun updateRefreshToken(refreshToken: String) {
+    withContext(dispatchersProvider.databaseWrite) { userQueries.updateRefreshToken(refreshToken) }
   }
 
   fun user(): Flow<User?> {
     return userQueries
-      .user(mapper = ::User)
+      .user(
+        mapper = {
+          id,
+          name,
+          email,
+          avatarUrl,
+          token,
+          refreshToken,
+          serverUrl,
+          lastSyncStatus,
+          serviceType ->
+          User(
+            id = id,
+            name = name,
+            email = email,
+            avatarUrl = avatarUrl,
+            token = token,
+            refreshToken = refreshToken,
+            serverUrl = serverUrl,
+            lastSyncStatus = lastSyncStatus,
+            serviceType = serviceType
+          )
+        }
+      )
       .asFlow()
       .mapToOneOrNull(dispatchersProvider.databaseRead)
   }
 
-  fun userBlocking(): User? {
-    return userQueries.user(mapper = ::User).executeAsOneOrNull()
+  suspend fun currentUser(): User? {
+    return withContext(dispatchersProvider.databaseRead) {
+      userQueries
+        .user(
+          mapper = {
+            id,
+            name,
+            email,
+            avatarUrl,
+            token,
+            refreshToken,
+            serverUrl,
+            lastSyncStatus,
+            serviceType ->
+            User(
+              id = id,
+              name = name,
+              email = email,
+              avatarUrl = avatarUrl,
+              token = token,
+              refreshToken = refreshToken,
+              serverUrl = serverUrl,
+              lastSyncStatus = lastSyncStatus,
+              serviceType = serviceType
+            )
+          }
+        )
+        .executeAsOneOrNull()
+    }
   }
 
   suspend fun deleteUser() {

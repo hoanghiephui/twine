@@ -15,6 +15,7 @@
  */
 package dev.sasikanth.rss.reader.data.di
 
+import app.cash.sqldelight.EnumColumnAdapter
 import app.cash.sqldelight.db.AfterVersion
 import app.cash.sqldelight.db.SqlDriver
 import dev.sasikanth.rss.reader.data.database.BlockedWord
@@ -23,17 +24,21 @@ import dev.sasikanth.rss.reader.data.database.FeedGroup
 import dev.sasikanth.rss.reader.data.database.Post
 import dev.sasikanth.rss.reader.data.database.PostContent
 import dev.sasikanth.rss.reader.data.database.ReaderDatabase
+import dev.sasikanth.rss.reader.data.database.User
 import dev.sasikanth.rss.reader.data.database.adapter.DateAdapter
 import dev.sasikanth.rss.reader.data.database.adapter.PostFlagsAdapter
 import dev.sasikanth.rss.reader.data.database.migrations.SQLCodeMigrations
-import dev.sasikanth.rss.reader.data.repository.SettingsRepository
-import dev.sasikanth.rss.reader.data.sync.DropboxSyncProvider
-import dev.sasikanth.rss.reader.data.sync.LocalSyncCoordinator
-import dev.sasikanth.rss.reader.data.sync.OAuthManager
-import dev.sasikanth.rss.reader.data.sync.OAuthTokenProvider
-import dev.sasikanth.rss.reader.data.sync.RealOAuthManager
-import dev.sasikanth.rss.reader.data.sync.RealOAuthTokenProvider
+import dev.sasikanth.rss.reader.data.repository.UserRepository
+import dev.sasikanth.rss.reader.data.sync.CloudServiceProvider
+import dev.sasikanth.rss.reader.data.sync.DefaultSyncCoordinator
 import dev.sasikanth.rss.reader.data.sync.SyncCoordinator
+import dev.sasikanth.rss.reader.data.sync.auth.OAuthManager
+import dev.sasikanth.rss.reader.data.sync.auth.OAuthTokenProvider
+import dev.sasikanth.rss.reader.data.sync.auth.RealOAuthManager
+import dev.sasikanth.rss.reader.data.sync.auth.RealOAuthTokenProvider
+import dev.sasikanth.rss.reader.data.sync.dropbox.DropboxCloudServiceProvider
+import dev.sasikanth.rss.reader.data.sync.freshrss.FreshRssSyncProvider
+import dev.sasikanth.rss.reader.data.sync.miniflux.MinifluxSyncProvider
 import dev.sasikanth.rss.reader.di.scopes.AppScope
 import io.ktor.client.HttpClient
 import me.tatarka.inject.annotations.Provides
@@ -47,7 +52,7 @@ interface DataComponent :
 
   @Provides
   @AppScope
-  fun providesSyncCoordinator(coordinator: LocalSyncCoordinator): SyncCoordinator = coordinator
+  fun providesSyncCoordinator(coordinator: DefaultSyncCoordinator): SyncCoordinator = coordinator
 
   @Provides
   @AppScope
@@ -82,7 +87,8 @@ interface DataComponent :
       blockedWordAdapter =
         BlockedWord.Adapter(
           updatedAtAdapter = DateAdapter,
-        )
+        ),
+      userAdapter = User.Adapter(serviceTypeAdapter = EnumColumnAdapter()),
     )
   }
 
@@ -165,22 +171,39 @@ interface DataComponent :
 
   @Provides
   @AppScope
-  fun providesOAuthTokenProvider(settingsRepository: SettingsRepository): OAuthTokenProvider =
-    RealOAuthTokenProvider(settingsRepository)
+  fun providesOAuthTokenProvider(userRepository: UserRepository): OAuthTokenProvider =
+    RealOAuthTokenProvider(userRepository)
 
   @Provides
   @AppScope
   fun providesOAuthManager(
     httpClient: HttpClient,
-    tokenProvider: OAuthTokenProvider
-  ): OAuthManager = RealOAuthManager(httpClient, tokenProvider)
+    tokenProvider: OAuthTokenProvider,
+    userRepository: UserRepository,
+  ): OAuthManager = RealOAuthManager(httpClient, tokenProvider, userRepository)
 
   @Provides
   @AppScope
   fun providesDropboxSyncProvider(
     httpClient: HttpClient,
-    tokenProvider: OAuthTokenProvider
-  ): DropboxSyncProvider = DropboxSyncProvider(httpClient, tokenProvider)
+    tokenProvider: OAuthTokenProvider,
+    userRepository: UserRepository,
+  ): DropboxCloudServiceProvider =
+    DropboxCloudServiceProvider(
+      httpClient = httpClient,
+      tokenProvider = tokenProvider,
+      onSignOut = { userRepository.deleteUser() }
+    )
+
+  @Provides
+  @AppScope
+  fun providesSyncProviders(
+    cloudServiceProvider: DropboxCloudServiceProvider,
+    freshRssSyncProvider: FreshRssSyncProvider,
+    minifluxSyncProvider: MinifluxSyncProvider,
+  ): Set<CloudServiceProvider> {
+    return setOf(freshRssSyncProvider, minifluxSyncProvider, cloudServiceProvider)
+  }
 
   @Provides fun providesPostContentQueries(database: ReaderDatabase) = database.postContentQueries
 

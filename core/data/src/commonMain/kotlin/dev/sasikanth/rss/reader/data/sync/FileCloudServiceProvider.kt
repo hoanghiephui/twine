@@ -12,6 +12,7 @@
 package dev.sasikanth.rss.reader.data.sync
 
 import dev.sasikanth.rss.reader.core.model.local.PostFlag
+import dev.sasikanth.rss.reader.core.model.local.ServiceType
 import dev.sasikanth.rss.reader.util.nameBasedUuidOf
 import kotlin.time.Instant
 import kotlinx.coroutines.flow.Flow
@@ -23,20 +24,28 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonArray
 
-interface CloudSyncProvider {
-  val id: String
-  val name: String
-  val isSupported: Boolean
-    get() = true
+interface CloudServiceProvider {
+  val cloudService: ServiceType
+
+  val isPremium: Boolean
+    get() = false
 
   fun isSignedIn(): Flow<Boolean>
 
   suspend fun isSignedInImmediate(): Boolean
 
   suspend fun signOut()
+}
+
+interface FileCloudServiceProvider : CloudServiceProvider {
+
+  override fun isSignedIn(): Flow<Boolean>
+
+  override suspend fun isSignedInImmediate(): Boolean
+
+  override suspend fun signOut()
 
   suspend fun upload(fileName: String, data: String): Boolean
 
@@ -45,6 +54,15 @@ interface CloudSyncProvider {
   suspend fun listFiles(prefix: String): List<String>
 
   suspend fun deleteFile(fileName: String): Boolean
+}
+
+interface APIServiceProvider : CloudServiceProvider {
+
+  override fun isSignedIn(): Flow<Boolean>
+
+  override suspend fun isSignedInImmediate(): Boolean
+
+  override suspend fun signOut()
 }
 
 @Serializable

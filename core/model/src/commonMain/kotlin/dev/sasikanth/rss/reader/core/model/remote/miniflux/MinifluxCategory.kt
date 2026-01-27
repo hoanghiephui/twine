@@ -9,12 +9,12 @@
  *
  */
 
-package dev.sasikanth.rss.reader.data.sync
+package dev.sasikanth.rss.reader.core.model.remote.miniflux
 
-interface OAuthManager {
-  fun getAuthUrl(providerId: String): String
+import kotlinx.serialization.Serializable
 
-  fun setPendingProvider(providerId: String)
-
-  suspend fun handleRedirect(uri: String): String?
-}
+@Serializable
+data class MinifluxCategory(
+  val id: Long,
+  val title: String,
+)

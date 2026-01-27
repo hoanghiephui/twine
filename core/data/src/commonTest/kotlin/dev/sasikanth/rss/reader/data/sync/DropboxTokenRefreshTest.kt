@@ -11,6 +11,9 @@
 
 package dev.sasikanth.rss.reader.data.sync
 
+import dev.sasikanth.rss.reader.core.model.local.ServiceType
+import dev.sasikanth.rss.reader.data.sync.auth.OAuthTokenProvider
+import dev.sasikanth.rss.reader.data.sync.dropbox.DropboxCloudServiceProvider
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -31,30 +34,9 @@ class DropboxTokenRefreshTest {
 
   private val json = Json { ignoreUnknownKeys = true }
 
-  class MockTokenProvider(
-    var accessToken: String? = "old_token",
-    var refreshToken: String? = "refresh_token"
-  ) : OAuthTokenProvider {
-    override fun isSignedIn(providerId: String): Flow<Boolean> = flowOf(accessToken != null)
-
-    override suspend fun isSignedInImmediate(providerId: String): Boolean = accessToken != null
-
-    override suspend fun getAccessToken(providerId: String): String? = accessToken
-
-    override suspend fun saveAccessToken(providerId: String, token: String?) {
-      accessToken = token
-    }
-
-    override suspend fun getRefreshToken(providerId: String): String? = refreshToken
-
-    override suspend fun saveRefreshToken(providerId: String, token: String?) {
-      refreshToken = token
-    }
-  }
-
   @Test
   fun should_refresh_token_when_401_occurs() = runTest {
-    val tokenProvider = MockTokenProvider()
+    val tokenProvider = FakeTokenProvider()
     var requestCount = 0
 
     val mockEngine = MockEngine { request ->
@@ -87,12 +69,38 @@ class DropboxTokenRefreshTest {
 
     val httpClient = HttpClient(mockEngine) { install(ContentNegotiation) { json(json) } }
 
-    val provider = DropboxSyncProvider(httpClient, tokenProvider)
+    val provider =
+      DropboxCloudServiceProvider(
+        httpClient = httpClient,
+        tokenProvider = tokenProvider,
+        onSignOut = {}
+      )
     val result = provider.download("test.json")
 
     assertEquals("success_content", result)
     assertEquals("new_token", tokenProvider.accessToken)
     assertEquals("new_refresh_token", tokenProvider.refreshToken)
     assertEquals(3, requestCount)
+  }
+}
+
+private class FakeTokenProvider(
+  var accessToken: String? = "old_token",
+  var refreshToken: String? = "refresh_token"
+) : OAuthTokenProvider {
+  override fun isSignedIn(serviceType: ServiceType): Flow<Boolean> = flowOf(accessToken != null)
+
+  override suspend fun isSignedInImmediate(serviceType: ServiceType): Boolean = accessToken != null
+
+  override suspend fun getAccessToken(serviceType: ServiceType): String? = accessToken
+
+  override suspend fun saveAccessToken(serviceType: ServiceType, token: String?) {
+    accessToken = token
+  }
+
+  override suspend fun getRefreshToken(serviceType: ServiceType): String? = refreshToken
+
+  override suspend fun saveRefreshToken(serviceType: ServiceType, token: String?) {
+    refreshToken = token
   }
 }
