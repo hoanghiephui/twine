@@ -7,6 +7,12 @@
  *
  *     https://www.gnu.org/licenses/gpl-3.0.en.html
  *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
  */
 
 package dev.sasikanth.rss.reader.freshrss
@@ -16,12 +22,12 @@ import androidx.lifecycle.viewModelScope
 import co.touchlab.kermit.Logger
 import dev.sasikanth.rss.reader.core.model.local.ServiceType
 import dev.sasikanth.rss.reader.core.network.freshrss.FreshRssSource
+import dev.sasikanth.rss.reader.data.refreshpolicy.RefreshPolicy
 import dev.sasikanth.rss.reader.data.repository.RssRepository
 import dev.sasikanth.rss.reader.data.repository.SettingsRepository
 import dev.sasikanth.rss.reader.data.repository.UserRepository
 import dev.sasikanth.rss.reader.data.sync.freshrss.FreshRSSSyncCoordinator
 import dev.sasikanth.rss.reader.util.DispatchersProvider
-import kotlin.time.Instant
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,6 +42,7 @@ class FreshRssLoginViewModel(
   private val rssRepository: RssRepository,
   private val settingsRepository: SettingsRepository,
   private val syncCoordinator: FreshRSSSyncCoordinator,
+  private val refreshPolicy: RefreshPolicy,
   private val dispatchersProvider: DispatchersProvider,
 ) : ViewModel() {
 
@@ -101,7 +108,7 @@ class FreshRssLoginViewModel(
         Logger.d { "FreshRSS login: starting data clear and user save" }
         userRepository.deleteUser()
         rssRepository.deleteAllLocalData()
-        settingsRepository.updateLastSyncedAt(Instant.DISTANT_PAST)
+        refreshPolicy.clear()
 
         userRepository.saveUser(
           id = userInfo.id,

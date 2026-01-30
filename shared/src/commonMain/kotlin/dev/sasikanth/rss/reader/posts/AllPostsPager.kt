@@ -1,17 +1,18 @@
 /*
- * Copyright 2025 Sasikanth Miriyampalli
+ * Copyright 2026 Sasikanth Miriyampalli
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
+ * Licensed under the GPL, Version 3.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
 package dev.sasikanth.rss.reader.posts
@@ -26,12 +27,12 @@ import dev.sasikanth.rss.reader.core.model.local.PostsSortOrder
 import dev.sasikanth.rss.reader.core.model.local.PostsType
 import dev.sasikanth.rss.reader.core.model.local.Source
 import dev.sasikanth.rss.reader.core.model.local.UnreadSinceLastSync
+import dev.sasikanth.rss.reader.data.refreshpolicy.RefreshPolicy
 import dev.sasikanth.rss.reader.data.repository.ObservableActiveSource
 import dev.sasikanth.rss.reader.data.repository.RssRepository
 import dev.sasikanth.rss.reader.data.repository.SettingsRepository
 import dev.sasikanth.rss.reader.data.sync.SyncCoordinator
 import dev.sasikanth.rss.reader.data.sync.SyncState
-import dev.sasikanth.rss.reader.data.time.LastRefreshedAt
 import dev.sasikanth.rss.reader.data.utils.PostsFilterUtils
 import dev.sasikanth.rss.reader.di.scopes.AppScope
 import dev.sasikanth.rss.reader.util.DispatchersProvider
@@ -44,7 +45,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -58,7 +59,7 @@ import me.tatarka.inject.annotations.Inject
 class AllPostsPager(
   observableActiveSource: ObservableActiveSource,
   settingsRepository: SettingsRepository,
-  lastRefreshedAt: LastRefreshedAt,
+  refreshPolicy: RefreshPolicy,
   private val rssRepository: RssRepository,
   private val syncCoordinator: SyncCoordinator,
   dispatchersProvider: DispatchersProvider,
@@ -78,7 +79,7 @@ class AllPostsPager(
         observableActiveSource.activeSource,
         settingsRepository.postsType,
         settingsRepository.postsSortOrder,
-        lastRefreshedAt.dateTimeFlow
+        refreshPolicy.dateTimeFlow
       ) { activeSource, postsType, postsSortOrder, dateTime ->
         computeParameters(activeSource, postsType, postsSortOrder, dateTime)
       }
@@ -110,15 +111,21 @@ class AllPostsPager(
   }
 
   private fun observeHasNewerArticles() {
-    combine(baseParameters, syncCoordinator.syncState) { params, syncState -> params to syncState }
-      .filter { (_, syncState) -> syncState !is SyncState.InProgress }
-      .flatMapLatest { (params, _) ->
-        rssRepository.unreadSinceLastSync(
-          sources = params.activeSourceIds,
-          postsAfter = params.postsAfter,
-          lastSyncedAt = params.lastSyncedAt
-        )
+    syncCoordinator.syncState
+      .flatMapLatest { syncState ->
+        if (syncState is SyncState.InProgress) {
+          emptyFlow()
+        } else {
+          baseParameters.flatMapLatest { params ->
+            rssRepository.unreadSinceLastSync(
+              sources = params.activeSourceIds,
+              postsAfter = params.postsAfter,
+              lastSyncedAt = params.lastSyncedAt
+            )
+          }
+        }
       }
+      .distinctUntilChanged()
       .onEach { _unreadSinceLastSync.value = it }
       .launchIn(coroutineScope)
   }

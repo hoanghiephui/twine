@@ -1,17 +1,18 @@
 /*
- * Copyright 2023 Sasikanth Miriyampalli
+ * Copyright 2026 Sasikanth Miriyampalli
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
+ * Licensed under the GPL, Version 3.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 package dev.sasikanth.rss.reader.settings.ui
 
@@ -53,6 +54,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.rounded.WorkspacePremium
 import androidx.compose.material.minimumInteractiveComponentSize
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.HorizontalDivider
@@ -152,6 +154,7 @@ import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import twine.shared.generated.resources.Res
 import twine.shared.generated.resources.blockedWords
+import twine.shared.generated.resources.buttonCancel
 import twine.shared.generated.resources.buttonGoBack
 import twine.shared.generated.resources.enableAutoSyncDesc
 import twine.shared.generated.resources.enableAutoSyncTitle
@@ -175,6 +178,11 @@ import twine.shared.generated.resources.settingsBlockImagesTitle
 import twine.shared.generated.resources.settingsBrowserTypeSubtitle
 import twine.shared.generated.resources.settingsBrowserTypeTitle
 import twine.shared.generated.resources.settingsCustomisations
+import twine.shared.generated.resources.settingsDeleteAppDataButton
+import twine.shared.generated.resources.settingsDeleteAppDataDialogDesc
+import twine.shared.generated.resources.settingsDeleteAppDataDialogTitle
+import twine.shared.generated.resources.settingsDeleteAppDataSubtitle
+import twine.shared.generated.resources.settingsDeleteAppDataTitle
 import twine.shared.generated.resources.settingsDownloadFullContentSubtitle
 import twine.shared.generated.resources.settingsDownloadFullContentTitle
 import twine.shared.generated.resources.settingsDownloadFullContentWarning
@@ -183,6 +191,7 @@ import twine.shared.generated.resources.settingsDynamicColorTitle
 import twine.shared.generated.resources.settingsEnableNotificationsSubtitle
 import twine.shared.generated.resources.settingsEnableNotificationsTitle
 import twine.shared.generated.resources.settingsHeaderBehaviour
+import twine.shared.generated.resources.settingsHeaderData
 import twine.shared.generated.resources.settingsHeaderFeedback
 import twine.shared.generated.resources.settingsHeaderOpml
 import twine.shared.generated.resources.settingsHeaderSync
@@ -205,6 +214,8 @@ import twine.shared.generated.resources.settingsShowReaderViewSubtitle
 import twine.shared.generated.resources.settingsShowReaderViewTitle
 import twine.shared.generated.resources.settingsShowUnreadCountSubtitle
 import twine.shared.generated.resources.settingsShowUnreadCountTitle
+import twine.shared.generated.resources.settingsStatisticsSubtitle
+import twine.shared.generated.resources.settingsStatisticsTitle
 import twine.shared.generated.resources.settingsSyncDropbox
 import twine.shared.generated.resources.settingsSyncFreshRSS
 import twine.shared.generated.resources.settingsSyncMiniflux
@@ -237,6 +248,7 @@ internal fun SettingsScreen(
   viewModel: SettingsViewModel,
   goBack: () -> Unit,
   openAbout: () -> Unit,
+  openStatistics: () -> Unit,
   openBlockedWords: () -> Unit,
   openPaywall: () -> Unit,
   openFreshRssLogin: () -> Unit,
@@ -248,6 +260,8 @@ internal fun SettingsScreen(
   val appInfo = viewModel.appInfo
   val layoutDirection = LocalLayoutDirection.current
   val linkHandler = LocalLinkHandler.current
+
+  var showDeleteAppDataConfirmation by remember { mutableStateOf(false) }
 
   LaunchedEffect(state.authUrlToOpen) {
     state.authUrlToOpen?.let { url ->
@@ -265,6 +279,16 @@ internal fun SettingsScreen(
 
   LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
     viewModel.dispatch(SettingsEvent.LoadSubscriptionStatus)
+  }
+
+  if (showDeleteAppDataConfirmation) {
+    DeleteAppDataConfirmationDialog(
+      onConfirm = {
+        showDeleteAppDataConfirmation = false
+        viewModel.dispatch(SettingsEvent.DeleteAppData)
+      },
+      onDismiss = { showDeleteAppDataConfirmation = false }
+    )
   }
 
   Scaffold(
@@ -299,7 +323,7 @@ internal fun SettingsScreen(
 
         HorizontalDivider(
           modifier = Modifier.fillMaxWidth().align(Alignment.BottomStart),
-          color = AppTheme.colorScheme.surfaceContainer
+          color = AppTheme.colorScheme.outlineVariant
         )
       }
     },
@@ -604,6 +628,18 @@ internal fun SettingsScreen(
         item { Divider() }
         // endregion
 
+        // region Data
+        item { SubHeader(text = stringResource(Res.string.settingsHeaderData)) }
+
+        item { StatisticsItem { openStatistics() } }
+
+        item { Divider(24.dp) }
+
+        item { DeleteAppDataSettingItem { showDeleteAppDataConfirmation = true } }
+
+        item { Divider() }
+        // endregion
+
         // region Feedback and about
         item {
           SubHeader(
@@ -628,7 +664,7 @@ internal fun SettingsScreen(
         // endregion
       }
     },
-    containerColor = AppTheme.colorScheme.surfaceContainerLowest,
+    containerColor = AppTheme.colorScheme.backdrop,
     contentColor = Color.Unspecified,
   )
 }
@@ -1713,6 +1749,90 @@ private fun ReportIssueItem(appInfo: AppInfo, onClick: () -> Unit) {
 }
 
 @Composable
+private fun DeleteAppDataSettingItem(onClick: () -> Unit) {
+  Row(
+    modifier =
+      Modifier.clickable(onClick = onClick)
+        .padding(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 20.dp),
+    verticalAlignment = Alignment.CenterVertically
+  ) {
+    Column(modifier = Modifier.weight(1f)) {
+      Text(
+        stringResource(Res.string.settingsDeleteAppDataTitle),
+        style = MaterialTheme.typography.titleMedium,
+        color = AppTheme.colorScheme.error
+      )
+      Text(
+        stringResource(Res.string.settingsDeleteAppDataSubtitle),
+        style = MaterialTheme.typography.labelLarge,
+        color = AppTheme.colorScheme.textEmphasisMed
+      )
+    }
+  }
+}
+
+@Composable
+private fun DeleteAppDataConfirmationDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    confirmButton = {
+      TextButton(onClick = onConfirm) {
+        Text(
+          text = stringResource(Res.string.settingsDeleteAppDataButton),
+          color = AppTheme.colorScheme.error
+        )
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) {
+        Text(
+          text = stringResource(Res.string.buttonCancel),
+          color = AppTheme.colorScheme.textEmphasisMed
+        )
+      }
+    },
+    title = {
+      Text(
+        text = stringResource(Res.string.settingsDeleteAppDataDialogTitle),
+        color = AppTheme.colorScheme.textEmphasisHigh
+      )
+    },
+    text = {
+      Text(
+        text = stringResource(Res.string.settingsDeleteAppDataDialogDesc),
+        color = AppTheme.colorScheme.textEmphasisMed
+      )
+    },
+    containerColor = AppTheme.colorScheme.surfaceContainerLowest,
+    titleContentColor = AppTheme.colorScheme.textEmphasisHigh,
+    textContentColor = AppTheme.colorScheme.textEmphasisMed,
+  )
+}
+
+@Composable
+private fun StatisticsItem(onClick: () -> Unit) {
+  Box(modifier = Modifier.clickable(onClick = onClick)) {
+    Row(
+      modifier = Modifier.padding(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 20.dp),
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      Column(modifier = Modifier.weight(1f)) {
+        Text(
+          stringResource(Res.string.settingsStatisticsTitle),
+          style = MaterialTheme.typography.titleMedium,
+          color = AppTheme.colorScheme.textEmphasisHigh
+        )
+        Text(
+          stringResource(Res.string.settingsStatisticsSubtitle),
+          style = MaterialTheme.typography.labelLarge,
+          color = AppTheme.colorScheme.textEmphasisMed
+        )
+      }
+    }
+  }
+}
+
+@Composable
 private fun AboutItem(onClick: () -> Unit) {
   Box(modifier = Modifier.clickable(onClick = onClick)) {
     Row(
@@ -1828,6 +1948,7 @@ private fun CloudSyncSettingItem(
         Icon(
           imageVector = icon,
           contentDescription = null,
+          tint = AppTheme.colorScheme.onSurface,
         )
 
         Column(modifier = Modifier.weight(1f)) {
@@ -1907,6 +2028,6 @@ private fun CloudSyncSettingItem(
 private fun Divider(horizontalInsets: Dp = 0.dp) {
   HorizontalDivider(
     modifier = Modifier.padding(vertical = 8.dp, horizontal = horizontalInsets),
-    color = AppTheme.colorScheme.surfaceContainer
+    color = AppTheme.colorScheme.outlineVariant
   )
 }

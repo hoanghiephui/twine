@@ -7,6 +7,12 @@
  *
  *     https://www.gnu.org/licenses/gpl-3.0.en.html
  *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
  */
 
 package dev.sasikanth.rss.reader.main.ui
@@ -57,9 +63,12 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import dev.sasikanth.rss.reader.resources.icons.Bookmark
+import dev.sasikanth.rss.reader.resources.icons.BookmarkFilled
 import dev.sasikanth.rss.reader.resources.icons.Home
+import dev.sasikanth.rss.reader.resources.icons.HomeFilled
 import dev.sasikanth.rss.reader.resources.icons.Search
 import dev.sasikanth.rss.reader.resources.icons.Settings
+import dev.sasikanth.rss.reader.resources.icons.SettingsFilled
 import dev.sasikanth.rss.reader.resources.icons.TwineIcons
 import dev.sasikanth.rss.reader.ui.AppTheme
 import dev.sasikanth.rss.reader.utils.LocalWindowSizeClass
@@ -130,10 +139,9 @@ internal fun MainScreen(
               selected = selected,
               onClick = { selectedDestination = destination },
               icon = {
-                Icon(
-                  imageVector = destination.icon,
-                  contentDescription = stringResource(destination.label)
-                )
+                val icon = if (selected) destination.selectedIcon else destination.icon
+
+                Icon(imageVector = icon, contentDescription = stringResource(destination.label))
               },
               label = null,
               colors = navigationRailItemColors
@@ -214,10 +222,9 @@ internal fun MainScreen(
                 }
               },
               icon = {
-                Icon(
-                  imageVector = destination.icon,
-                  contentDescription = stringResource(destination.label)
-                )
+                val icon = if (selected) destination.selectedIcon else destination.icon
+
+                Icon(imageVector = icon, contentDescription = stringResource(destination.label))
               },
               colors = drawerItemColors
             )
@@ -239,10 +246,23 @@ internal fun MainScreen(
 
 private enum class MainDestination(
   val icon: ImageVector,
+  val selectedIcon: ImageVector,
   val label: StringResource,
 ) {
-  Home(icon = TwineIcons.Home, label = Res.string.screenHome),
-  Search(icon = TwineIcons.Search, label = Res.string.postsSearchHint),
-  Bookmarks(icon = TwineIcons.Bookmark, label = Res.string.bookmarks),
-  Settings(icon = TwineIcons.Settings, label = Res.string.settings),
+  Home(icon = TwineIcons.Home, selectedIcon = TwineIcons.HomeFilled, label = Res.string.screenHome),
+  Search(
+    icon = TwineIcons.Search,
+    selectedIcon = TwineIcons.Search,
+    label = Res.string.postsSearchHint
+  ),
+  Bookmarks(
+    icon = TwineIcons.Bookmark,
+    selectedIcon = TwineIcons.BookmarkFilled,
+    label = Res.string.bookmarks
+  ),
+  Settings(
+    icon = TwineIcons.Settings,
+    selectedIcon = TwineIcons.SettingsFilled,
+    label = Res.string.settings
+  ),
 }

@@ -1,4 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ Copyright 2026 Sasikanth Miriyampalli
+  ~
+  ~ Licensed under the GPL, Version 3.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     https://www.gnu.org/licenses/gpl-3.0.en.html
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  ~
+  -->
+
 <resources>
     <string name="appName" translatable="false">Twine</string>
     <string name="postSourceUnknown">Unknown</string>
@@ -110,6 +127,12 @@
     <string name="tagSaveButton">Save</string>
     <string name="deleteTagTitle">Delete tag?</string>
     <string name="deleteTagDesc">Tag will be deleted and removed from all the assigned feeds. Your feeds won't be deleted</string>
+    <string name="settingsHeaderData">Data</string>
+    <string name="settingsDeleteAppDataTitle">Delete app data</string>
+    <string name="settingsDeleteAppDataSubtitle">Clear all your feeds, settings and image cache. You will be logged out as well.</string>
+    <string name="settingsDeleteAppDataDialogTitle">Delete app data?</string>
+    <string name="settingsDeleteAppDataDialogDesc">This action will clear all your feeds, settings, and image cache. This action cannot be undone.</string>
+    <string name="settingsDeleteAppDataButton">Delete</string>
     <string name="feedOptionShare">Share</string>
     <string name="feedOptionCopyLink">Copy Link</string>
     <string name="feedOptionWebsite">Website</string>
@@ -194,19 +217,18 @@
     <string name="settingsAppIconTitle">App icon</string>
     <string name="settingsAppIconSubtitle">Choose how Twine looks on your home screen</string>
     <string name="filter">Filter</string>
-    <string name="freshRssLoginTitle">FreshRSS Login</string>
-    <string name="freshRssServerUrl">Server URL</string>
+    <string name="freshRssLoginTitle">FreshRSS</string>
+    <string name="freshRssServerUrl" translatable="false">https://freshrss.example.com/api/greader.php/</string>
     <string name="freshRssUsername">Username</string>
     <string name="freshRssPassword">Password</string>
     <string name="freshRssLoginButton">Login</string>
-    <string name="freshRssUrlPlaceholder" translatable="false">https://freshrss.example.com/api/greader.php/</string>
     <string name="freshRssClearDataTitle">Clear local data?</string>
     <string name="freshRssClearDataDesc">Logging into FreshRSS will clear all your current local feeds and posts to ensure a clean sync. Do you want to proceed?</string>
     <string name="freshRssClearDataPositive">Clear and Login</string>
     <string name="freshRssErrorLoginFailed">Login failed. Please check your credentials and URL.</string>
     <string name="freshRssErrorUnknown">An unknown error occurred</string>
     <string name="settingsSyncMiniflux" translatable="false">Miniflux</string>
-    <string name="minifluxLoginTitle">Miniflux Login</string>
+    <string name="minifluxLoginTitle">Miniflux</string>
     <string name="minifluxServerUrl">Server URL</string>
     <string name="minifluxApiKey">API Key</string>
     <string name="minifluxLoginButton">Login</string>
@@ -219,7 +241,7 @@
     <string name="settingsNotificationWarningAndroid">Having notification issues? Your device may be closing the app in background. Tap here to find out how to fix it.</string>
     <string name="onboardingGetStarted">Get started</string>
     <string name="onboardingSubtitle">Build your feed</string>
-    <string name="onboardingSubtitle2">No algorithm. No ads. Just the content you love.</string>
+    <string name="onboardingSubtitle2">No algorithm. No ads.\nJust the content you love.</string>
 
     <!-- Plurals -->
     <plurals name="searchResultsCount">
@@ -236,4 +258,12 @@
         <item quantity="one">%1$d feed</item>
         <item quantity="other">%1$d feeds</item>
     </plurals>
+    <!-- Statistics -->
+    <string name="statistics">Statistics</string>
+    <string name="statisticsNoData">No reading data available yet</string>
+    <string name="statisticsTotalRead">Total Articles Read</string>
+    <string name="statisticsTopFeeds">Top 10 Feeds</string>
+    <string name="statisticsReadingTrends">Reading Trends (Last 30 Days)</string>
+    <string name="settingsStatisticsTitle">Statistics</string>
+    <string name="settingsStatisticsSubtitle">View your reading habits and insights</string>
 </resources>

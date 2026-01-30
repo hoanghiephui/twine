@@ -7,6 +7,12 @@
  *
  *     https://www.gnu.org/licenses/gpl-3.0.en.html
  *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
  */
 
 package dev.sasikanth.rss.reader.core.network.miniflux
@@ -24,13 +30,27 @@ class MinifluxApi {
 
   @Serializable
   @Resource("feeds/{feedId}")
-  class Feed(val parent: MinifluxApi = MinifluxApi(), val feedId: Long)
+  class Feed(val parent: MinifluxApi = MinifluxApi(), val feedId: Long) {
+
+    @Serializable
+    @Resource("entries")
+    class Entries(
+      val parent: Feed,
+      val status: List<String>? = null,
+      val limit: Int? = null,
+      val offset: Int? = null,
+      val after: Long? = null,
+      val starred: String? = null,
+      val order: String? = "published_at",
+      val direction: String? = "desc",
+    )
+  }
 
   @Serializable
   @Resource("entries")
   class Entries(
     val parent: MinifluxApi = MinifluxApi(),
-    val status: String? = null,
+    val status: List<String>? = null,
     val limit: Int? = null,
     val offset: Int? = null,
     val after: Long? = null,
@@ -44,6 +64,10 @@ class MinifluxApi {
   @Serializable
   @Resource("entries/{entryId}/bookmark")
   class ToggleEntryBookmark(val parent: MinifluxApi = MinifluxApi(), val entryId: Long)
+
+  @Serializable
+  @Resource("entries/{entryId}/fetch-content")
+  class FetchContent(val parent: MinifluxApi = MinifluxApi(), val entryId: Long)
 
   @Serializable
   @Resource("feeds/{feedId}/entries")

@@ -7,6 +7,12 @@
  *
  *     https://www.gnu.org/licenses/gpl-3.0.en.html
  *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
  */
 
 package dev.sasikanth.rss.reader.core.model.remote.miniflux
@@ -25,4 +31,11 @@ data class MinifluxEntry(
   val content: String,
   @SerialName("published_at") val publishedAt: String,
   val starred: Boolean,
+  @SerialName("comments_url") val commentsUrl: String?
+)
+
+@Serializable
+data class MinifluxEntryContent(
+  val content: String,
+  @SerialName("reading_time") val readingTime: Long
 )

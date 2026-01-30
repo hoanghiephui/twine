@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sasikanth Miriyampalli
+ * Copyright 2026 Sasikanth Miriyampalli
  *
  * Licensed under the GPL, Version 3.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -7,11 +7,18 @@
  *
  *     https://www.gnu.org/licenses/gpl-3.0.en.html
  *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
  */
 
 package dev.sasikanth.rss.reader.core.network.freshrss
 
 import dev.sasikanth.rss.reader.core.model.local.User
+import dev.sasikanth.rss.reader.core.model.remote.freshrss.AddFeedResponsePayload
 import dev.sasikanth.rss.reader.core.model.remote.freshrss.ArticlesPayload
 import dev.sasikanth.rss.reader.core.model.remote.freshrss.ItemIds
 import dev.sasikanth.rss.reader.core.model.remote.freshrss.SubscriptionsPayload
@@ -182,9 +189,9 @@ class FreshRssSource(
     }
   }
 
-  suspend fun addFeed(url: String) {
-    withContext(dispatchersProvider.io) {
-      authenticatedHttpClient().post(Reader.AddFeed(quickadd = url))
+  suspend fun addFeed(url: String): AddFeedResponsePayload? {
+    return withContext(dispatchersProvider.io) {
+      authenticatedHttpClient().post(Reader.AddFeed(quickadd = url)).body()
     }
   }
 

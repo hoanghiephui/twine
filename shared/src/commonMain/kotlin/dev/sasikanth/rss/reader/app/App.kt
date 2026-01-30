@@ -1,11 +1,17 @@
 /*
- * Copyright 2023 Sasikanth Miriyampalli
+ * Copyright 2026 Sasikanth Miriyampalli
  *
  * Licensed under the GPL, Version 3.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
  *     https://www.gnu.org/licenses/gpl-3.0.en.html
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  */
 package dev.sasikanth.rss.reader.app
@@ -95,6 +101,8 @@ import dev.sasikanth.rss.reader.settings.SettingsViewModel
 import dev.sasikanth.rss.reader.settings.ui.SettingsScreen
 import dev.sasikanth.rss.reader.share.LocalShareHandler
 import dev.sasikanth.rss.reader.share.ShareHandler
+import dev.sasikanth.rss.reader.statistics.StatisticsViewModel
+import dev.sasikanth.rss.reader.statistics.ui.StatisticsScreen
 import dev.sasikanth.rss.reader.ui.AppTheme
 import dev.sasikanth.rss.reader.ui.LocalDynamicColorState
 import dev.sasikanth.rss.reader.ui.LocalSeedColorExtractor
@@ -113,6 +121,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -144,7 +153,7 @@ fun App(
   readerPageViewModel: (PostWithMetadata) -> ReaderPageViewModel,
   addFeedViewModel: () -> AddFeedViewModel,
   feedViewModel: (SavedStateHandle) -> FeedViewModel,
-  groupSelectionViewModel: () -> GroupSelectionViewModel,
+  groupSelectionViewModel: (SavedStateHandle) -> GroupSelectionViewModel,
   searchViewModel: () -> SearchViewModel,
   bookmarksViewModel: () -> BookmarksViewModel,
   settingsViewModel: () -> SettingsViewModel,
@@ -153,6 +162,7 @@ fun App(
   groupViewModel: (SavedStateHandle) -> GroupViewModel,
   blockedWordsViewModel: () -> BlockedWordsViewModel,
   premiumPaywallViewModel: () -> PremiumPaywallViewModel,
+  statisticsViewModel: () -> StatisticsViewModel,
   @Assisted onThemeChange: (useDarkTheme: Boolean) -> Unit,
   @Assisted toggleLightStatusBar: (isLightStatusBar: Boolean) -> Unit,
   @Assisted toggleLightNavBar: (isLightNavBar: Boolean) -> Unit,
@@ -310,6 +320,17 @@ fun App(
               }
 
               LaunchedEffect(Unit) {
+                feedsViewModel.state
+                  .map { it.openGroupSelection }
+                  .filterNotNull()
+                  .onEach { selectedGroupIds ->
+                    navController.navigate(Modals.GroupSelection(selectedGroupIds.toList()))
+                    feedsViewModel.dispatch(FeedsEvent.MarkOpenGroupSelectionDone)
+                  }
+                  .launchIn(this)
+              }
+
+              LaunchedEffect(Unit) {
                 viewModel.dispatch(HomeEvent.UpdateVisibleItemIndex(appState.activePostIndex))
               }
 
@@ -318,7 +339,9 @@ fun App(
                 feedsViewModel = feedsViewModel,
                 onVisiblePostChanged = { index -> appViewModel.updateActivePostIndex(index) },
                 openPost = { index, post -> openPost(index, post, FromScreen.Home) },
-                openGroupSelectionSheet = { navController.navigate(Modals.GroupSelection) },
+                openGroupSelectionSheet = {
+                  feedsViewModel.dispatch(FeedsEvent.OnAddToGroupClicked)
+                },
                 openFeedInfoSheet = { feedId -> navController.navigate(Modals.FeedInfo(feedId)) },
                 openAddFeedScreen = { navController.navigate(Screen.AddFeed) },
                 openGroupScreen = { groupId -> navController.navigate(Screen.FeedGroup(groupId)) },
@@ -335,6 +358,7 @@ fun App(
                   toggleLightStatusBar(!showDarkSystemBars)
                   toggleLightNavBar(!showDarkSystemBars)
                 },
+                onScrolledToTop = { appViewModel.updateActivePostIndex(0) },
                 modifier = screenModifier,
               )
             },
@@ -394,6 +418,7 @@ fun App(
                 viewModel = viewModel,
                 goBack = goBack,
                 openAbout = { navController.navigate(Screen.About) },
+                openStatistics = { navController.navigate(Screen.Statistics) },
                 openBlockedWords = { navController.navigate(Screen.BlockedWords) },
                 openPaywall = { navController.navigate(Screen.Paywall) },
                 openFreshRssLogin = { navController.navigate(Screen.FreshRssLogin) },
@@ -485,16 +510,26 @@ fun App(
           }
 
           AddFeedScreen(
-            modifier = roundedCornerScreenModifier,
             viewModel = viewModel,
             goBack = { navController.popBackStack() },
-            openGroupSelection = { navController.navigate(Modals.GroupSelection) }
+            openGroupSelection = { selectedGroupIds ->
+              navController.navigate(Modals.GroupSelection(selectedGroupIds.toList()))
+            }
           )
         }
 
         composable<Screen.About> {
           AboutScreen(
             modifier = roundedCornerScreenModifier,
+            goBack = { navController.popBackStack() }
+          )
+        }
+
+        composable<Screen.Statistics> {
+          val viewModel = viewModel { statisticsViewModel() }
+          StatisticsScreen(
+            modifier = roundedCornerScreenModifier,
+            viewModel = viewModel,
             goBack = { navController.popBackStack() }
           )
         }
@@ -519,7 +554,7 @@ fun App(
             modifier = roundedCornerScreenModifier,
             viewModel = viewModel,
             goBack = { navController.popBackStack() },
-            openGroupSelection = { navController.navigate(Modals.GroupSelection) }
+            openGroupSelection = { navController.navigate(Modals.GroupSelection()) }
           )
         }
 
@@ -549,7 +584,7 @@ fun App(
         }
 
         dialog<Modals.GroupSelection> {
-          val viewModel = viewModel { groupSelectionViewModel() }
+          val viewModel = viewModel { groupSelectionViewModel(it.savedStateHandle) }
           GroupSelectionSheet(
             viewModel = viewModel,
             dismiss = { navController.popBackStack() },

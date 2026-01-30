@@ -7,23 +7,34 @@
  *
  *     https://www.gnu.org/licenses/gpl-3.0.en.html
  *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
  */
 
 package dev.sasikanth.rss.reader.data.sync.freshrss
 
 import co.touchlab.kermit.Logger
+import dev.sasikanth.rss.reader.core.model.local.Post
 import dev.sasikanth.rss.reader.core.model.remote.FeedPayload
 import dev.sasikanth.rss.reader.core.model.remote.PostPayload
 import dev.sasikanth.rss.reader.core.model.remote.freshrss.ArticlePayload
+import dev.sasikanth.rss.reader.core.network.FullArticleFetcher
 import dev.sasikanth.rss.reader.core.network.freshrss.FreshRssSource
 import dev.sasikanth.rss.reader.core.network.parser.common.ArticleHtmlParser
+import dev.sasikanth.rss.reader.data.refreshpolicy.RefreshPolicy
 import dev.sasikanth.rss.reader.data.repository.RssRepository
 import dev.sasikanth.rss.reader.data.repository.SettingsRepository
 import dev.sasikanth.rss.reader.data.sync.SyncCoordinator
 import dev.sasikanth.rss.reader.data.sync.SyncState
 import dev.sasikanth.rss.reader.di.scopes.AppScope
 import dev.sasikanth.rss.reader.util.DispatchersProvider
+import dev.sasikanth.rss.reader.util.nameBasedUuidOf
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,9 +54,16 @@ class FreshRSSSyncCoordinator(
   private val freshRssSource: FreshRssSource,
   private val rssRepository: RssRepository,
   private val dispatchersProvider: DispatchersProvider,
-  private val settingsRepository: SettingsRepository,
   private val articleHtmlParser: ArticleHtmlParser,
+  private val refreshPolicy: RefreshPolicy,
+  private val settingsRepository: SettingsRepository,
+  private val fullArticleFetcher: FullArticleFetcher,
 ) : SyncCoordinator {
+  private companion object {
+    private const val ARTICLE_PAGE_SIZE = 250
+    private const val LOCAL_POSTS_PAGE_SIZE = 1000
+    private const val STATUS_BATCH_SIZE = 500
+  }
 
   private val syncMutex = Mutex()
   private val _syncState = MutableStateFlow<SyncState>(SyncState.Idle)
@@ -53,48 +71,6 @@ class FreshRSSSyncCoordinator(
 
   override suspend fun pull(): Boolean {
     return syncMutex.withLock { pullInternal() }
-  }
-
-  private suspend fun pullInternal(): Boolean {
-    return try {
-      val syncStartTime = Clock.System.now()
-      updateSyncState(SyncState.InProgress(0f))
-
-      // 1. Sync Subscriptions
-      val hasNewSubscriptions = syncSubscriptions(syncStartTime)
-      updateSyncState(SyncState.InProgress(0.3f))
-
-      // 2. Sync Articles
-      val lastSyncedAt = settingsRepository.lastSyncedAt.first() ?: syncStartTime.minus(4.hours)
-      val newerThan =
-        if (hasNewSubscriptions) {
-          lastSyncedAt.minus(2.hours).toEpochMilliseconds()
-        } else {
-          lastSyncedAt.toEpochMilliseconds()
-        }
-
-      val hasNewArticles = syncArticles(newerThan = newerThan)
-      syncArticles(streamId = FreshRssSource.USER_STATE_STARRED, newerThan = newerThan)
-      updateSyncState(SyncState.InProgress(0.7f))
-
-      // 3. Sync Statuses (Read/Bookmark)
-      syncStatuses()
-      updateSyncState(SyncState.InProgress(0.9f))
-
-      // 4. Push local changes
-      pushChanges(syncStartTime)
-
-      if (hasNewArticles) {
-        settingsRepository.updateLastSyncedAt(syncStartTime)
-      }
-      updateSyncState(SyncState.Complete)
-
-      true
-    } catch (e: Exception) {
-      Logger.e(e) { "FreshRSS pull failed" }
-      updateSyncState(SyncState.Error(e))
-      false
-    }
   }
 
   override suspend fun pull(feedIds: List<String>): Boolean {
@@ -108,25 +84,6 @@ class FreshRSSSyncCoordinator(
 
   override suspend fun pull(feedId: String): Boolean {
     return withContext(dispatchersProvider.io) { syncMutex.withLock { pullFeedInternal(feedId) } }
-  }
-
-  private suspend fun pullFeedInternal(feedId: String): Boolean {
-    return try {
-      updateSyncState(SyncState.InProgress(0f))
-      val feed = rssRepository.feed(feedId)
-      if (feed?.remoteId != null) {
-        syncArticles(streamId = feed.remoteId!!)
-        updateSyncState(SyncState.Complete)
-      } else {
-        pullInternal()
-      }
-
-      true
-    } catch (e: Exception) {
-      Logger.e(e) { "FreshRSS pull failed for feed: $feedId" }
-      updateSyncState(SyncState.Error(e))
-      false
-    }
   }
 
   override suspend fun push(): Boolean {
@@ -143,11 +100,82 @@ class FreshRSSSyncCoordinator(
     }
   }
 
+  private suspend fun pullInternal(): Boolean {
+    return try {
+      val syncStartTime = Clock.System.now()
+      updateSyncState(SyncState.InProgress(0f))
+
+      // 1. Push local changes
+      pushChanges(syncStartTime)
+
+      // 2. Sync Subscriptions
+      val hasNewSubscriptions = syncSubscriptions(syncStartTime)
+      updateSyncState(SyncState.InProgress(0.3f))
+
+      // 3. Sync Articles
+      val lastSyncedAt = refreshPolicy.fetchLastUpdatedAt() ?: syncStartTime.minus(2.days)
+      val newerThan =
+        if (hasNewSubscriptions) {
+          lastSyncedAt.minus(2.hours).toEpochMilliseconds()
+        } else {
+          lastSyncedAt.toEpochMilliseconds()
+        }
+
+      val hasNewArticles = syncArticles(newerThan = newerThan)
+      syncArticles(streamId = FreshRssSource.USER_STATE_STARRED, newerThan = newerThan)
+      updateSyncState(SyncState.InProgress(0.7f))
+
+      // 4. Sync Statuses (Read/Bookmark)
+      syncStatuses()
+      updateSyncState(SyncState.InProgress(0.9f))
+
+      // Only update lastSyncedAt if we found new articles to avoid missing articles
+      // that were added to the server between syncs with older timestamps
+      if (hasNewArticles) {
+        refreshPolicy.refresh()
+      }
+      updateSyncState(SyncState.Complete)
+
+      true
+    } catch (e: Exception) {
+      Logger.e(e) { "FreshRSS pull failed" }
+      updateSyncState(SyncState.Error(e))
+      false
+    }
+  }
+
+  private suspend fun pullFeedInternal(feedId: String): Boolean {
+    return try {
+      updateSyncState(SyncState.InProgress(0f))
+
+      // Push local changes for this feed before pulling
+      pushChangesForFeed(feedId)
+
+      val feed = rssRepository.feed(feedId)
+      if (feed?.remoteId != null) {
+        syncArticles(streamId = feed.remoteId!!)
+        updateSyncState(SyncState.Complete)
+      } else {
+        pullInternal()
+      }
+
+      true
+    } catch (e: Exception) {
+      Logger.e(e) { "FreshRSS pull failed for feed: $feedId" }
+      updateSyncState(SyncState.Error(e))
+      false
+    }
+  }
+
   private suspend fun pushChanges(syncStartTime: Instant = Clock.System.now()) {
     pushStatusChanges()
-    pushGroupChanges(syncStartTime)
     pushFeedChanges(syncStartTime)
+    pushGroupChanges(syncStartTime)
     purgeDeletedSources()
+  }
+
+  private suspend fun pushChangesForFeed(feedId: String) {
+    pushStatusChangesForFeed(feedId)
   }
 
   private suspend fun purgeDeletedSources() {
@@ -160,7 +188,12 @@ class FreshRSSSyncCoordinator(
 
   private suspend fun pushFeedChanges(syncStartTime: Instant) {
     val localFeeds = rssRepository.allFeedsBlocking()
-    val lastSyncedAt = settingsRepository.lastSyncedAt.first() ?: Instant.DISTANT_PAST
+    val lastSyncedAt = refreshPolicy.fetchLastUpdatedAt() ?: Instant.DISTANT_PAST
+
+    // Early return if no feeds have been updated since last sync
+    val hasUpdatedFeeds =
+      localFeeds.any { (it.lastUpdatedAt ?: Instant.DISTANT_PAST) > lastSyncedAt }
+    if (!hasUpdatedFeeds) return
 
     // 1. Handle deleted feeds
     localFeeds
@@ -178,7 +211,12 @@ class FreshRSSSyncCoordinator(
           it.remoteId == null &&
           (it.lastUpdatedAt ?: Instant.DISTANT_PAST) > lastSyncedAt
       }
-      .forEach { feed -> freshRssSource.addFeed(feed.link) }
+      .forEach { feed ->
+        val response = freshRssSource.addFeed(feed.link)
+        if (response != null) {
+          rssRepository.updateFeedRemoteId(response.streamId, feed.id, syncStartTime)
+        }
+      }
 
     // 3. Handle renamed feeds
     localFeeds
@@ -191,13 +229,22 @@ class FreshRSSSyncCoordinator(
         freshRssSource.editFeedName(feed.remoteId!!, feed.name)
         rssRepository.updateFeedLastUpdatedAt(feed.id, syncStartTime)
       }
+
+    // Update lastSyncedAt after successful push to prevent redundant push attempts
+    // This ensures early returns work correctly on subsequent syncs when no new articles
+    refreshPolicy.refresh()
   }
 
   private suspend fun pushGroupChanges(syncStartTime: Instant) {
-    val subscriptions = freshRssSource.subscriptions().subscriptions
     val localGroups = rssRepository.allFeedGroupsBlocking()
     val localFeeds = rssRepository.allFeedsBlocking()
-    val lastSyncedAt = settingsRepository.lastSyncedAt.first() ?: Instant.DISTANT_PAST
+    val lastSyncedAt = refreshPolicy.fetchLastUpdatedAt() ?: Instant.DISTANT_PAST
+
+    // Early return if no groups have been updated since last sync
+    val hasUpdatedGroups = localGroups.any { it.updatedAt > lastSyncedAt }
+    if (!hasUpdatedGroups) return
+
+    val subscriptions = freshRssSource.subscriptions().subscriptions
 
     // 1. Handle deleted groups
     localGroups
@@ -259,13 +306,12 @@ class FreshRSSSyncCoordinator(
           (targetTags - currentTags).forEach { tagId ->
             freshRssSource.addTagToFeed(remoteFeedId, tagId)
           }
-
-          // Remove extra tags
-          (currentTags - targetTags).forEach { tagId ->
-            freshRssSource.removeTagFromFeed(remoteFeedId, tagId)
-          }
         }
       }
+
+    // Update lastSyncedAt after successful push to prevent redundant push attempts
+    // This ensures early returns work correctly on subsequent syncs when no new articles
+    refreshPolicy.refresh()
   }
 
   private suspend fun syncSubscriptions(syncStartTime: Instant): Boolean {
@@ -367,7 +413,7 @@ class FreshRSSSyncCoordinator(
               localGroup.id
             } else {
               rssRepository.upsertGroup(
-                id = tagName.lowercase().replace(" ", "-"),
+                id = nameBasedUuidOf(tagName).toString(),
                 name = tagName,
                 pinnedAt = null,
                 updatedAt = syncStartTime,
@@ -409,17 +455,18 @@ class FreshRSSSyncCoordinator(
   ): Boolean {
     var hasNewArticles = false
     var continuation: String? = null
+    val downloadFullContent = settingsRepository.downloadFullContent.first()
     do {
       val articlesPayload =
         freshRssSource.articles(
           streamId = streamId,
-          limit = 1000,
+          limit = ARTICLE_PAGE_SIZE,
           newerThan = newerThan,
           continuation = continuation
         )
       val items = articlesPayload.items
       items.asReversed().forEach { item ->
-        val isNewArticle = upsertArticle(item)
+        val isNewArticle = upsertArticle(item, downloadFullContent)
         if (isNewArticle) {
           hasNewArticles = true
         }
@@ -431,13 +478,14 @@ class FreshRSSSyncCoordinator(
     return hasNewArticles
   }
 
-  private suspend fun upsertArticle(item: ArticlePayload): Boolean {
+  private suspend fun upsertArticle(
+    item: ArticlePayload,
+    downloadFullContent: Boolean,
+  ): Boolean {
     val remoteId = item.id
-    val localPost =
-      rssRepository.postByRemoteId(remoteId)
-        ?: rssRepository.postByLink(
-          item.canonical.firstOrNull()?.href ?: item.alternate.firstOrNull()?.href ?: ""
-        )
+    val postLink =
+      item.canonical.firstOrNull()?.href ?: item.alternate.firstOrNull()?.href ?: item.id
+    val localPost = rssRepository.postByRemoteId(remoteId) ?: rssRepository.postByLink(postLink)
 
     if (localPost != null) {
       if (localPost.remoteId != remoteId) {
@@ -451,17 +499,22 @@ class FreshRSSSyncCoordinator(
 
       if (feed != null) {
         val htmlContent = articleHtmlParser.parse(item.summary.content)
+        val fullContent =
+          if (downloadFullContent && postLink.isNotBlank()) {
+            fullArticleFetcher.fetch(postLink).getOrNull()
+          } else {
+            null
+          }
         val postPayload =
           PostPayload(
             title = item.title,
-            link = item.canonical.firstOrNull()?.href
-                ?: item.alternate.firstOrNull()?.href ?: item.id,
+            link = postLink,
             description = htmlContent?.textContent ?: "",
             rawContent = htmlContent?.cleanedHtml ?: item.summary.content,
             imageUrl = htmlContent?.heroImage,
             date = item.published * 1000, // FreshRSS uses seconds, we use millis
             commentsLink = null,
-            fullContent = null,
+            fullContent = fullContent,
             isDateParsedCorrectly = true
           )
 
@@ -492,44 +545,92 @@ class FreshRSSSyncCoordinator(
   private suspend fun syncStatuses() {
     val unreadIds = freshRssSource.unreadIds().toSet()
     val bookmarkIds = freshRssSource.bookmarkIds().toSet()
-    val localPosts = rssRepository.postsWithRemoteId()
+    var offset = 0L
+    var localPosts: List<Post> = emptyList()
+    do {
+      localPosts =
+        rssRepository.postsWithRemoteIdPaged(
+          limit = LOCAL_POSTS_PAGE_SIZE.toLong(),
+          offset = offset,
+        )
 
-    localPosts.forEach { post ->
-      val remoteRead = post.remoteId !in unreadIds
-      val remoteBookmarked = post.remoteId in bookmarkIds
+      localPosts.forEach { post ->
+        val remoteRead = post.remoteId !in unreadIds
+        val remoteBookmarked = post.remoteId in bookmarkIds
 
-      // If local is synced (no pending changes), remote is source of truth
-      if (post.syncedAt >= post.updatedAt) {
-        if (post.read != remoteRead) {
-          rssRepository.updatePostReadStatus(read = remoteRead, id = post.id)
-          rssRepository.updatePostSyncedAt(post.id, Clock.System.now())
-        }
-        if (post.bookmarked != remoteBookmarked) {
-          rssRepository.updateBookmarkStatus(bookmarked = remoteBookmarked, id = post.id)
-          rssRepository.updatePostSyncedAt(post.id, Clock.System.now())
+        // If local is synced (no pending changes), remote is source of truth
+        if (post.syncedAt >= post.updatedAt) {
+          if (post.read != remoteRead) {
+            rssRepository.updatePostReadStatus(read = remoteRead, id = post.id)
+            rssRepository.updatePostSyncedAt(post.id, Clock.System.now())
+          }
+          if (post.bookmarked != remoteBookmarked) {
+            rssRepository.updateBookmarkStatus(bookmarked = remoteBookmarked, id = post.id)
+            rssRepository.updatePostSyncedAt(post.id, Clock.System.now())
+          }
         }
       }
-    }
+
+      offset += localPosts.size
+    } while (localPosts.size >= LOCAL_POSTS_PAGE_SIZE)
   }
 
   private suspend fun pushStatusChanges() {
-    val dirtyPosts = rssRepository.postsWithLocalChanges()
-    if (dirtyPosts.isEmpty()) return
+    while (true) {
+      val dirtyPosts =
+        rssRepository.postsWithLocalChangesPaged(
+          limit = LOCAL_POSTS_PAGE_SIZE.toLong(),
+          offset = 0,
+        )
+      if (dirtyPosts.isEmpty()) return
 
-    val toMarkRead = dirtyPosts.filter { it.read }.mapNotNull { it.remoteId }
-    val toMarkUnread = dirtyPosts.filter { !it.read }.mapNotNull { it.remoteId }
-    val toBookmark = dirtyPosts.filter { it.bookmarked }.mapNotNull { it.remoteId }
-    val toUnbookmark = dirtyPosts.filter { !it.bookmarked }.mapNotNull { it.remoteId }
+      val toMarkRead = dirtyPosts.filter { it.read }.mapNotNull { it.remoteId }
+      val toMarkUnread = dirtyPosts.filter { !it.read }.mapNotNull { it.remoteId }
+      val toBookmark = dirtyPosts.filter { it.bookmarked }.mapNotNull { it.remoteId }
+      val toUnbookmark = dirtyPosts.filter { !it.bookmarked }.mapNotNull { it.remoteId }
 
-    if (toMarkRead.isNotEmpty()) freshRssSource.markArticlesAsRead(toMarkRead)
-    if (toMarkUnread.isNotEmpty()) freshRssSource.markArticlesAsUnRead(toMarkUnread)
-    if (toBookmark.isNotEmpty()) freshRssSource.addBookmarks(toBookmark)
-    if (toUnbookmark.isNotEmpty()) freshRssSource.removeBookmarks(toUnbookmark)
+      toMarkRead.chunked(STATUS_BATCH_SIZE).forEach { ids ->
+        freshRssSource.markArticlesAsRead(ids)
+      }
+      toMarkUnread.chunked(STATUS_BATCH_SIZE).forEach { ids ->
+        freshRssSource.markArticlesAsUnRead(ids)
+      }
+      toBookmark.chunked(STATUS_BATCH_SIZE).forEach { ids -> freshRssSource.addBookmarks(ids) }
+      toUnbookmark.chunked(STATUS_BATCH_SIZE).forEach { ids -> freshRssSource.removeBookmarks(ids) }
 
-    dirtyPosts.forEach { post -> rssRepository.updatePostSyncedAt(post.id, post.updatedAt) }
+      dirtyPosts.forEach { post -> rssRepository.updatePostSyncedAt(post.id, post.updatedAt) }
+    }
   }
 
-  private suspend fun updateSyncState(newState: SyncState) {
+  private suspend fun pushStatusChangesForFeed(feedId: String) {
+    while (true) {
+      val dirtyPosts =
+        rssRepository.postsWithLocalChangesForFeedPaged(
+          feedId = feedId,
+          limit = LOCAL_POSTS_PAGE_SIZE.toLong(),
+          offset = 0,
+        )
+      if (dirtyPosts.isEmpty()) return
+
+      val toMarkRead = dirtyPosts.filter { it.read }.mapNotNull { it.remoteId }
+      val toMarkUnread = dirtyPosts.filter { !it.read }.mapNotNull { it.remoteId }
+      val toBookmark = dirtyPosts.filter { it.bookmarked }.mapNotNull { it.remoteId }
+      val toUnbookmark = dirtyPosts.filter { !it.bookmarked }.mapNotNull { it.remoteId }
+
+      toMarkRead.chunked(STATUS_BATCH_SIZE).forEach { ids ->
+        freshRssSource.markArticlesAsRead(ids)
+      }
+      toMarkUnread.chunked(STATUS_BATCH_SIZE).forEach { ids ->
+        freshRssSource.markArticlesAsUnRead(ids)
+      }
+      toBookmark.chunked(STATUS_BATCH_SIZE).forEach { ids -> freshRssSource.addBookmarks(ids) }
+      toUnbookmark.chunked(STATUS_BATCH_SIZE).forEach { ids -> freshRssSource.removeBookmarks(ids) }
+
+      dirtyPosts.forEach { post -> rssRepository.updatePostSyncedAt(post.id, post.updatedAt) }
+    }
+  }
+
+  private fun updateSyncState(newState: SyncState) {
     _syncState.value = newState
   }
 }

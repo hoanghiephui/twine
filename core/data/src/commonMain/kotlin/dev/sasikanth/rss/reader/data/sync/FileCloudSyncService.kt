@@ -7,6 +7,12 @@
  *
  *     https://www.gnu.org/licenses/gpl-3.0.en.html
  *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
  */
 
 package dev.sasikanth.rss.reader.data.sync
@@ -16,6 +22,7 @@ import dev.sasikanth.rss.reader.core.model.local.Feed
 import dev.sasikanth.rss.reader.core.model.local.Post
 import dev.sasikanth.rss.reader.core.model.local.PostFlag
 import dev.sasikanth.rss.reader.data.database.AppConfigQueries
+import dev.sasikanth.rss.reader.data.refreshpolicy.RefreshPolicy
 import dev.sasikanth.rss.reader.data.repository.BlockedWordsRepository
 import dev.sasikanth.rss.reader.data.repository.PostContentRepository
 import dev.sasikanth.rss.reader.data.repository.RssRepository
@@ -38,6 +45,7 @@ class FileCloudSyncService(
   private val userRepository: UserRepository,
   private val settingsRepository: SettingsRepository,
   private val appConfigQueries: AppConfigQueries,
+  private val refreshPolicy: RefreshPolicy,
 ) {
 
   private val json: Json = Json { ignoreUnknownKeys = true }
@@ -168,7 +176,7 @@ class FileCloudSyncService(
       if (result) {
         appConfigQueries.updateLastSyncedFormatVersion(currentSyncVersion.toLong())
         userRepository.updateLastSyncStatus("SUCCESS")
-        settingsRepository.updateLastSyncedAt(Clock.System.now())
+        refreshPolicy.refresh()
 
         val allFiles = provider.listFiles("/twine_")
         val activeFiles = postChunks + metadataFileName

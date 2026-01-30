@@ -1,17 +1,18 @@
 /*
- * Copyright 2023 Sasikanth Miriyampalli
+ * Copyright 2026 Sasikanth Miriyampalli
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
+ * Licensed under the GPL, Version 3.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 package dev.sasikanth.rss.reader.feeds
 
@@ -32,11 +33,11 @@ import dev.sasikanth.rss.reader.billing.BillingHandler
 import dev.sasikanth.rss.reader.core.model.local.Feed
 import dev.sasikanth.rss.reader.core.model.local.Source
 import dev.sasikanth.rss.reader.core.model.local.SourceType
+import dev.sasikanth.rss.reader.data.refreshpolicy.RefreshPolicy
 import dev.sasikanth.rss.reader.data.repository.FeedsOrderBy
 import dev.sasikanth.rss.reader.data.repository.ObservableActiveSource
 import dev.sasikanth.rss.reader.data.repository.RssRepository
 import dev.sasikanth.rss.reader.data.repository.SettingsRepository
-import dev.sasikanth.rss.reader.data.time.LastRefreshedAt
 import dev.sasikanth.rss.reader.data.utils.PostsFilterUtils
 import dev.sasikanth.rss.reader.util.DispatchersProvider
 import dev.sasikanth.rss.reader.utils.Constants.MINIMUM_REQUIRED_SEARCH_CHARACTERS
@@ -69,7 +70,7 @@ class FeedsViewModel(
   private val rssRepository: RssRepository,
   private val settingsRepository: SettingsRepository,
   private val observableActiveSource: ObservableActiveSource,
-  private val lastRefreshedAt: LastRefreshedAt,
+  private val refreshPolicy: RefreshPolicy,
   private val billingHandler: BillingHandler,
 ) : ViewModel() {
 
@@ -115,6 +116,7 @@ class FeedsViewModel(
         }
       }
       FeedsEvent.DeleteSelectedSources -> deleteSelectedSources()
+      FeedsEvent.OnAddToGroupClicked -> onAddToGroupClicked()
       FeedsEvent.DismissDeleteConfirmation -> dismissDeleteConfirmation()
       is FeedsEvent.OnPinnedSourcePositionChanged ->
         onPinnedSourcePositionChanged(event.newSourcesList)
@@ -124,6 +126,23 @@ class FeedsViewModel(
       is FeedsEvent.MarkOpenAddFeedDone -> {
         _state.update { it.copy(openAddFeedScreen = false) }
       }
+      is FeedsEvent.MarkOpenGroupSelectionDone -> {
+        _state.update { it.copy(openGroupSelection = null) }
+      }
+    }
+  }
+
+  private fun onAddToGroupClicked() {
+    viewModelScope.launch {
+      val selectedSources = _state.value.selectedSources
+      val groupIds =
+        if (selectedSources.size == 1) {
+          rssRepository.groupIdsForFeed(selectedSources.first().id).toSet()
+        } else {
+          emptySet()
+        }
+
+      _state.update { it.copy(openGroupSelection = groupIds) }
     }
   }
 
@@ -256,7 +275,7 @@ class FeedsViewModel(
     combine(
         searchQueryFlow,
         settingsRepository.postsType,
-        lastRefreshedAt.dateTimeFlow,
+        refreshPolicy.dateTimeFlow,
       ) { searchQuery, postsType, dateTime ->
         Triple(searchQuery, postsType, dateTime)
       }
@@ -289,7 +308,7 @@ class FeedsViewModel(
 
     combine(
         activeSourceFlow,
-        lastRefreshedAt.dateTimeFlow,
+        refreshPolicy.dateTimeFlow,
         postsTypeFlow,
       ) { activeSource, lastRefreshedAt, postsType ->
         Triple(activeSource, lastRefreshedAt, postsType)
@@ -331,7 +350,7 @@ class FeedsViewModel(
     val pinnedSourcesFlow =
       combine(
           settingsRepository.postsType,
-          lastRefreshedAt.dateTimeFlow,
+          refreshPolicy.dateTimeFlow,
         ) { postsType, dateTime ->
           Pair(postsType, dateTime)
         }
@@ -347,7 +366,7 @@ class FeedsViewModel(
       combine(
           settingsRepository.postsType,
           settingsRepository.feedsSortOrder,
-          lastRefreshedAt.dateTimeFlow
+          refreshPolicy.dateTimeFlow
         ) { postsType, feedsSortOrder, dateTime ->
           Triple(postsType, feedsSortOrder, dateTime)
         }

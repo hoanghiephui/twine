@@ -1,17 +1,18 @@
 /*
- * Copyright 2024 Sasikanth Miriyampalli
+ * Copyright 2026 Sasikanth Miriyampalli
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
+ * Licensed under the GPL, Version 3.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 package dev.sasikanth.rss.reader.data.repository
 
@@ -23,14 +24,18 @@ import app.cash.sqldelight.coroutines.mapToOneOrNull
 import app.cash.sqldelight.paging3.QueryPagingSource
 import dev.sasikanth.rss.reader.core.model.local.Feed
 import dev.sasikanth.rss.reader.core.model.local.FeedGroup
+import dev.sasikanth.rss.reader.core.model.local.FeedReadCount
 import dev.sasikanth.rss.reader.core.model.local.Post
 import dev.sasikanth.rss.reader.core.model.local.PostFlag
 import dev.sasikanth.rss.reader.core.model.local.PostWithMetadata
 import dev.sasikanth.rss.reader.core.model.local.PostsSortOrder
+import dev.sasikanth.rss.reader.core.model.local.ReadingStatistics
+import dev.sasikanth.rss.reader.core.model.local.ReadingTrend
 import dev.sasikanth.rss.reader.core.model.local.SearchSortOrder
 import dev.sasikanth.rss.reader.core.model.local.Source
 import dev.sasikanth.rss.reader.core.model.local.UnreadSinceLastSync
 import dev.sasikanth.rss.reader.core.model.remote.FeedPayload
+import dev.sasikanth.rss.reader.core.model.remote.PostPayload
 import dev.sasikanth.rss.reader.data.database.AppConfigQueries
 import dev.sasikanth.rss.reader.data.database.BlockedWordsQueries
 import dev.sasikanth.rss.reader.data.database.BookmarkQueries
@@ -51,10 +56,11 @@ import dev.sasikanth.rss.reader.util.nameBasedUuidOf
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Instant
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.chunked
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.withContext
 import me.tatarka.inject.annotations.Inject
 
@@ -75,6 +81,9 @@ class RssRepository(
   private val sourceQueries: SourceQueries,
   private val dispatchersProvider: DispatchersProvider
 ) {
+  private companion object {
+    private const val POST_UPSERT_BATCH_SIZE = 200
+  }
 
   suspend fun deleteAllLocalData() {
     withContext(dispatchersProvider.databaseWrite) {
@@ -90,6 +99,7 @@ class RssRepository(
     }
   }
 
+  @OptIn(ExperimentalCoroutinesApi::class)
   suspend fun upsertFeedWithPosts(
     feedPayload: FeedPayload,
     feedId: String? = null,
@@ -122,43 +132,45 @@ class RssRepository(
     val feedLastCleanUpAtEpochMilli =
       feedLastCleanUpAt?.toEpochMilliseconds() ?: Instant.DISTANT_PAST.toEpochMilliseconds()
 
-    val posts =
+    withContext(dispatchersProvider.databaseWrite) {
       feedPayload.posts
         .filter { it.date >= feedLastCleanUpAtEpochMilli }
-        .toList()
-        .sortedBy { it.date }
-
-    withContext(dispatchersProvider.databaseWrite) {
-      posts.forEach { postPayload ->
-        val postId = nameBasedUuidOf(postPayload.link).toString()
-        transactionRunner.invoke {
-          postQueries.upsert(
-            id = postId,
-            sourceId = finalFeedId,
-            title = postPayload.title,
-            description = postPayload.description,
-            imageUrl = postPayload.imageUrl,
-            postDate = Instant.fromEpochMilliseconds(postPayload.date),
-            createdAt = Clock.System.now(),
-            updatedAt = Clock.System.now(),
-            syncedAt = Clock.System.now(),
-            link = postPayload.link,
-            commentsLink = postPayload.commentsLink,
-            isDateParsedCorrectly = if (postPayload.isDateParsedCorrectly) 1 else 0,
-          )
-
-          postContentQueries.upsert(
-            id = postId,
-            rawContent = postPayload.rawContent,
-            rawContentLen = postPayload.rawContent.orEmpty().length.toLong(),
-            htmlContent = postPayload.fullContent,
-            createdAt = Clock.System.now(),
-          )
-        }
-      }
+        .chunked(POST_UPSERT_BATCH_SIZE)
+        .collect { batch -> upsertPostsBatch(batch, finalFeedId) }
     }
 
     return finalFeedId
+  }
+
+  private fun upsertPostsBatch(posts: List<PostPayload>, feedId: String) {
+    val now = Clock.System.now()
+    transactionRunner.invoke {
+      posts.forEach { postPayload ->
+        val postId = nameBasedUuidOf(postPayload.link).toString()
+        postQueries.upsert(
+          id = postId,
+          sourceId = feedId,
+          title = postPayload.title,
+          description = postPayload.description,
+          imageUrl = postPayload.imageUrl,
+          postDate = Instant.fromEpochMilliseconds(postPayload.date),
+          createdAt = now,
+          updatedAt = now,
+          syncedAt = now,
+          link = postPayload.link,
+          commentsLink = postPayload.commentsLink,
+          isDateParsedCorrectly = if (postPayload.isDateParsedCorrectly) 1 else 0,
+        )
+
+        postContentQueries.upsert(
+          id = postId,
+          rawContent = postPayload.rawContent,
+          rawContentLen = postPayload.rawContent.orEmpty().length.toLong(),
+          htmlContent = postPayload.fullContent,
+          createdAt = now,
+        )
+      }
+    }
   }
 
   fun feed(feedId: String): Feed? {
@@ -938,9 +950,37 @@ class RssRepository(
     }
   }
 
+  suspend fun postsWithRemoteIdPaged(limit: Long, offset: Long): List<Post> {
+    return withContext(dispatchersProvider.databaseRead) {
+      postQueries.postsWithRemoteIdPaged(limit, offset, ::Post).executeAsList()
+    }
+  }
+
   suspend fun postsWithLocalChanges(): List<Post> {
     return withContext(dispatchersProvider.databaseRead) {
       postQueries.postsWithLocalChanges(::Post).executeAsList()
+    }
+  }
+
+  suspend fun postsWithLocalChangesPaged(limit: Long, offset: Long): List<Post> {
+    return withContext(dispatchersProvider.databaseRead) {
+      postQueries.postsWithLocalChangesPaged(limit, offset, ::Post).executeAsList()
+    }
+  }
+
+  suspend fun postsWithLocalChangesForFeed(feedId: String): List<Post> {
+    return withContext(dispatchersProvider.databaseRead) {
+      postQueries.postsWithLocalChangesForFeed(feedId, ::Post).executeAsList()
+    }
+  }
+
+  suspend fun postsWithLocalChangesForFeedPaged(
+    feedId: String,
+    limit: Long,
+    offset: Long,
+  ): List<Post> {
+    return withContext(dispatchersProvider.databaseRead) {
+      postQueries.postsWithLocalChangesForFeedPaged(feedId, limit, offset, ::Post).executeAsList()
     }
   }
 
@@ -1181,13 +1221,36 @@ class RssRepository(
     val feedIdsSnapshot = feedIds.toList()
     withContext(dispatchersProvider.databaseWrite) {
       transactionRunner.invoke {
+        val now = Clock.System.now()
+        feedIdsSnapshot.forEach { feedId ->
+          val currentGroupIds =
+            feedGroupFeedQueries.groupIdsForFeed(feedId).executeAsList().mapNotNull {
+              it.feedGroupId
+            }
+
+          currentGroupIds.forEach { groupId -> feedGroupQueries.updateUpdatedAt(now, groupId) }
+
+          feedGroupFeedQueries.removeFeedFromAllGroups(feedId)
+          feedQueries.updateLastUpdatedAt(lastUpdatedAt = now, id = feedId)
+        }
+
         groupIdsSnapshot.forEach { groupId ->
           feedIdsSnapshot.forEach { feedId ->
             feedGroupFeedQueries.addFeedToGroup(feedGroupId = groupId, feedId = feedId)
           }
-          feedGroupQueries.updateUpdatedAt(Clock.System.now(), groupId)
+          feedGroupQueries.updateUpdatedAt(now, groupId)
         }
       }
+    }
+  }
+
+  suspend fun groupIdsForFeed(feedId: String): List<String> {
+    return withContext(dispatchersProvider.io) {
+      feedGroupFeedQueries
+        .groupIdsForFeed(feedId)
+        .executeAsList()
+        .map { it.feedGroupId }
+        .filterNotNull()
     }
   }
 
@@ -1745,6 +1808,36 @@ class RssRepository(
       )
       .asFlow()
       .mapToOne(dispatchersProvider.databaseRead)
+  }
+
+  suspend fun getReadingStatistics(startDate: Instant): Flow<ReadingStatistics> {
+    return withContext(dispatchersProvider.databaseRead) {
+      val totalReadCount = postQueries.totalReadPostsCount().executeAsOne()
+
+      val topFeeds =
+        postQueries.readPostsByFeed().executeAsList().map {
+          FeedReadCount(
+            feedId = it.feedId,
+            feedName = it.feedName,
+            feedIcon = it.feedIcon,
+            homepageLink = it.feedHomepageLink,
+            readCount = it.readCount
+          )
+        }
+
+      val readingTrends =
+        postQueries.readPostsOverTime(startDate).executeAsList().map {
+          ReadingTrend(date = it.date, count = it.count)
+        }
+
+      kotlinx.coroutines.flow.flowOf(
+        ReadingStatistics(
+          totalReadCount = totalReadCount,
+          topFeeds = topFeeds,
+          readingTrends = readingTrends
+        )
+      )
+    }
   }
 
   private fun sanitizeSearchQuery(searchQuery: String): String {

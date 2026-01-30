@@ -7,6 +7,12 @@
  *
  *     https://www.gnu.org/licenses/gpl-3.0.en.html
  *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
  */
 
 package dev.sasikanth.rss.reader.data.sync.local
@@ -16,12 +22,12 @@ import dev.sasikanth.rss.reader.core.model.local.FeedGroup
 import dev.sasikanth.rss.reader.core.model.local.Source
 import dev.sasikanth.rss.reader.core.network.fetcher.FeedFetchResult
 import dev.sasikanth.rss.reader.core.network.fetcher.FeedFetcher
+import dev.sasikanth.rss.reader.data.refreshpolicy.RefreshPolicy
 import dev.sasikanth.rss.reader.data.repository.ObservableActiveSource
 import dev.sasikanth.rss.reader.data.repository.RssRepository
 import dev.sasikanth.rss.reader.data.repository.SettingsRepository
 import dev.sasikanth.rss.reader.data.sync.SyncCoordinator
 import dev.sasikanth.rss.reader.data.sync.SyncState
-import dev.sasikanth.rss.reader.data.time.LastRefreshedAt
 import dev.sasikanth.rss.reader.data.utils.PostsFilterUtils
 import dev.sasikanth.rss.reader.di.scopes.AppScope
 import dev.sasikanth.rss.reader.util.DispatchersProvider
@@ -51,11 +57,11 @@ class LocalSyncCoordinator(
   private val dispatchersProvider: DispatchersProvider,
   private val observableActiveSource: ObservableActiveSource,
   private val settingsRepository: SettingsRepository,
-  private val lastRefreshedAt: LastRefreshedAt,
+  private val refreshPolicy: RefreshPolicy,
 ) : SyncCoordinator {
 
   companion object {
-    private const val SYNC_CHUNK_SIZE = 6
+    private const val SYNC_CHUNK_SIZE = 3
   }
 
   private val syncMutex = Mutex()
@@ -176,7 +182,7 @@ class LocalSyncCoordinator(
     withContext(dispatchersProvider.default) {
       val activeSource = observableActiveSource.activeSource.firstOrNull()
       val postsType = settingsRepository.postsType.first()
-      val lastRefreshedAtDateTime = lastRefreshedAt.dateTimeFlow.first()
+      val lastRefreshedAtDateTime = refreshPolicy.dateTimeFlow.first()
 
       val unreadOnly = PostsFilterUtils.shouldGetUnreadPostsOnly(postsType)
       val postsAfter = PostsFilterUtils.postsThresholdTime(postsType, lastRefreshedAtDateTime)
@@ -196,7 +202,7 @@ class LocalSyncCoordinator(
       block()
 
       if (allPostsCount == 0L) {
-        lastRefreshedAt.refresh()
+        refreshPolicy.refresh()
       }
     }
   }

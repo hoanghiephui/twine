@@ -1,11 +1,17 @@
 /*
- * Copyright 2024 Sasikanth Miriyampalli
+ * Copyright 2026 Sasikanth Miriyampalli
  *
  * Licensed under the GPL, Version 3.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
  *     https://www.gnu.org/licenses/gpl-3.0.en.html
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  */
 package dev.sasikanth.rss.reader.data.repository
@@ -54,7 +60,6 @@ class SettingsRepository(
   private val enableNotificationsKey = booleanPreferencesKey("enable_notifications")
   private val downloadFullContentKey = booleanPreferencesKey("download_full_content")
   private val lastReviewPromptDateKey = longPreferencesKey("last_review_prompt_date")
-  private val lastSyncedAtKey = longPreferencesKey("last_synced_at")
   private val installDateKey = longPreferencesKey("install_date")
   private val userSessionCountKey = intPreferencesKey("user_session_count")
   private val appIconKey = stringPreferencesKey("app_icon")
@@ -137,11 +142,6 @@ class SettingsRepository(
   val lastReviewPromptDate: Flow<Instant?> =
     dataStore.data.map { preferences ->
       preferences[lastReviewPromptDateKey]?.let(Instant::fromEpochMilliseconds)
-    }
-
-  val lastSyncedAt: Flow<Instant?> =
-    dataStore.data.map { preferences ->
-      preferences[lastSyncedAtKey]?.let(Instant::fromEpochMilliseconds)
     }
 
   val installDate: Flow<Instant?> =
@@ -257,10 +257,6 @@ class SettingsRepository(
     }
   }
 
-  suspend fun updateLastSyncedAt(value: Instant) {
-    dataStore.edit { preferences -> preferences[lastSyncedAtKey] = value.toEpochMilliseconds() }
-  }
-
   suspend fun updateInstallDate(value: Instant) {
     dataStore.edit { preferences -> preferences[installDateKey] = value.toEpochMilliseconds() }
   }
@@ -274,6 +270,10 @@ class SettingsRepository(
       val currentSessionCount = preferences[userSessionCountKey] ?: 0
       preferences[userSessionCountKey] = currentSessionCount + 1
     }
+  }
+
+  suspend fun clear() {
+    dataStore.edit { it.clear() }
   }
 
   private fun mapToAppThemeMode(pref: String?): AppThemeMode? {

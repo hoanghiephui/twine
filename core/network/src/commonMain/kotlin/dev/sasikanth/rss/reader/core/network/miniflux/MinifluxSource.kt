@@ -7,14 +7,22 @@
  *
  *     https://www.gnu.org/licenses/gpl-3.0.en.html
  *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
  */
 
 package dev.sasikanth.rss.reader.core.network.miniflux
 
+import co.touchlab.kermit.Logger
 import dev.sasikanth.rss.reader.core.model.local.User
 import dev.sasikanth.rss.reader.core.model.remote.miniflux.MinifluxCategory
 import dev.sasikanth.rss.reader.core.model.remote.miniflux.MinifluxCreateFeedResponse
 import dev.sasikanth.rss.reader.core.model.remote.miniflux.MinifluxEntriesPayload
+import dev.sasikanth.rss.reader.core.model.remote.miniflux.MinifluxEntryContent
 import dev.sasikanth.rss.reader.core.model.remote.miniflux.MinifluxError
 import dev.sasikanth.rss.reader.core.model.remote.miniflux.MinifluxFeed
 import dev.sasikanth.rss.reader.core.model.remote.miniflux.MinifluxUser
@@ -108,24 +116,46 @@ class MinifluxSource(
   }
 
   suspend fun entries(
-    status: String? = null,
+    status: List<String>? = null,
     limit: Int? = null,
     offset: Int? = null,
     after: Long? = null,
     starred: Boolean? = null,
+    feedId: Long? = null
   ): MinifluxEntriesPayload {
     return withContext(dispatchersProvider.io) {
-      authenticatedHttpClient()
-        .get(
-          MinifluxApi.Entries(
-            status = status,
-            limit = limit,
-            offset = offset,
-            after = after,
-            starred = starred?.toString()
+      if (feedId == null) {
+        authenticatedHttpClient()
+          .get(
+            MinifluxApi.Entries(
+              status = status,
+              limit = limit,
+              offset = offset,
+              after = after,
+              starred = starred?.toString()
+            )
           )
-        )
-        .body<MinifluxEntriesPayload>()
+          .body<MinifluxEntriesPayload>()
+      } else {
+        authenticatedHttpClient()
+          .get(
+            MinifluxApi.Feed.Entries(
+              parent = MinifluxApi.Feed(feedId = feedId),
+              status = status,
+              limit = limit,
+              offset = offset,
+              after = after,
+              starred = starred?.toString()
+            )
+          )
+          .body<MinifluxEntriesPayload>()
+      }
+    }
+  }
+
+  suspend fun fetchEntryContent(entryId: Long): MinifluxEntryContent {
+    return withContext(dispatchersProvider.io) {
+      authenticatedHttpClient().get(MinifluxApi.FetchContent(entryId = entryId)).body()
     }
   }
 
@@ -204,6 +234,32 @@ class MinifluxSource(
     updateEntriesStatus(ids, "unread")
   }
 
+  suspend fun addBookmarks(ids: List<Long>) {
+    withContext(dispatchersProvider.io) {
+      ids.forEach { entryId ->
+        try {
+          authenticatedHttpClient().put(MinifluxApi.ToggleEntryBookmark(entryId = entryId))
+        } catch (e: Exception) {
+          Logger.e(e) { "Failed to add bookmark for entry: $entryId" }
+          throw e
+        }
+      }
+    }
+  }
+
+  suspend fun removeBookmarks(ids: List<Long>) {
+    withContext(dispatchersProvider.io) {
+      ids.forEach { entryId ->
+        try {
+          authenticatedHttpClient().put(MinifluxApi.ToggleEntryBookmark(entryId = entryId))
+        } catch (e: Exception) {
+          Logger.e(e) { "Failed to remove bookmark for entry: $entryId" }
+          throw e
+        }
+      }
+    }
+  }
+
   private suspend fun updateEntriesStatus(ids: List<Long>, status: String) {
     withContext(dispatchersProvider.io) {
       val response =
@@ -219,19 +275,6 @@ class MinifluxSource(
 
       if (!response.status.isSuccess()) {
         throw Exception("Failed to update entries status: ${response.status}")
-      }
-    }
-  }
-
-  suspend fun toggleBookmark(entryId: Long) {
-    withContext(dispatchersProvider.io) {
-      val response =
-        authenticatedHttpClient().put(MinifluxApi.ToggleEntryBookmark(entryId = entryId)) {
-          contentType(ContentType.Application.Json)
-        }
-
-      if (!response.status.isSuccess()) {
-        throw Exception("Failed to toggle bookmark: ${response.status}")
       }
     }
   }
