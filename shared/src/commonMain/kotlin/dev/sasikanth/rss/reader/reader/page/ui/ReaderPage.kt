@@ -40,7 +40,6 @@ import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.selection.TextSelectionColors
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -93,14 +92,13 @@ import com.mikepenz.markdown.model.markdownAnnotator
 import com.mikepenz.markdown.model.markdownDimens
 import com.mikepenz.markdown.model.markdownPadding
 import dev.sasikanth.rss.reader.components.image.FeedIcon
-import dev.sasikanth.rss.reader.core.model.local.PostWithMetadata
+import dev.sasikanth.rss.reader.core.model.local.ResolvedPost
 import dev.sasikanth.rss.reader.core.network.utils.UrlUtils
 import dev.sasikanth.rss.reader.home.ui.FeaturedImage
 import dev.sasikanth.rss.reader.home.ui.PostMetadataConfig
 import dev.sasikanth.rss.reader.markdown.CoilMarkdownTransformer
 import dev.sasikanth.rss.reader.platform.LocalLinkHandler
 import dev.sasikanth.rss.reader.reader.page.ReaderPageViewModel
-import dev.sasikanth.rss.reader.reader.webview.ReaderWebView
 import dev.sasikanth.rss.reader.resources.icons.Bookmark
 import dev.sasikanth.rss.reader.resources.icons.Bookmarked
 import dev.sasikanth.rss.reader.resources.icons.Comments
@@ -123,6 +121,7 @@ import twine.shared.generated.resources.Res
 import twine.shared.generated.resources.bookmark
 import twine.shared.generated.resources.comments
 import twine.shared.generated.resources.markAsUnRead
+import twine.shared.generated.resources.readingTimeEstimate
 import twine.shared.generated.resources.share
 import twine.shared.generated.resources.unBookmark
 
@@ -135,11 +134,11 @@ private val json = Json {
 @Composable
 internal fun ReaderPage(
   pageViewModel: ReaderPageViewModel,
-  readerPost: PostWithMetadata,
+  readerPost: ResolvedPost,
+  showFullArticle: Boolean,
   page: Int,
   pagerState: PagerState,
   markdownComponents: MarkdownComponents,
-  loadFullArticle: Boolean,
   isDarkTheme: Boolean,
   onBookmarkClick: () -> Unit,
   onMarkAsUnread: () -> Unit,
@@ -149,7 +148,6 @@ internal fun ReaderPage(
   val markdownContentState by pageViewModel.contentState.collectAsStateWithLifecycle()
   val excerptState by pageViewModel.excerptState.collectAsStateWithLifecycle()
   val contentParsingProgress by pageViewModel.parsingProgress.collectAsStateWithLifecycle()
-  val readerPostContent by pageViewModel.postContent.collectAsStateWithLifecycle()
 
   val linkHandler = LocalLinkHandler.current
   val sharedHandler = LocalShareHandler.current
@@ -166,27 +164,6 @@ internal fun ReaderPage(
   CompositionLocalProvider(LocalTextSelectionColors provides textSelectionColors) {
     SelectionContainer {
       Box(modifier = modifier) {
-        // Dummy view to parse the reader content using JS
-        val postContent =
-          remember(loadFullArticle, readerPostContent) {
-            if (loadFullArticle) {
-              readerPostContent?.fullArticleHtml
-            } else {
-              readerPostContent?.postContent
-            }
-          }
-
-        ReaderWebView(
-          link = readerPost.link,
-          content = postContent,
-          postImage = readerPost.imageUrl,
-          contentLoaded = {
-            val readerContent = json.decodeFromString<ReaderContent>(it)
-            pageViewModel.onParsingComplete(readerContent)
-          },
-          modifier = Modifier.requiredSize(0.dp),
-        )
-
         CompositionLocalProvider(
           LocalReferenceLinkHandler provides ReferenceLinkHandlerImpl(),
           LocalMarkdownPadding provides
@@ -242,6 +219,7 @@ internal fun ReaderPage(
             item(key = "reader-header") {
               PostHeader(
                 readerPost = readerPost,
+                showFullArticle = showFullArticle,
                 page = page,
                 pagerState = pagerState,
                 excerpt = excerptState,
@@ -306,7 +284,8 @@ private fun ProgressIndicator() {
 
 @Composable
 private fun PostHeader(
-  readerPost: PostWithMetadata,
+  readerPost: ResolvedPost,
+  showFullArticle: Boolean,
   page: Int,
   pagerState: PagerState,
   excerpt: String,
@@ -328,7 +307,7 @@ private fun PostHeader(
       Box(modifier = Modifier.padding(horizontal = 24.dp).align(Alignment.CenterHorizontally)) {
         FeaturedImage(
           imageUrl = postImage,
-          isComicStrip = UrlUtils.isComicStrip(postImage),
+          unlockAspectRatio = UrlUtils.isUnconstrainedMedia(postImage),
           alignment =
             remember(pagerState) {
               ParallaxAlignment(
@@ -344,13 +323,38 @@ private fun PostHeader(
 
     Column(modifier = Modifier.padding(horizontal = 32.dp)) {
       DisableSelection {
-        Text(
+        Row(
           modifier = Modifier.padding(top = 20.dp),
-          text = readerPost.date.readerDateTimestamp(),
-          style = MaterialTheme.typography.bodyMedium,
-          color = AppTheme.colorScheme.outline,
-          maxLines = 1,
-        )
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Text(
+            text = readerPost.date.readerDateTimestamp(),
+            style = MaterialTheme.typography.bodyMedium,
+            color = AppTheme.colorScheme.outline,
+            maxLines = 1,
+          )
+
+          val readingTimeEstimate =
+            readerPost.articleContentReadingTime?.takeIf { showFullArticle }
+              ?: readerPost.feedContentReadingTime ?: 0
+
+          if (readingTimeEstimate > 0) {
+            Text(
+              modifier = Modifier.padding(horizontal = 4.dp).clearAndSetSemantics {},
+              style = MaterialTheme.typography.bodyMedium,
+              maxLines = 1,
+              text = "\u2022",
+              color = AppTheme.colorScheme.outline,
+            )
+
+            Text(
+              text = stringResource(Res.string.readingTimeEstimate, readingTimeEstimate),
+              style = MaterialTheme.typography.bodyMedium,
+              color = AppTheme.colorScheme.outline,
+              maxLines = 1,
+            )
+          }
+        }
       }
 
       Text(
@@ -587,9 +591,3 @@ enum class ReaderProcessingProgress {
   Loading,
   Idle
 }
-
-@Serializable
-data class ReaderContent(
-  val excerpt: String?,
-  val content: String?,
-)
