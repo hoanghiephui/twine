@@ -36,6 +36,7 @@ import dev.sasikanth.rss.reader.data.sync.SyncState
 import dev.sasikanth.rss.reader.data.utils.PostsFilterUtils
 import dev.sasikanth.rss.reader.di.scopes.AppScope
 import dev.sasikanth.rss.reader.util.DispatchersProvider
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -69,6 +70,7 @@ class AllPostsPager(
   private data class PostsParameters(
     val activeSourceIds: List<String>,
     val postsAfter: Instant,
+    val featuredPostsAfter: Instant,
     val lastSyncedAt: Instant,
     val unreadOnly: Boolean?,
     val postsSortOrder: PostsSortOrder,
@@ -79,7 +81,7 @@ class AllPostsPager(
         observableActiveSource.activeSource,
         settingsRepository.postsType,
         settingsRepository.postsSortOrder,
-        refreshPolicy.dateTimeFlow
+        refreshPolicy.dateTimeFlow,
       ) { activeSource, postsType, postsSortOrder, dateTime ->
         computeParameters(activeSource, postsType, postsSortOrder, dateTime)
       }
@@ -93,7 +95,8 @@ class AllPostsPager(
             postsSortOrder = params.postsSortOrder,
             unreadOnly = params.unreadOnly,
             after = params.postsAfter,
-            lastSyncedAt = params.lastSyncedAt
+            featuredPostsAfter = params.featuredPostsAfter,
+            lastSyncedAt = params.lastSyncedAt,
           )
         }
         .flow
@@ -120,7 +123,7 @@ class AllPostsPager(
             rssRepository.unreadSinceLastSync(
               sources = params.activeSourceIds,
               postsAfter = params.postsAfter,
-              lastSyncedAt = params.lastSyncedAt
+              lastSyncedAt = params.lastSyncedAt,
             )
           }
         }
@@ -146,11 +149,15 @@ class AllPostsPager(
     activeSource: Source?,
     postsType: PostsType,
     postsSortOrder: PostsSortOrder,
-    dateTime: LocalDateTime
+    dateTime: LocalDateTime,
   ): PostsParameters {
+    val postsAfter = PostsFilterUtils.postsThresholdTime(postsType, dateTime)
+    val featuredPostsAfter = dateTime.toInstant(TimeZone.currentSystemDefault()).minus(24.hours)
+
     return PostsParameters(
       activeSourceIds = activeSourceIds(activeSource),
-      postsAfter = PostsFilterUtils.postsThresholdTime(postsType, dateTime),
+      postsAfter = postsAfter,
+      featuredPostsAfter = featuredPostsAfter,
       lastSyncedAt = dateTime.toInstant(TimeZone.currentSystemDefault()),
       unreadOnly = PostsFilterUtils.shouldGetUnreadPostsOnly(postsType),
       postsSortOrder = postsSortOrder,

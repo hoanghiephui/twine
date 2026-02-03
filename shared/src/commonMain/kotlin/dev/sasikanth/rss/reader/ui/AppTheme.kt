@@ -26,6 +26,8 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import dev.sasikanth.rss.reader.utils.LocalAmoledSetting
@@ -34,7 +36,7 @@ import dev.sasikanth.rss.reader.utils.LocalAmoledSetting
 internal fun AppTheme(
   useDarkTheme: Boolean = false,
   typography: Typography = typography(GolosFontFamily),
-  content: @Composable () -> Unit
+  content: @Composable () -> Unit,
 ) {
   val useAmoled = LocalAmoledSetting.current
 
@@ -44,13 +46,18 @@ internal fun AppTheme(
       typography = typography,
     ) {
       val dynamicColorState = LocalDynamicColorState.current
-      val colorScheme =
-        if (useDarkTheme) {
-          if (useAmoled) dynamicColorState.darkAppColorScheme.amoled()
-          else dynamicColorState.darkAppColorScheme
-        } else {
-          dynamicColorState.lightAppColorScheme
-        }
+      val sourceColorScheme =
+        if (useDarkTheme) dynamicColorState.darkAppColorScheme
+        else dynamicColorState.lightAppColorScheme
+
+      // We read a property from the source color scheme to ensure that AppTheme recomposes
+      // whenever the dynamic colors change. This allows us to update the stable color scheme
+      // instance that is provided to the rest of the app.
+      sourceColorScheme.primary
+
+      val colorScheme = remember(useDarkTheme) { sourceColorScheme.copy() }
+
+      SideEffect { colorScheme.updateFrom(sourceColorScheme, amoled = useDarkTheme && useAmoled) }
 
       val secondary = colorScheme.secondary
       val onSurface = colorScheme.onSurface
@@ -67,17 +74,14 @@ internal fun AppTheme(
               background = secondary.copy(alpha = 0.16f),
               outline = secondary.copy(alpha = 0.16f),
               foreground = onSurface,
-            )
+            ),
         )
 
       CompositionLocalProvider(
         LocalAppColorScheme provides colorScheme,
         LocalRippleConfiguration provides
-          RippleConfiguration(
-            color = colorScheme.secondary,
-            rippleAlpha = DefaultRippleAlpha,
-          ),
-        LocalTranslucentStyles provides localTranslucentStyles
+          RippleConfiguration(color = colorScheme.secondary, rippleAlpha = DefaultRippleAlpha),
+        LocalTranslucentStyles provides localTranslucentStyles,
       ) {
         content()
       }
@@ -99,7 +103,7 @@ internal val DefaultRippleAlpha =
     pressedAlpha = 0.16f,
     focusedAlpha = 0.24f,
     draggedAlpha = 0.24f,
-    hoveredAlpha = 0.08f
+    hoveredAlpha = 0.08f,
   )
 
 internal val SYSTEM_SCRIM = Color.Black.copy(alpha = 0.8f)

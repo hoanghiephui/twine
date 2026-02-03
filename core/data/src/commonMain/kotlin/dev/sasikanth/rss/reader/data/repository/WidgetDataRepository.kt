@@ -30,6 +30,8 @@ import dev.sasikanth.rss.reader.data.database.PostQueries
 import dev.sasikanth.rss.reader.di.scopes.AppScope
 import dev.sasikanth.rss.reader.util.DispatchersProvider
 import kotlin.collections.Set
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -66,12 +68,15 @@ class WidgetDataRepository(
   }
 
   fun unreadPosts(numberOfPosts: Int): Flow<List<WidgetPost>> {
+    val featuredPostsAfter = Clock.System.now().minus(24.hours)
+
     return postQueries
       .allPosts(
         isSourceIdsEmpty = true,
         sourceIds = emptyList(),
         unreadOnly = true,
         postsAfter = Instant.DISTANT_PAST,
+        featuredPostsAfter = featuredPostsAfter,
         numberOfFeaturedPosts = 0,
         lastSyncedAt = Instant.DISTANT_FUTURE,
         limit = numberOfPosts.toLong(),
@@ -83,6 +88,7 @@ class WidgetDataRepository(
           title: String,
           description: String,
           imageUrl: String?,
+          audioUrl: String?,
           date: Instant,
           createdAt: Instant,
           link: String,
@@ -96,7 +102,7 @@ class WidgetDataRepository(
           showFeedFavIcon: Boolean,
           feedContentReadingTime: Long?,
           articleContentReadingTime: Long?,
-          _: Long ->
+          isFeatured: Boolean ->
           WidgetPost(
             id = id,
             title = title,
@@ -106,7 +112,7 @@ class WidgetDataRepository(
             feedName = feedName,
             feedIcon = feedIcon,
           )
-        }
+        },
       )
       .asFlow()
       .mapToList(dispatchersProvider.databaseRead)
@@ -124,6 +130,7 @@ class WidgetDataRepository(
             title: String,
             description: String,
             imageUrl: String?,
+            audioUrl: String?,
             date: Instant,
             createdAt: Instant,
             link: String,
@@ -146,7 +153,7 @@ class WidgetDataRepository(
               feedName = feedName,
               feedIcon = feedIcon,
             )
-          }
+          },
         )
         .executeAsList()
     }
@@ -167,6 +174,7 @@ class WidgetDataRepository(
             title,
             description,
             imageUrl,
+            audioUrl,
             date,
             createdAt,
             link,
@@ -186,6 +194,7 @@ class WidgetDataRepository(
               title = title,
               description = description,
               imageUrl = imageUrl,
+              audioUrl = audioUrl,
               date = date,
               createdAt = createdAt,
               link = link,
@@ -200,9 +209,9 @@ class WidgetDataRepository(
               articleContentReadingTime = articleContentReadingTime?.toInt(),
               remoteId = remoteId,
             )
-          }
+          },
         )
-      }
+      },
     )
   }
 }

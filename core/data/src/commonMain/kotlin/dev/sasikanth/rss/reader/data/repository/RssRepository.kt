@@ -83,7 +83,7 @@ class RssRepository(
   private val appConfigQueries: AppConfigQueries,
   private val sourceQueries: SourceQueries,
   private val readingTimeCalculator: ReadingTimeCalculator,
-  private val dispatchersProvider: DispatchersProvider
+  private val dispatchersProvider: DispatchersProvider,
 ) {
   private companion object {
     private const val POST_UPSERT_BATCH_SIZE = 200
@@ -176,6 +176,7 @@ class RssRepository(
           title = postPayload.title,
           description = postPayload.description,
           imageUrl = postPayload.imageUrl,
+          audioUrl = postPayload.audioUrl,
           postDate = Instant.fromEpochMilliseconds(postPayload.date),
           createdAt = now,
           updatedAt = now,
@@ -239,7 +240,7 @@ class RssRepository(
             isDeleted = isDeleted,
             remoteId = remoteId,
           )
-        }
+        },
       )
       .executeAsOneOrNull()
   }
@@ -274,6 +275,7 @@ class RssRepository(
     postsSortOrder: PostsSortOrder,
     unreadOnly: Boolean? = null,
     after: Instant = Instant.DISTANT_PAST,
+    featuredPostsAfter: Instant = Instant.DISTANT_PAST,
     lastSyncedAt: Instant = Instant.DISTANT_FUTURE,
   ): PagingSource<Int, ResolvedPost> {
     return QueryPagingSource(
@@ -293,6 +295,7 @@ class RssRepository(
           sourceIds = activeSourceIds,
           unreadOnly = unreadOnly,
           postsAfter = after,
+          featuredPostsAfter = featuredPostsAfter,
           numberOfFeaturedPosts = Constants.NUMBER_OF_FEATURED_POSTS,
           lastSyncedAt = lastSyncedAt,
           orderBy = postsSortOrder.name,
@@ -304,6 +307,7 @@ class RssRepository(
             title: String,
             description: String,
             imageUrl: String?,
+            audioUrl: String?,
             date: Instant,
             createdAt: Instant,
             link: String,
@@ -317,13 +321,14 @@ class RssRepository(
             showFeedFavIcon: Boolean,
             feedContentReadingTime: Long?,
             articleContentReadingTime: Long?,
-            _: Long ->
+            _: Boolean ->
             ResolvedPost(
               id = id,
               sourceId = sourceId,
               title = title,
               description = description,
               imageUrl = imageUrl,
+              audioUrl = audioUrl,
               date = date,
               createdAt = createdAt,
               link = link,
@@ -338,9 +343,9 @@ class RssRepository(
               articleContentReadingTime = articleContentReadingTime?.toInt(),
               remoteId = remoteId,
             )
-          }
+          },
         )
-      }
+      },
     )
   }
 
@@ -349,7 +354,7 @@ class RssRepository(
       postQueries.updateBookmarkStatus(
         bookmarked = if (bookmarked) 1L else 0L,
         id = id,
-        updatedAt = Clock.System.now()
+        updatedAt = Clock.System.now(),
       )
     }
   }
@@ -359,7 +364,7 @@ class RssRepository(
       postQueries.updateReadStatus(
         read = if (read) 1L else 0L,
         id = id,
-        updatedAt = Clock.System.now()
+        updatedAt = Clock.System.now(),
       )
     }
   }
@@ -451,7 +456,8 @@ class RssRepository(
             FeedGroup(
               id = id,
               name = name,
-              feedIds = feedIds?.split(Constants.GROUP_CONCAT_SEPARATOR)?.filter { it.isNotBlank() }
+              feedIds =
+                feedIds?.split(Constants.GROUP_CONCAT_SEPARATOR)?.filter { it.isNotBlank() }
                   ?: emptyList(),
               feedHomepageLinks =
                 feedHomepageLinks.split(Constants.GROUP_CONCAT_SEPARATOR).filter {
@@ -533,9 +539,9 @@ class RssRepository(
               showFeedFavIcon = showFeedFavIcon,
               hideFromAllFeeds = hideFromAllFeeds,
             )
-          }
+          },
         )
-      }
+      },
     )
   }
 
@@ -584,7 +590,7 @@ class RssRepository(
             isDeleted = isDeleted,
             remoteId = remoteId,
           )
-        }
+        },
       )
       .asFlow()
       .mapToOne(dispatchersProvider.databaseRead)
@@ -636,7 +642,7 @@ class RssRepository(
               isDeleted = isDeleted,
               remoteId = remoteId,
             )
-          }
+          },
         )
         .executeAsOne()
     }
@@ -670,7 +676,7 @@ class RssRepository(
       feedQueries.updateFeedName(
         newFeedName = newFeedName,
         id = feedId,
-        lastUpdatedAt = Clock.System.now()
+        lastUpdatedAt = Clock.System.now(),
       )
     }
   }
@@ -712,6 +718,7 @@ class RssRepository(
             title: String,
             description: String,
             imageUrl: String?,
+            audioUrl: String?,
             date: Instant,
             createdAt: Instant,
             link: String,
@@ -730,6 +737,7 @@ class RssRepository(
               title = title,
               description = description,
               imageUrl = imageUrl,
+              audioUrl = audioUrl,
               date = date,
               createdAt = createdAt,
               link = link,
@@ -743,9 +751,9 @@ class RssRepository(
               feedContentReadingTime = feedContentReadingTime?.toInt(),
               articleContentReadingTime = articleContentReadingTime?.toInt(),
             )
-          }
+          },
         )
-      }
+      },
     )
   }
 
@@ -764,6 +772,7 @@ class RssRepository(
             title: String,
             description: String,
             imageUrl: String?,
+            audioUrl: String?,
             date: Instant,
             createdAt: Instant,
             link: String,
@@ -781,6 +790,7 @@ class RssRepository(
               title = title,
               description = description,
               imageUrl = imageUrl,
+              audioUrl = audioUrl,
               date = date,
               createdAt = createdAt,
               link = link,
@@ -794,9 +804,9 @@ class RssRepository(
               feedContentReadingTime = feedContentReadingTime?.toInt(),
               articleContentReadingTime = articleContentReadingTime?.toInt(),
             )
-          }
+          },
         )
-      }
+      },
     )
   }
 
@@ -840,7 +850,7 @@ class RssRepository(
 
   suspend fun updateFeedsLastCleanUpAt(
     feedIds: List<String>,
-    lastCleanUpAt: Instant = Clock.System.now()
+    lastCleanUpAt: Instant = Clock.System.now(),
   ) {
     val feedIdsSnapshot = feedIds.toList()
     withContext(dispatchersProvider.databaseWrite) {
@@ -857,7 +867,7 @@ class RssRepository(
       postQueries.markPostsAsRead(
         sourceId = null,
         after = postsAfter,
-        updatedAt = Clock.System.now()
+        updatedAt = Clock.System.now(),
       )
     }
   }
@@ -875,7 +885,7 @@ class RssRepository(
 
   suspend fun markPostsInFeedAsRead(
     feedIds: List<String>,
-    postsAfter: Instant = Instant.DISTANT_PAST
+    postsAfter: Instant = Instant.DISTANT_PAST,
   ) {
     val feedIdsSnapshot = feedIds.toList()
     withContext(dispatchersProvider.databaseWrite) {
@@ -884,7 +894,7 @@ class RssRepository(
           postQueries.markPostsAsRead(
             sourceId = feedId,
             after = postsAfter,
-            updatedAt = Clock.System.now()
+            updatedAt = Clock.System.now(),
           )
         }
       }
@@ -975,7 +985,7 @@ class RssRepository(
               isDeleted = isDeleted,
               remoteId = remoteId,
             )
-          }
+          },
         )
         .executeAsOneOrNull()
     }
@@ -1074,7 +1084,7 @@ class RssRepository(
             isDeleted = isDeleted,
             remoteId = remoteId,
           )
-        }
+        },
       )
       .executeAsOneOrNull()
   }
@@ -1090,6 +1100,7 @@ class RssRepository(
             title = post.title,
             description = post.description,
             imageUrl = post.imageUrl,
+            audioUrl = post.audioUrl,
             postDate = post.postDate,
             createdAt = post.createdAt,
             updatedAt = post.updatedAt,
@@ -1172,7 +1183,8 @@ class RssRepository(
             FeedGroup(
               id = id,
               name = name,
-              feedIds = feedIds?.split(Constants.GROUP_CONCAT_SEPARATOR)?.filter { it.isNotBlank() }
+              feedIds =
+                feedIds?.split(Constants.GROUP_CONCAT_SEPARATOR)?.filter { it.isNotBlank() }
                   ?: emptyList(),
               feedHomepageLinks =
                 feedHomepageLinks.split(Constants.GROUP_CONCAT_SEPARATOR).filter {
@@ -1188,7 +1200,7 @@ class RssRepository(
               isDeleted = isDeleted,
               remoteId = remoteId,
             )
-          }
+          },
         )
         .executeAsOneOrNull()
     }
@@ -1228,7 +1240,7 @@ class RssRepository(
       feedQueries.updateHideFromAllFeeds(
         hideFromAllFeeds = newValue,
         lastUpdatedAt = Clock.System.now(),
-        id = feedId
+        id = feedId,
       )
     }
   }
@@ -1240,7 +1252,7 @@ class RssRepository(
         id = id,
         name = name,
         createdAt = Clock.System.now(),
-        updatedAt = Clock.System.now()
+        updatedAt = Clock.System.now(),
       )
 
       return@withContext id
@@ -1411,7 +1423,7 @@ class RssRepository(
               updatedAt = updatedAt!!,
               pinnedAt = pinnedAt,
               numberOfUnreadPosts = numberOfUnreadPosts,
-              pinnedPosition = pinnedPosition
+              pinnedPosition = pinnedPosition,
             )
           } else {
             Feed(
@@ -1427,10 +1439,10 @@ class RssRepository(
               numberOfUnreadPosts = numberOfUnreadPosts,
               pinnedPosition = pinnedPosition,
               showFeedFavIcon = showFeedFavIcon ?: true,
-              remoteId = remoteId
+              remoteId = remoteId,
             )
           }
-        }
+        },
       )
       .asFlow()
       .mapToList(dispatchersProvider.databaseRead)
@@ -1511,12 +1523,12 @@ class RssRepository(
                 numberOfUnreadPosts = numberOfUnreadPosts,
                 pinnedPosition = pinnedPosition,
                 showFeedFavIcon = showFeedFavIcon ?: true,
-                remoteId = remoteId
+                remoteId = remoteId,
               )
             }
-          }
+          },
         )
-      }
+      },
     )
   }
 
@@ -1589,10 +1601,10 @@ class RssRepository(
               numberOfUnreadPosts = numberOfUnreadPosts,
               pinnedPosition = pinnedPosition,
               showFeedFavIcon = showFeedFavIcon ?: true,
-              remoteId = remoteId
+              remoteId = remoteId,
             )
           }
-        }
+        },
       )
       .asFlow()
       .mapToOneOrNull(dispatchersProvider.databaseRead)
@@ -1637,11 +1649,11 @@ class RssRepository(
               updatedAt = updatedAt,
               pinnedAt = pinnedAt,
               pinnedPosition = pinnedPosition,
-              remoteId = remoteId
+              remoteId = remoteId,
             )
-          }
+          },
         )
-      }
+      },
     )
   }
 
@@ -1684,7 +1696,7 @@ class RssRepository(
               pinnedAt = pinnedAt,
               remoteId = remoteId,
             )
-          }
+          },
         )
         .executeAsList()
     }
@@ -1720,7 +1732,7 @@ class RssRepository(
             pinnedAt = pinnedAt,
             remoteId = remoteId,
           )
-        }
+        },
       )
       .asFlow()
       .mapToOne(dispatchersProvider.databaseRead)
@@ -1775,9 +1787,9 @@ class RssRepository(
               isDeleted = isDeleted,
               remoteId = remoteId,
             )
-          }
+          },
         )
-      }
+      },
     )
   }
 
@@ -1789,12 +1801,12 @@ class RssRepository(
           feedQueries.updatedPinnedPosition(
             pinnedPosition = index.toDouble(),
             id = source.id,
-            lastUpdatedAt = now
+            lastUpdatedAt = now,
           )
           feedGroupQueries.updatedPinnedPosition(
             pinnedPosition = index.toDouble(),
             id = source.id,
-            updatedAt = now
+            updatedAt = now,
           )
         }
       }
@@ -1803,13 +1815,13 @@ class RssRepository(
 
   fun hasUnreadPostsInSource(
     activeSourceIds: List<String>,
-    postsAfter: Instant = Instant.DISTANT_PAST
+    postsAfter: Instant = Instant.DISTANT_PAST,
   ): Flow<Boolean> {
     return postQueries
       .unreadPostsCountInSource(
         isSourceIdsEmpty = activeSourceIds.isEmpty(),
         sourceIds = activeSourceIds,
-        after = postsAfter
+        after = postsAfter,
       )
       .asFlow()
       .mapToOne(dispatchersProvider.databaseRead)
@@ -1819,7 +1831,7 @@ class RssRepository(
   fun unreadSinceLastSync(
     sources: List<String>,
     postsAfter: Instant,
-    lastSyncedAt: Instant
+    lastSyncedAt: Instant,
   ): Flow<UnreadSinceLastSync> {
     return postQueries
       .unreadSinceLastSync(
@@ -1839,9 +1851,9 @@ class RssRepository(
               feedIcons.orEmpty().split(Constants.GROUP_CONCAT_SEPARATOR).filterNot {
                 it.isBlank()
               },
-            feedShowFavIconSettings = mapToFeedShowFavIconSettings(feedShowFavIconSettings)
+            feedShowFavIconSettings = mapToFeedShowFavIconSettings(feedShowFavIconSettings),
           )
-        }
+        },
       )
       .asFlow()
       .mapToOne(dispatchersProvider.databaseRead)
@@ -1858,7 +1870,7 @@ class RssRepository(
             feedName = it.feedName,
             feedIcon = it.feedIcon,
             homepageLink = it.feedHomepageLink,
-            readCount = it.readCount
+            readCount = it.readCount,
           )
         }
 
@@ -1871,7 +1883,7 @@ class RssRepository(
         ReadingStatistics(
           totalReadCount = totalReadCount,
           topFeeds = topFeeds,
-          readingTrends = readingTrends
+          readingTrends = readingTrends,
         )
       )
     }
