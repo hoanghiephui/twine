@@ -40,6 +40,7 @@ import dev.sasikanth.rss.reader.data.repository.RssRepository
 import dev.sasikanth.rss.reader.data.repository.SettingsRepository
 import dev.sasikanth.rss.reader.data.utils.PostsFilterUtils
 import dev.sasikanth.rss.reader.util.DispatchersProvider
+import dev.sasikanth.rss.reader.utils.Constants
 import dev.sasikanth.rss.reader.utils.Constants.MINIMUM_REQUIRED_SEARCH_CHARACTERS
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Instant
@@ -107,7 +108,7 @@ class FeedsViewModel(
         viewModelScope.launch {
           val feedsCount = state.value.numberOfFeeds
           val isSubscribed = billingHandler.isSubscribed()
-          if (!isSubscribed && feedsCount >= 10) {
+          if (!isSubscribed && feedsCount >= Constants.MAX_FREE_FEEDS) {
             _state.update { it.copy(openPaywall = true) }
             return@launch
           }
@@ -272,7 +273,7 @@ class FeedsViewModel(
     val searchQueryFlow =
       snapshotFlow { searchQuery }.debounce(500.milliseconds).distinctUntilChangedBy { it.text }
 
-    combine(searchQueryFlow, settingsRepository.postsType, refreshPolicy.dateTimeFlow) {
+    combine(searchQueryFlow, settingsRepository.postsType, refreshPolicy.lastRefreshedAtFlow) {
         searchQuery,
         postsType,
         dateTime ->
@@ -305,7 +306,7 @@ class FeedsViewModel(
     val activeSourceFlow = observableActiveSource.activeSource
     val postsTypeFlow = settingsRepository.postsType
 
-    combine(activeSourceFlow, refreshPolicy.dateTimeFlow, postsTypeFlow) {
+    combine(activeSourceFlow, refreshPolicy.lastRefreshedAtFlow, postsTypeFlow) {
         activeSource,
         lastRefreshedAt,
         postsType ->
@@ -346,7 +347,8 @@ class FeedsViewModel(
       .launchIn(viewModelScope)
 
     val pinnedSourcesFlow =
-      combine(settingsRepository.postsType, refreshPolicy.dateTimeFlow) { postsType, dateTime ->
+      combine(settingsRepository.postsType, refreshPolicy.lastRefreshedAtFlow) { postsType, dateTime
+          ->
           Pair(postsType, dateTime)
         }
         .flatMapLatest { (postsType, dateTime) ->
@@ -361,7 +363,7 @@ class FeedsViewModel(
       combine(
           settingsRepository.postsType,
           settingsRepository.feedsSortOrder,
-          refreshPolicy.dateTimeFlow,
+          refreshPolicy.lastRefreshedAtFlow,
         ) { postsType, feedsSortOrder, dateTime ->
           Triple(postsType, feedsSortOrder, dateTime)
         }

@@ -168,6 +168,8 @@
   <string name="blockedWordsHint">Bir kelime girin</string>
   <string name="blockedWordsDesc">Gönderiler, metinlerine göre ana ekrandan gizlenebilir. Birçok gönderide görünen yaygın kelimelerden kaçınmanızı öneririz, çünkü bu, hiçbir gönderinin gösterilmemesine veya uygulamanın performansını olumsuz etkilemesine neden olabilir. \n\nGizli gönderiler arama ve yer imlerinde hala gösterilecektir.</string>
   <string name="blockedWordsEmpty">Henüz herhangi bir kelime engellemediniz</string>
+  <string name="readMore">Read more</string>
+  <string name="readLess">Read less</string>
   <string name="markArticleAsRead">Gönderiyi okundu olarak işaretle</string>
   <string name="markArticleAsReadOnOpen">Açıldığında</string>
   <string name="markArticleAsReadOnScroll">Kaydırıldığında</string>
@@ -242,7 +244,9 @@
   <string name="statisticsNoData">No reading data available yet</string>
   <string name="statisticsTotalRead">Total Articles Read</string>
   <string name="statisticsTopFeeds">Top 10 Feeds</string>
-  <string name="statisticsReadingTrends">Reading Trends (Last 30 Days)</string>
+  <string name="statisticsReadingTrends">Reading Trends</string>
+  <string name="statisticsLess">Less</string>
+  <string name="statisticsMore">More</string>
   <string name="settingsStatisticsTitle">Statistics</string>
   <string name="settingsStatisticsSubtitle">View your reading habits and insights</string>
   <!-- Plurals -->

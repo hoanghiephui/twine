@@ -57,12 +57,14 @@ import dev.sasikanth.rss.reader.util.nameBasedUuidOf
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Instant
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.chunked
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import me.tatarka.inject.annotations.Inject
@@ -275,7 +277,6 @@ class RssRepository(
     postsSortOrder: PostsSortOrder,
     unreadOnly: Boolean? = null,
     after: Instant = Instant.DISTANT_PAST,
-    featuredPostsAfter: Instant = Instant.DISTANT_PAST,
     lastSyncedAt: Instant = Instant.DISTANT_FUTURE,
   ): PagingSource<Int, ResolvedPost> {
     return QueryPagingSource(
@@ -290,63 +291,234 @@ class RssRepository(
       transacter = postQueries,
       context = dispatchersProvider.databaseRead,
       queryProvider = { limit, offset ->
-        postQueries.allPosts(
+        when (postsSortOrder) {
+          PostsSortOrder.Latest ->
+            postQueries.allPostsLatest(
+              postsAfter = after,
+              lastSyncedAt = lastSyncedAt,
+              isSourceIdsEmpty = activeSourceIds.isEmpty(),
+              sourceIds = activeSourceIds,
+              unreadOnly = unreadOnly,
+              limit = limit,
+              offset = offset,
+              mapper = ::mapToResolvedPost,
+            )
+          PostsSortOrder.Oldest ->
+            postQueries.allPostsOldest(
+              postsAfter = after,
+              lastSyncedAt = lastSyncedAt,
+              isSourceIdsEmpty = activeSourceIds.isEmpty(),
+              sourceIds = activeSourceIds,
+              unreadOnly = unreadOnly,
+              limit = limit,
+              offset = offset,
+              mapper = ::mapToResolvedPost,
+            )
+          PostsSortOrder.AddedLatest ->
+            postQueries.allPostsAddedLatest(
+              postsAfter = after,
+              lastSyncedAt = lastSyncedAt,
+              isSourceIdsEmpty = activeSourceIds.isEmpty(),
+              sourceIds = activeSourceIds,
+              unreadOnly = unreadOnly,
+              limit = limit,
+              offset = offset,
+              mapper = ::mapToResolvedPost,
+            )
+          PostsSortOrder.AddedOldest ->
+            postQueries.allPostsAddedOldest(
+              postsAfter = after,
+              lastSyncedAt = lastSyncedAt,
+              isSourceIdsEmpty = activeSourceIds.isEmpty(),
+              sourceIds = activeSourceIds,
+              unreadOnly = unreadOnly,
+              limit = limit,
+              offset = offset,
+              mapper = ::mapToResolvedPost,
+            )
+        }
+      },
+    )
+  }
+
+  fun featuredPosts(
+    activeSourceIds: List<String>,
+    unreadOnly: Boolean? = null,
+    after: Instant = Instant.DISTANT_PAST,
+    featuredPostsAfter: Instant = Instant.DISTANT_PAST,
+    lastSyncedAt: Instant = Instant.DISTANT_FUTURE,
+    limit: Long = Constants.NUMBER_OF_FEATURED_POSTS,
+  ): Flow<List<ResolvedPost>> {
+    return postQueries
+      .featuredPosts(
+        featuredPostsAfter = featuredPostsAfter,
+        postsAfter = after,
+        lastSyncedAt = lastSyncedAt,
+        isSourceIdsEmpty = activeSourceIds.isEmpty(),
+        sourceIds = activeSourceIds,
+        unreadOnly = unreadOnly,
+        limit = limit,
+        mapper = ::mapToResolvedPost,
+      )
+      .asFlow()
+      .mapToList(dispatchersProvider.databaseRead)
+  }
+
+  suspend fun featuredPostsBlocking(
+    activeSourceIds: List<String>,
+    unreadOnly: Boolean? = null,
+    after: Instant = Instant.DISTANT_PAST,
+    featuredPostsAfter: Instant = Instant.DISTANT_PAST,
+    lastSyncedAt: Instant = Instant.DISTANT_FUTURE,
+    limit: Long = Constants.NUMBER_OF_FEATURED_POSTS,
+  ): List<ResolvedPost> {
+    return withContext(dispatchersProvider.databaseRead) {
+      postQueries
+        .featuredPosts(
+          featuredPostsAfter = featuredPostsAfter,
+          postsAfter = after,
+          lastSyncedAt = lastSyncedAt,
+          isSourceIdsEmpty = activeSourceIds.isEmpty(),
+          sourceIds = activeSourceIds,
+          unreadOnly = unreadOnly,
+          limit = limit,
+          mapper = ::mapToResolvedPost,
+        )
+        .executeAsList()
+    }
+  }
+
+  fun nonFeaturedPosts(
+    activeSourceIds: List<String>,
+    postsSortOrder: PostsSortOrder,
+    unreadOnly: Boolean? = null,
+    after: Instant = Instant.DISTANT_PAST,
+    featuredPostsAfter: Instant = Instant.DISTANT_PAST,
+    lastSyncedAt: Instant = Instant.DISTANT_FUTURE,
+    numberOfFeaturedPosts: Long = Constants.NUMBER_OF_FEATURED_POSTS,
+  ): PagingSource<Int, ResolvedPost> {
+    return QueryPagingSource(
+      countQuery =
+        postQueries.nonFeaturedPostsCount(
+          featuredPostsAfter = featuredPostsAfter,
+          postsAfter = after,
+          lastSyncedAt = lastSyncedAt,
+          isSourceIdsEmpty = activeSourceIds.isEmpty(),
+          sourceIds = activeSourceIds,
+          unreadOnly = unreadOnly,
+          numberOfFeaturedPosts = numberOfFeaturedPosts,
+        ),
+      transacter = postQueries,
+      context = dispatchersProvider.databaseRead,
+      queryProvider = { limit, offset ->
+        when (postsSortOrder) {
+          PostsSortOrder.Latest ->
+            postQueries.nonFeaturedPostsLatest(
+              featuredPostsAfter = featuredPostsAfter,
+              postsAfter = after,
+              lastSyncedAt = lastSyncedAt,
+              isSourceIdsEmpty = activeSourceIds.isEmpty(),
+              sourceIds = activeSourceIds,
+              unreadOnly = unreadOnly,
+              numberOfFeaturedPosts = numberOfFeaturedPosts,
+              limit = limit,
+              offset = offset,
+              mapper = ::mapToResolvedPost,
+            )
+          PostsSortOrder.Oldest ->
+            postQueries.nonFeaturedPostsOldest(
+              featuredPostsAfter = featuredPostsAfter,
+              postsAfter = after,
+              lastSyncedAt = lastSyncedAt,
+              isSourceIdsEmpty = activeSourceIds.isEmpty(),
+              sourceIds = activeSourceIds,
+              unreadOnly = unreadOnly,
+              numberOfFeaturedPosts = numberOfFeaturedPosts,
+              limit = limit,
+              offset = offset,
+              mapper = ::mapToResolvedPost,
+            )
+          PostsSortOrder.AddedLatest ->
+            postQueries.nonFeaturedPostsAddedLatest(
+              featuredPostsAfter = featuredPostsAfter,
+              postsAfter = after,
+              lastSyncedAt = lastSyncedAt,
+              isSourceIdsEmpty = activeSourceIds.isEmpty(),
+              sourceIds = activeSourceIds,
+              unreadOnly = unreadOnly,
+              numberOfFeaturedPosts = numberOfFeaturedPosts,
+              limit = limit,
+              offset = offset,
+              mapper = ::mapToResolvedPost,
+            )
+          PostsSortOrder.AddedOldest ->
+            postQueries.nonFeaturedPostsAddedOldest(
+              featuredPostsAfter = featuredPostsAfter,
+              postsAfter = after,
+              lastSyncedAt = lastSyncedAt,
+              isSourceIdsEmpty = activeSourceIds.isEmpty(),
+              sourceIds = activeSourceIds,
+              unreadOnly = unreadOnly,
+              numberOfFeaturedPosts = numberOfFeaturedPosts,
+              limit = limit,
+              offset = offset,
+              mapper = ::mapToResolvedPost,
+            )
+        }
+      },
+    )
+  }
+
+  suspend fun postPosition(
+    postId: String,
+    activeSourceIds: List<String>,
+    unreadOnly: Boolean? = null,
+    after: Instant = Instant.DISTANT_PAST,
+    lastSyncedAt: Instant = Instant.DISTANT_FUTURE,
+  ): Int {
+    return withContext(dispatchersProvider.databaseRead) {
+      val post = postQueries.post(postId, ::Post).executeAsOne()
+      postQueries
+        .postPosition(
           isSourceIdsEmpty = activeSourceIds.isEmpty(),
           sourceIds = activeSourceIds,
           unreadOnly = unreadOnly,
           postsAfter = after,
-          featuredPostsAfter = featuredPostsAfter,
-          numberOfFeaturedPosts = Constants.NUMBER_OF_FEATURED_POSTS,
           lastSyncedAt = lastSyncedAt,
-          orderBy = postsSortOrder.name,
-          limit = limit,
-          offset = offset,
-          mapper = {
-            id: String,
-            sourceId: String,
-            title: String,
-            description: String,
-            imageUrl: String?,
-            audioUrl: String?,
-            date: Instant,
-            createdAt: Instant,
-            link: String,
-            commentsLink: String?,
-            flags: Set<PostFlag>,
-            remoteId: String?,
-            feedName: String,
-            feedIcon: String,
-            feedHomepageLink: String,
-            alwaysFetchFullArticle: Boolean,
-            showFeedFavIcon: Boolean,
-            feedContentReadingTime: Long?,
-            articleContentReadingTime: Long?,
-            _: Boolean ->
-            ResolvedPost(
-              id = id,
-              sourceId = sourceId,
-              title = title,
-              description = description,
-              imageUrl = imageUrl,
-              audioUrl = audioUrl,
-              date = date,
-              createdAt = createdAt,
-              link = link,
-              commentsLink = commentsLink,
-              flags = flags,
-              feedName = feedName,
-              feedIcon = feedIcon,
-              feedHomepageLink = feedHomepageLink,
-              alwaysFetchFullArticle = alwaysFetchFullArticle,
-              showFeedFavIcon = showFeedFavIcon,
-              feedContentReadingTime = feedContentReadingTime?.toInt(),
-              articleContentReadingTime = articleContentReadingTime?.toInt(),
-              remoteId = remoteId,
-            )
-          },
+          postDate = post.postDate,
+          postCreatedAt = post.createdAt,
         )
-      },
-    )
+        .executeAsOne()
+        .toInt()
+    }
+  }
+
+  suspend fun nonFeaturedPostPosition(
+    postId: String,
+    activeSourceIds: List<String>,
+    unreadOnly: Boolean? = null,
+    after: Instant = Instant.DISTANT_PAST,
+    featuredPostsAfter: Instant = Instant.DISTANT_PAST,
+    lastSyncedAt: Instant = Instant.DISTANT_FUTURE,
+    numberOfFeaturedPosts: Long = Constants.NUMBER_OF_FEATURED_POSTS,
+  ): Int {
+    return withContext(dispatchersProvider.databaseRead) {
+      val post = postQueries.post(postId, ::Post).executeAsOne()
+      postQueries
+        .nonFeaturedPostPosition(
+          featuredPostsAfter = featuredPostsAfter,
+          postsAfter = after,
+          lastSyncedAt = lastSyncedAt,
+          numberOfFeaturedPosts = numberOfFeaturedPosts,
+          isSourceIdsEmpty = activeSourceIds.isEmpty(),
+          sourceIds = activeSourceIds,
+          unreadOnly = unreadOnly,
+          postDate = post.postDate,
+          postCreatedAt = post.createdAt,
+        )
+        .executeAsOne()
+        .toInt()
+    }
   }
 
   suspend fun updateBookmarkStatus(bookmarked: Boolean, id: String) {
@@ -699,17 +871,34 @@ class RssRepository(
     }
   }
 
-  fun search(searchQuery: String, sortOrder: SearchSortOrder): PagingSource<Int, ResolvedPost> {
+  fun search(
+    searchQuery: String,
+    sortOrder: SearchSortOrder,
+    sourceIds: List<String> = emptyList(),
+    onlyBookmarked: Boolean = false,
+    onlyUnread: Boolean = false,
+  ): PagingSource<Int, ResolvedPost> {
     val sanitizedSearchQuery = sanitizeSearchQuery(searchQuery)
 
     return QueryPagingSource(
-      countQuery = postSearchFTSQueries.countSearchResults(sanitizedSearchQuery),
+      countQuery =
+        postSearchFTSQueries.countSearchResults(
+          searchQuery = sanitizedSearchQuery,
+          isSourceIdsEmpty = sourceIds.isEmpty(),
+          sourceIds = sourceIds,
+          onlyBookmarked = if (onlyBookmarked) 1L else 0L,
+          onlyUnread = if (onlyUnread) 1L else 0L,
+        ),
       transacter = postSearchFTSQueries,
       context = dispatchersProvider.databaseRead,
       queryProvider = { limit, offset ->
         postSearchFTSQueries.search(
           searchQuery = sanitizedSearchQuery,
           sortOrder = sortOrder.value,
+          isSourceIdsEmpty = sourceIds.isEmpty(),
+          sourceIds = sourceIds,
+          onlyBookmarked = if (onlyBookmarked) 1L else 0L,
+          onlyUnread = if (onlyUnread) 1L else 0L,
           limit = limit,
           offset = offset,
           mapper = {
@@ -1879,14 +2068,58 @@ class RssRepository(
           ReadingTrend(date = it.date, count = it.count)
         }
 
-      kotlinx.coroutines.flow.flowOf(
+      flowOf(
         ReadingStatistics(
           totalReadCount = totalReadCount,
-          topFeeds = topFeeds,
-          readingTrends = readingTrends,
+          topFeeds = topFeeds.toImmutableList(),
+          readingTrends = readingTrends.toImmutableList(),
         )
       )
     }
+  }
+
+  private fun mapToResolvedPost(
+    id: String,
+    sourceId: String,
+    title: String,
+    description: String,
+    imageUrl: String?,
+    audioUrl: String?,
+    date: Instant,
+    createdAt: Instant,
+    link: String,
+    commentsLink: String?,
+    flags: Set<PostFlag>,
+    remoteId: String?,
+    feedName: String,
+    feedIcon: String,
+    feedHomepageLink: String,
+    alwaysFetchFullArticle: Boolean,
+    showFeedFavIcon: Boolean,
+    feedContentReadingTime: Long?,
+    articleContentReadingTime: Long?,
+  ): ResolvedPost {
+    return ResolvedPost(
+      id = id,
+      sourceId = sourceId,
+      title = title,
+      description = description,
+      imageUrl = imageUrl,
+      audioUrl = audioUrl,
+      date = date,
+      createdAt = createdAt,
+      link = link,
+      commentsLink = commentsLink,
+      flags = flags,
+      feedName = feedName,
+      feedIcon = feedIcon,
+      feedHomepageLink = feedHomepageLink,
+      alwaysFetchFullArticle = alwaysFetchFullArticle,
+      showFeedFavIcon = showFeedFavIcon,
+      feedContentReadingTime = feedContentReadingTime?.toInt(),
+      articleContentReadingTime = articleContentReadingTime?.toInt(),
+      remoteId = remoteId,
+    )
   }
 
   private fun sanitizeSearchQuery(searchQuery: String): String {

@@ -73,6 +73,10 @@
   <string name="settingsOpmlImporting">Importing.. %1$d%</string>
   <string name="settingsOpmlExporting">Exporting.. %1$d%</string>
   <string name="settingsOpmlCancel">Cancel</string>
+  <string name="settingsOpmlSelectionTitle">Select feeds</string>
+  <string name="settingsOpmlSelectionSubtitle">You can select up to %1$d feeds under the free plan.</string>
+  <string name="settingsFreeFeedLimitReached">You have reached the maximum number of free feeds.</string>
+  <string name="settingsUpgradeToPremium">Go Premium</string>
   <string name="settingsPostsDeletionPeriodTitle">Delete read posts older than</string>
   <string name="settingsPostsDeletionPeriodOneWeek">1 week</string>
   <string name="settingsPostsDeletionPeriodOneMonth">1 month</string>
@@ -173,6 +177,8 @@
   <string name="blockedWordsHint">Enter a word</string>
   <string name="blockedWordsDesc">Post can be hidden from the home screen based on their text. We recommend avoiding common words that appear in many posts, since it can result in no posts being shown or negatively impacting app performance. \n\nHidden posts will still be displayed in search &amp; bookmarks.</string>
   <string name="blockedWordsEmpty">You haven't blocked any words yet</string>
+  <string name="readMore">Read more</string>
+  <string name="readLess">Read less</string>
   <string name="markArticleAsRead">Mark article as read</string>
   <string name="markArticleAsReadOnOpen">On Open</string>
   <string name="markArticleAsReadOnScroll">On Scroll</string>
@@ -247,13 +253,19 @@
   <string name="seek_forward">Seek forward 30 seconds</string>
   <string name="seek_backward">Seek backward 30 seconds</string>
   <string name="playback_speed">%1$dx</string>
+  <string name="sleep_timer">Sleep timer</string>
+  <string name="sleep_timer_off">Off</string>
+  <string name="sleep_timer_end_of_track">End of track</string>
+  <string name="sleep_timer_minutes">%1$d minutes</string>
 
   <!-- Statistics -->
   <string name="statistics">Statistics</string>
   <string name="statisticsNoData">No reading data available yet</string>
   <string name="statisticsTotalRead">Total Articles Read</string>
   <string name="statisticsTopFeeds">Top 10 Feeds</string>
-  <string name="statisticsReadingTrends">Reading Trends (Last 30 Days)</string>
+  <string name="statisticsReadingTrends">Reading Trends</string>
+  <string name="statisticsLess">Less</string>
+  <string name="statisticsMore">More</string>
   <string name="settingsStatisticsTitle">Statistics</string>
   <string name="settingsStatisticsSubtitle">View your reading habits and insights</string>
 

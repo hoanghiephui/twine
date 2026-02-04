@@ -23,6 +23,8 @@ import dev.sasikanth.rss.reader.app.AppIcon
 import dev.sasikanth.rss.reader.app.AppIconManager
 import dev.sasikanth.rss.reader.app.AppInfo
 import dev.sasikanth.rss.reader.billing.BillingHandler
+import dev.sasikanth.rss.reader.data.opml.OpmlFeed
+import dev.sasikanth.rss.reader.data.opml.OpmlFeedGroup
 import dev.sasikanth.rss.reader.data.opml.OpmlManager
 import dev.sasikanth.rss.reader.data.refreshpolicy.RefreshPolicy
 import dev.sasikanth.rss.reader.data.repository.AppThemeMode
@@ -37,7 +39,9 @@ import dev.sasikanth.rss.reader.data.sync.CloudServiceProvider
 import dev.sasikanth.rss.reader.data.sync.SyncCoordinator
 import dev.sasikanth.rss.reader.data.sync.auth.OAuthManager
 import dev.sasikanth.rss.reader.notifications.Notifier
+import dev.sasikanth.rss.reader.utils.Constants
 import dev.sasikanth.rss.reader.utils.combine
+import kotlin.time.Instant
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -84,7 +88,7 @@ class SettingsViewModel(
         settingsRepository.blockImages,
         settingsRepository.enableNotifications,
         settingsRepository.downloadFullContent,
-        refreshPolicy.instantFlow,
+        refreshPolicy.lastSyncedAtFlow,
         userRepository.user(),
         settingsRepository.appIcon,
       ) {
@@ -206,6 +210,20 @@ class SettingsViewModel(
         _state.update { it.copy(showAppIconSelectionSheet = false) }
       }
       SettingsEvent.DeleteAppData -> deleteAppData()
+      is SettingsEvent.OnOpmlFeedsSelected -> onOpmlFeedsSelected(event.feeds)
+      SettingsEvent.ClearOpmlFeedsToSelect -> {
+        _state.update { it.copy(opmlFeedsToSelect = null) }
+      }
+      SettingsEvent.MarkFreeFeedLimitWarningAsDone -> {
+        _state.update { it.copy(showFreeFeedLimitWarning = false) }
+      }
+    }
+  }
+
+  private fun onOpmlFeedsSelected(feeds: List<OpmlFeed>) {
+    viewModelScope.launch {
+      _state.update { it.copy(opmlFeedsToSelect = null) }
+      opmlManager.import(feeds)
     }
   }
 
@@ -336,10 +354,31 @@ class SettingsViewModel(
 
   private fun importOpmlClicked() {
     viewModelScope.launch {
-      if (billingHandler.isSubscribed()) {
-        opmlManager.import()
+      val isSubscribed = billingHandler.isSubscribed()
+      if (!isSubscribed) {
+        val feedsCount = rssRepository.numberOfFeeds().first()
+        if (feedsCount >= Constants.MAX_FREE_FEEDS) {
+          _state.update { it.copy(showFreeFeedLimitWarning = true) }
+          return@launch
+        }
+      }
+
+      val opmlSources = opmlManager.pickAndDecode()
+      if (opmlSources.isNullOrEmpty()) {
+        return@launch
+      }
+
+      if (isSubscribed) {
+        opmlManager.import(opmlSources)
       } else {
-        _state.update { it.copy(openPaywall = true) }
+        val feeds =
+          opmlSources.flatMap { source ->
+            when (source) {
+              is OpmlFeed -> listOf(source)
+              is OpmlFeedGroup -> source.feeds
+            }
+          }
+        _state.update { it.copy(opmlFeedsToSelect = feeds) }
       }
     }
   }
@@ -381,7 +420,7 @@ private data class Settings(
   val blockImages: Boolean,
   val enableNotifications: Boolean,
   val downloadFullContent: Boolean,
-  val lastSyncedAt: kotlin.time.Instant?,
+  val lastSyncedAt: Instant?,
   val lastSyncStatus: SettingsState.SyncProgress,
   val hasCloudServiceSignedIn: Boolean,
   val appIcon: AppIcon,

@@ -52,13 +52,15 @@ sealed interface HomeEvent {
 
   data class ChangeHomeViewMode(val homeViewMode: HomeViewMode) : HomeEvent
 
-  data class UpdateVisibleItemIndex(val index: Int) : HomeEvent
+  data class UpdateVisibleItemIndex(val index: Int, val postId: String? = null) : HomeEvent
 
   data object LoadNewArticlesClick : HomeEvent
 
   data object UpdateDate : HomeEvent
 
   data class UpdatePrevActiveSource(val source: Source?) : HomeEvent
+
+  data class OnPostClicked(val post: ResolvedPost) : HomeEvent
 
   data class ShowPostsSortFilter(val show: Boolean) : HomeEvent
 
