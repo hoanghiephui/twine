@@ -36,7 +36,7 @@ import dev.sasikanth.rss.reader.data.sync.SyncCoordinator
 import dev.sasikanth.rss.reader.data.utils.PostsFilterUtils
 import dev.sasikanth.rss.reader.posts.AllPostsPager
 import dev.sasikanth.rss.reader.utils.InAppRating
-import dev.sasikanth.rss.reader.utils.NTuple6
+import dev.sasikanth.rss.reader.utils.NTuple7
 import dev.sasikanth.rss.reader.utils.combine as flowCombine
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
@@ -54,9 +54,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
-import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.toInstant
-import kotlinx.datetime.toLocalDateTime
 import me.tatarka.inject.annotations.Inject
 
 @Inject
@@ -72,10 +70,7 @@ class HomeViewModel(
 
   private val scrolledPostItems = mutableSetOf<String>()
 
-  private val defaultState =
-    HomeState.default(
-      currentDateTime = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
-    )
+  private val defaultState = HomeState.default()
   private val _state = MutableStateFlow(defaultState)
   val state: StateFlow<HomeState>
     get() = _state
@@ -105,7 +100,6 @@ class HomeViewModel(
       is HomeEvent.ChangeHomeViewMode -> changeHomeViewMode(event.homeViewMode)
       is HomeEvent.UpdateVisibleItemIndex -> updateVisibleItemIndex(event.index, event.postId)
       is HomeEvent.LoadNewArticlesClick -> loadNewArticles()
-      is HomeEvent.UpdateDate -> updateDate()
       is HomeEvent.UpdatePrevActiveSource -> updatePrevActiveSource(event)
       is HomeEvent.OnPostsSortFilterApplied -> onPostsSortFilterApplied(event)
       is HomeEvent.ShowPostsSortFilter -> showPostsSortFilter(event.show)
@@ -118,6 +112,9 @@ class HomeViewModel(
       val postsAfter = postsThresholdTime(_state.value.postsType)
       val activeSourceIds = activeSourceIds(_state.value.activeSource)
       val unreadOnly = PostsFilterUtils.shouldGetUnreadPostsOnly(_state.value.postsType)
+      val postsUpperBound =
+        _state.value.lastRefreshedAt?.toInstant(TimeZone.currentSystemDefault())
+          ?: Clock.System.now()
 
       val position =
         rssRepository.postPosition(
@@ -125,6 +122,7 @@ class HomeViewModel(
           activeSourceIds = activeSourceIds,
           unreadOnly = unreadOnly,
           after = postsAfter,
+          postsUpperBound = postsUpperBound,
         )
 
       _openPost.emit(position to post)
@@ -192,21 +190,35 @@ class HomeViewModel(
         settingsRepository.homeViewMode,
         allPostsPager.hasUnreadPosts,
         allPostsPager.unreadSinceLastSync,
-      ) { activeSource, postsType, postsSortOrder, homeViewMode, hasUnreadPosts, unreadSinceLastSync
-        ->
-        NTuple6(
+        refreshPolicy.lastRefreshedAtFlow,
+      ) {
+        activeSource,
+        postsType,
+        postsSortOrder,
+        homeViewMode,
+        hasUnreadPosts,
+        unreadSinceLastSync,
+        lastRefreshedAt ->
+        NTuple7(
           activeSource,
           postsType,
           postsSortOrder,
           homeViewMode,
           hasUnreadPosts,
           unreadSinceLastSync,
+          lastRefreshedAt,
         )
       }
       .distinctUntilChanged()
       .onEach {
-        (activeSource, postsType, postsSortOrder, homeViewMode, hasUnreadPosts, unreadSinceLastSync)
-        ->
+        (
+          activeSource,
+          postsType,
+          postsSortOrder,
+          homeViewMode,
+          hasUnreadPosts,
+          unreadSinceLastSync,
+          lastRefreshedAt) ->
         _state.update {
           it.copy(
             activeSource = activeSource,
@@ -215,6 +227,7 @@ class HomeViewModel(
             homeViewMode = homeViewMode,
             hasUnreadPosts = hasUnreadPosts,
             unreadSinceLastSync = unreadSinceLastSync,
+            lastRefreshedAt = lastRefreshedAt,
           )
         }
       }
@@ -223,14 +236,6 @@ class HomeViewModel(
 
   private fun updatePrevActiveSource(event: HomeEvent.UpdatePrevActiveSource) {
     _state.update { it.copy(prevActiveSource = event.source) }
-  }
-
-  private fun updateDate() {
-    val currentDate = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
-
-    if (_state.value.currentDateTime.date != currentDate.date) {
-      _state.update { it.copy(currentDateTime = currentDate) }
-    }
   }
 
   private fun loadNewArticles() {
@@ -252,9 +257,14 @@ class HomeViewModel(
         } else {
           val postsAfter = postsThresholdTime(_state.value.postsType)
           val featuredPostsAfter =
-            _state.value.currentDateTime.toInstant(TimeZone.currentSystemDefault()).minus(24.hours)
+            (_state.value.lastRefreshedAt?.toInstant(TimeZone.currentSystemDefault())
+                ?: Clock.System.now())
+              .minus(24.hours)
           val activeSourceIds = activeSourceIds(_state.value.activeSource)
           val unreadOnly = PostsFilterUtils.shouldGetUnreadPostsOnly(_state.value.postsType)
+          val lastRefreshedAt =
+            _state.value.lastRefreshedAt?.toInstant(TimeZone.currentSystemDefault())
+              ?: Clock.System.now()
 
           val position =
             rssRepository.nonFeaturedPostPosition(
@@ -263,6 +273,7 @@ class HomeViewModel(
               unreadOnly = unreadOnly,
               after = postsAfter,
               featuredPostsAfter = featuredPostsAfter,
+              postsUpperBound = lastRefreshedAt,
             )
 
           val adjustedIndex = position + featuredPosts.size
@@ -346,15 +357,14 @@ class HomeViewModel(
   }
 
   private fun postsThresholdTime(postsType: PostsType): Instant {
-    val dateTime = _state.value.currentDateTime
-    return when (postsType) {
-      PostsType.ALL,
-      PostsType.UNREAD -> Instant.DISTANT_PAST
-      PostsType.TODAY -> {
-        dateTime.date.atStartOfDayIn(TimeZone.currentSystemDefault())
-      }
-      PostsType.LAST_24_HOURS -> {
-        dateTime.toInstant(TimeZone.currentSystemDefault()).minus(24.hours)
+    val lastRefreshedAt = _state.value.lastRefreshedAt
+    return if (lastRefreshedAt != null) {
+      PostsFilterUtils.postsThresholdTime(postsType, lastRefreshedAt)
+    } else {
+      when (postsType) {
+        PostsType.ALL,
+        PostsType.UNREAD -> Instant.DISTANT_PAST
+        else -> Clock.System.now().minus(24.hours)
       }
     }
   }

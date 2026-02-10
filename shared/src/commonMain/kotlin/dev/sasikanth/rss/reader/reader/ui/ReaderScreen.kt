@@ -91,6 +91,7 @@ import dev.sasikanth.rss.reader.components.CircularIconButton
 import dev.sasikanth.rss.reader.components.HorizontalPageIndicators
 import dev.sasikanth.rss.reader.components.PageIndicatorState
 import dev.sasikanth.rss.reader.core.model.local.ResolvedPost
+import dev.sasikanth.rss.reader.data.repository.ReaderColorScheme
 import dev.sasikanth.rss.reader.data.repository.ReaderFont
 import dev.sasikanth.rss.reader.platform.LocalLinkHandler
 import dev.sasikanth.rss.reader.reader.ReaderEvent
@@ -101,6 +102,7 @@ import dev.sasikanth.rss.reader.resources.icons.ArrowBack
 import dev.sasikanth.rss.reader.resources.icons.Platform
 import dev.sasikanth.rss.reader.resources.icons.TwineIcons
 import dev.sasikanth.rss.reader.resources.icons.platform
+import dev.sasikanth.rss.reader.ui.AppColorScheme
 import dev.sasikanth.rss.reader.ui.AppTheme
 import dev.sasikanth.rss.reader.ui.ComicNeueFontFamily
 import dev.sasikanth.rss.reader.ui.GolosFontFamily
@@ -133,6 +135,8 @@ internal fun ReaderScreen(
   onPostChanged: (Int, String) -> Unit,
   onBack: () -> Unit,
   openPaywall: () -> Unit,
+  toggleLightStatusBar: (Boolean) -> Unit,
+  toggleLightNavBar: (Boolean) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val coroutineScope = rememberCoroutineScope()
@@ -144,13 +148,14 @@ internal fun ReaderScreen(
   val dynamicColorEnabled = LocalDynamicColorEnabled.current
   val shouldBlockImage = LocalBlockImage.current
 
-  // Using theme colors as default from the home screen
-  // before we create dynamic content theme
-  val dynamicColorState =
+  val defaultLight = remember { appDynamicColorState.lightAppColorScheme }
+  val defaultDark = remember { appDynamicColorState.darkAppColorScheme }
+  val articleDynamicColorState =
     rememberDynamicColorState(
-      defaultLightAppColorScheme = appDynamicColorState.lightAppColorScheme,
-      defaultDarkAppColorScheme = appDynamicColorState.darkAppColorScheme,
+      defaultLightAppColorScheme = defaultLight.toValues(),
+      defaultDarkAppColorScheme = defaultDark.toValues(),
     )
+
   val readerLinkHandler = remember {
     object : UriHandler {
       override fun openUri(uri: String) {
@@ -162,23 +167,23 @@ internal fun ReaderScreen(
   val exitScreen by viewModel.exitScreen.collectAsStateWithLifecycle(false)
 
   pagerState.CollectItemTransition(
-    key = posts.itemCount,
+    posts.itemCount,
+    state.selectedReaderColorScheme,
     itemProvider = { index ->
       if (shouldBlockImage || posts.itemCount == 0) null else posts.peek(index)
     },
   ) { fromItem, toItem, offset ->
-    val fromSeedColor = seedColorExtractor.calculateSeedColor(url = fromItem?.imageUrl)
-    val toSeedColor = seedColorExtractor.calculateSeedColor(url = toItem?.imageUrl)
+    if (dynamicColorEnabled && state.selectedReaderColorScheme == ReaderColorScheme.Dynamic) {
+      val fromSeedColor = seedColorExtractor.calculateSeedColor(url = fromItem?.imageUrl)
+      val toSeedColor = seedColorExtractor.calculateSeedColor(url = toItem?.imageUrl)
 
-    if (dynamicColorEnabled) {
-      dynamicColorState.animate(
+      articleDynamicColorState.animate(
         fromSeedColor = fromSeedColor,
         toSeedColor = toSeedColor,
         progress = offset,
       )
     }
   }
-
   LaunchedEffect(state.openPaywall) {
     if (state.openPaywall) {
       openPaywall()
@@ -196,31 +201,57 @@ internal fun ReaderScreen(
     viewModel.dispatch(ReaderEvent.HideReaderCustomisations)
   }
 
+  val isParentThemeDark = AppTheme.isDark
+  val isDarkTheme =
+    remember(state.selectedReaderColorScheme, isParentThemeDark) {
+      state.selectedReaderColorScheme.isDark(isParentThemeDark)
+    }
+
+  LaunchedEffect(isDarkTheme) {
+    toggleLightStatusBar(!isDarkTheme)
+    toggleLightNavBar(!isDarkTheme)
+  }
+
+  val snackbarHostState = remember { SnackbarHostState() }
+  val scrollBehaviour = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+  val fontFamily =
+    when (state.selectedReaderFont) {
+      ReaderFont.ComicNeue -> ComicNeueFontFamily
+      ReaderFont.GoogleSans -> GoogleSansFontFamily
+      ReaderFont.Golos -> GolosFontFamily
+      ReaderFont.Lora -> LoraFontFamily
+      ReaderFont.Merriweather -> MerriWeatherFontFamily
+      ReaderFont.RobotoSerif -> RobotoSerifFontFamily
+    }
+  val typography =
+    typography(
+      fontFamily = fontFamily,
+      fontScalingFactor = state.readerFontScaleFactor,
+      lineHeightScalingFactor = state.readerLineHeightScaleFactor,
+    )
+
   CompositionLocalProvider(
-    LocalDynamicColorState provides dynamicColorState,
+    LocalDynamicColorState provides articleDynamicColorState,
     LocalUriHandler provides readerLinkHandler,
   ) {
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scrollBehaviour = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    val fontFamily =
-      when (state.selectedReaderFont) {
-        ReaderFont.ComicNeue -> ComicNeueFontFamily
-        ReaderFont.GoogleSans -> GoogleSansFontFamily
-        ReaderFont.Golos -> GolosFontFamily
-        ReaderFont.Lora -> LoraFontFamily
-        ReaderFont.Merriweather -> MerriWeatherFontFamily
-        ReaderFont.RobotoSerif -> RobotoSerifFontFamily
+    val overriddenColorScheme =
+      remember(state.selectedReaderColorScheme, isDarkTheme) {
+        when (state.selectedReaderColorScheme) {
+          ReaderColorScheme.Dynamic -> null
+          ReaderColorScheme.Sepia -> sepiaColorScheme()
+          ReaderColorScheme.Solarized -> solarizedColorScheme(isDarkTheme)
+          ReaderColorScheme.Parchment -> parchmentColorScheme()
+          ReaderColorScheme.Midnight -> midnightColorScheme()
+          ReaderColorScheme.Forest -> forestColorScheme()
+          ReaderColorScheme.Slate -> slateColorScheme()
+        }
       }
-    val typography =
-      typography(
-        fontFamily = fontFamily,
-        fontScalingFactor = state.readerFontScaleFactor,
-        lineHeightScalingFactor = state.readerLineHeightScaleFactor,
-      )
 
-    val isParentThemeDark = AppTheme.isDark
-    AppTheme(useDarkTheme = isParentThemeDark, typography = typography) {
-      val isDarkTheme = AppTheme.isDark
+    AppTheme(
+      useDarkTheme = isDarkTheme,
+      typography = typography,
+      overriddenColorScheme = overriddenColorScheme,
+    ) {
       val nestedScrollModifier =
         if (platform !is Platform.Desktop) {
           Modifier.nestedScroll(scrollBehaviour.nestedScrollConnection)
@@ -246,7 +277,7 @@ internal fun ReaderScreen(
             }
           },
         topBar = {
-          val topBarScrimColor = AppTheme.colorScheme.backdrop
+          val colorScheme = AppTheme.colorScheme
           val scrollBehavior =
             if (platform !is Platform.Desktop) {
               scrollBehaviour
@@ -258,7 +289,7 @@ internal fun ReaderScreen(
             modifier =
               Modifier.drawBehind {
                 drawRect(
-                  brush = Brush.verticalGradient(listOf(topBarScrimColor, Color.Transparent))
+                  brush = Brush.verticalGradient(listOf(colorScheme.backdrop, Color.Transparent))
                 )
               },
             expandedHeight = 72.dp,
@@ -324,19 +355,25 @@ internal fun ReaderScreen(
             val showFullArticle by pageViewModel.showFullArticle.collectAsStateWithLifecycle()
 
             ReaderActionsPanel(
+              isParentThemeDark = isParentThemeDark,
               isDarkTheme = isDarkTheme,
               loadFullArticle = showFullArticle,
               showReaderCustomisations = state.showReaderCustomisations,
               selectedFont = state.selectedReaderFont,
+              selectedColorScheme = state.selectedReaderColorScheme,
               fontScaleFactor = state.readerFontScaleFactor,
               fontLineHeightFactor = state.readerLineHeightScaleFactor,
               isSubscribed = state.isSubscribed,
+              overriddenColorScheme = overriddenColorScheme,
               openInBrowserClick = {
                 coroutineScope.launch { linkHandler.openLink(readerPost.link) }
               },
               loadFullArticleClick = { pageViewModel.toggleFullArticle() },
               openReaderViewSettings = { viewModel.dispatch(ReaderEvent.ShowReaderCustomisations) },
               onFontChange = { font -> viewModel.dispatch(ReaderEvent.UpdateReaderFont(font)) },
+              onColorSchemeChange = { colorScheme ->
+                viewModel.dispatch(ReaderEvent.UpdateReaderColorScheme(colorScheme))
+              },
               onFontScaleFactorChange = { fontScaleFactor ->
                 viewModel.dispatch(ReaderEvent.UpdateFontScaleFactor(fontScaleFactor))
               },
@@ -424,6 +461,7 @@ internal fun ReaderScreen(
                 pagerState = pagerState,
                 markdownComponents = markdownComponents,
                 isDarkTheme = isDarkTheme,
+                readerColorScheme = state.selectedReaderColorScheme,
                 onBookmarkClick = {
                   viewModel.dispatch(
                     ReaderEvent.TogglePostBookmark(
@@ -458,10 +496,12 @@ internal fun ReaderScreen(
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun ReaderActionsPanel(
+  isParentThemeDark: Boolean,
   isDarkTheme: Boolean,
   loadFullArticle: Boolean,
   showReaderCustomisations: Boolean,
   selectedFont: ReaderFont,
+  selectedColorScheme: ReaderColorScheme,
   fontScaleFactor: Float,
   fontLineHeightFactor: Float,
   isSubscribed: Boolean,
@@ -469,11 +509,13 @@ private fun ReaderActionsPanel(
   loadFullArticleClick: () -> Unit,
   openReaderViewSettings: () -> Unit,
   onFontChange: (ReaderFont) -> Unit,
+  onColorSchemeChange: (ReaderColorScheme) -> Unit,
   onFontScaleFactorChange: (Float) -> Unit,
   onFontLineHeightFactorChange: (Float) -> Unit,
   modifier: Modifier = Modifier,
+  overriddenColorScheme: AppColorScheme? = null,
 ) {
-  val navBarScrimColor = AppTheme.colorScheme.backdrop
+  val colorScheme = AppTheme.colorScheme
 
   LookaheadScope {
     Box(
@@ -481,7 +523,9 @@ private fun ReaderActionsPanel(
         Modifier.fillMaxWidth()
           .wrapContentHeight()
           .drawBehind {
-            drawRect(brush = Brush.verticalGradient(listOf(Color.Transparent, navBarScrimColor)))
+            drawRect(
+              brush = Brush.verticalGradient(listOf(Color.Transparent, colorScheme.backdrop))
+            )
           }
           .animateBounds(
             lookaheadScope = this,
@@ -543,19 +587,23 @@ private fun ReaderActionsPanel(
             if (targetState) {
               ReaderCustomizationsContent(
                 selectedFont = selectedFont,
+                selectedColorScheme = selectedColorScheme,
                 fontScaleFactor = fontScaleFactor,
                 fontLineHeightFactor = fontLineHeightFactor,
                 isSubscribed = isSubscribed,
+                isParentThemeDark = isParentThemeDark,
                 onFontChange = onFontChange,
+                onColorSchemeChange = onColorSchemeChange,
                 onFontScaleFactorChange = onFontScaleFactorChange,
                 onFontLineHeightFactorChange = onFontLineHeightFactorChange,
               )
             } else {
               ReaderViewBottomBar(
-                loadFullArticle,
-                openInBrowserClick,
-                loadFullArticleClick,
-                openReaderViewSettings,
+                selectedAppColorScheme = overriddenColorScheme,
+                loadFullArticle = loadFullArticle,
+                openInBrowserClick = openInBrowserClick,
+                loadFullArticleClick = loadFullArticleClick,
+                openReaderViewSettings = openReaderViewSettings,
               )
             }
           }

@@ -18,6 +18,7 @@
 package dev.sasikanth.rss.reader.reader.page.ui
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -27,10 +28,14 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandIn
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
@@ -52,15 +57,14 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.selection.TextSelectionColors
-import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
@@ -81,7 +85,6 @@ import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTooltipState
-import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.derivedStateOf
@@ -93,10 +96,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -107,6 +113,7 @@ import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.graphics.shapes.Morph
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -119,6 +126,7 @@ import com.mikepenz.markdown.compose.LocalMarkdownPadding
 import com.mikepenz.markdown.compose.LocalMarkdownTypography
 import com.mikepenz.markdown.compose.LocalReferenceLinkHandler
 import com.mikepenz.markdown.compose.MarkdownElement
+import com.mikepenz.markdown.compose.components.CurrentComponentsBridge.text
 import com.mikepenz.markdown.compose.components.MarkdownComponents
 import com.mikepenz.markdown.m3.markdownColor
 import com.mikepenz.markdown.m3.markdownTypography
@@ -131,6 +139,7 @@ import com.mikepenz.markdown.model.markdownPadding
 import dev.sasikanth.rss.reader.components.image.FeedIcon
 import dev.sasikanth.rss.reader.core.model.local.ResolvedPost
 import dev.sasikanth.rss.reader.core.network.utils.UrlUtils
+import dev.sasikanth.rss.reader.data.repository.ReaderColorScheme
 import dev.sasikanth.rss.reader.home.ui.FeaturedImage
 import dev.sasikanth.rss.reader.home.ui.PostMetadataConfig
 import dev.sasikanth.rss.reader.markdown.CoilMarkdownTransformer
@@ -194,6 +203,7 @@ internal fun ReaderPage(
   pagerState: PagerState,
   markdownComponents: MarkdownComponents,
   isDarkTheme: Boolean,
+  readerColorScheme: ReaderColorScheme,
   onBookmarkClick: () -> Unit,
   onMarkAsUnread: () -> Unit,
   modifier: Modifier = Modifier,
@@ -277,6 +287,7 @@ internal fun ReaderPage(
                 pagerState = pagerState,
                 excerpt = excerptState,
                 darkTheme = isDarkTheme,
+                readerColorScheme = readerColorScheme,
                 onCommentsClick = {
                   coroutineScope.launch { linkHandler.openLink(readerPost.commentsLink) }
                 },
@@ -389,6 +400,7 @@ private fun PostHeader(
   pagerState: PagerState,
   excerpt: String,
   darkTheme: Boolean,
+  readerColorScheme: ReaderColorScheme,
   onCommentsClick: () -> Unit,
   onShareClick: () -> Unit,
   onBookmarkClick: () -> Unit,
@@ -458,12 +470,14 @@ private fun PostHeader(
       Text(
         modifier =
           Modifier.padding(top = 12.dp).graphicsLayer {
-            blendMode =
-              if (darkTheme) {
-                BlendMode.Screen
-              } else {
-                BlendMode.Multiply
-              }
+            if (readerColorScheme == ReaderColorScheme.Dynamic) {
+              blendMode =
+                if (readerColorScheme.isDark(darkTheme)) {
+                  BlendMode.Screen
+                } else {
+                  BlendMode.Multiply
+                }
+            }
           },
         text = title.ifBlank { description },
         style = MaterialTheme.typography.headlineMedium,
@@ -697,6 +711,7 @@ private fun MediaControls(
   onSleepTimerClick: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  val haptic = LocalHapticFeedback.current
   val isPlaying = playbackState.isPlaying || playbackState.buffering
   val progress =
     if (playbackState.duration > 0) {
@@ -704,6 +719,9 @@ private fun MediaControls(
     } else {
       0f
     }
+  val showExtendedControls = playbackState.duration > 0
+  val extendedControlsAnimationSpec =
+    spring<IntSize>(stiffness = Spring.StiffnessLow, dampingRatio = Spring.DampingRatioMediumBouncy)
 
   Column(
     modifier =
@@ -711,33 +729,57 @@ private fun MediaControls(
         .fillMaxWidth()
         .background(AppTheme.colorScheme.surface, RoundedCornerShape(16.dp))
         .padding(16.dp),
-    verticalArrangement = Arrangement.spacedBy(16.dp),
+    verticalArrangement = Arrangement.spacedBy(if (showExtendedControls) 16.dp else 0.dp),
   ) {
-    Column {
-      Slider(
-        modifier = Modifier.padding(top = 8.dp),
-        value = progress,
-        onValueChange = { onSeek((it * playbackState.duration).toLong()) },
-        colors =
+    AnimatedVisibility(
+      visible = showExtendedControls,
+      enter = fadeIn() + expandVertically(animationSpec = extendedControlsAnimationSpec),
+      exit = fadeOut() + shrinkVertically(animationSpec = extendedControlsAnimationSpec),
+    ) {
+      Column {
+        val sliderColors =
           SliderDefaults.colors(
-            thumbColor = AppTheme.colorScheme.primary,
-            activeTrackColor = AppTheme.colorScheme.primary,
-            inactiveTrackColor = AppTheme.colorScheme.primary.copy(alpha = 0.24f),
-          ),
-      )
+            activeTrackColor = AppTheme.colorScheme.primaryContainer,
+            inactiveTrackColor = AppTheme.colorScheme.surfaceContainerHigh,
+          )
+        Slider(
+          modifier = Modifier.padding(top = 8.dp),
+          value = progress,
+          onValueChange = {
+            val newPosition = (it * playbackState.duration).toLong()
+            val currentPosition = (progress * playbackState.duration).toLong()
+            if (newPosition / 1000 != currentPosition / 1000) {
+              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            }
+            onSeek(newPosition)
+          },
+          thumb = {
+            Box(
+              modifier =
+                Modifier.requiredSize(24.dp)
+                  .shadow(elevation = 2.dp, shape = CircleShape)
+                  .background(AppTheme.colorScheme.inverseSurface, CircleShape)
+                  .border(1.dp, AppTheme.colorScheme.secondary, CircleShape)
+            )
+          },
+          track = {
+            SliderDefaults.Track(sliderState = it, thumbTrackGapSize = 0.dp, colors = sliderColors)
+          },
+        )
 
-      Row(modifier = Modifier.fillMaxWidth()) {
-        Text(
-          text = formatDuration(playbackState.currentPosition),
-          style = MaterialTheme.typography.labelSmall,
-          color = AppTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.weight(1f))
-        Text(
-          text = formatDuration(playbackState.duration),
-          style = MaterialTheme.typography.labelSmall,
-          color = AppTheme.colorScheme.onSurfaceVariant,
-        )
+        Row(modifier = Modifier.fillMaxWidth()) {
+          Text(
+            text = formatDuration(playbackState.currentPosition),
+            style = MaterialTheme.typography.labelSmall,
+            color = AppTheme.colorScheme.onSurfaceVariant,
+          )
+          Spacer(Modifier.weight(1f))
+          Text(
+            text = formatDuration(playbackState.duration),
+            style = MaterialTheme.typography.labelSmall,
+            color = AppTheme.colorScheme.onSurfaceVariant,
+          )
+        }
       }
     }
 
@@ -746,38 +788,84 @@ private fun MediaControls(
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
-      TextButton(onClick = { onPlaybackSpeedChange(playbackState.playbackSpeed) }) {
-        AnimatedContent(
-          targetState = playbackState.playbackSpeed,
-          transitionSpec = {
-            (fadeIn() + scaleIn() + slideInVertically()).togetherWith(
-              (fadeOut() + scaleOut() + slideOutVertically { it / 2 })
-            )
-          },
+      AnimatedVisibility(
+        visible = showExtendedControls,
+        enter =
+          fadeIn() +
+            expandIn(
+              animationSpec = extendedControlsAnimationSpec,
+              expandFrom = Alignment.Center,
+              clip = false,
+            ),
+        exit =
+          fadeOut() +
+            shrinkOut(
+              animationSpec = extendedControlsAnimationSpec,
+              shrinkTowards = Alignment.Center,
+              clip = false,
+            ),
+      ) {
+        TextButton(
+          onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onPlaybackSpeedChange(playbackState.playbackSpeed)
+          }
         ) {
-          Text(
-            text = stringResource(Res.string.playback_speed, it),
-            style = MaterialTheme.typography.labelLarge,
-            color = AppTheme.colorScheme.onSurfaceVariant,
-          )
+          AnimatedContent(
+            targetState = playbackState.playbackSpeed,
+            transitionSpec = {
+              (fadeIn() + scaleIn() + slideInVertically()).togetherWith(
+                (fadeOut() + scaleOut() + slideOutVertically { it / 2 })
+              )
+            },
+          ) {
+            Text(
+              text = stringResource(Res.string.playback_speed, it),
+              style = MaterialTheme.typography.labelLarge,
+              color = AppTheme.colorScheme.onSurfaceVariant,
+            )
+          }
         }
       }
 
-      IconButton(onClick = onSeekBackward) {
-        Icon(
-          imageVector = TwineIcons.Replay30,
-          contentDescription = stringResource(Res.string.seek_backward),
-          tint = AppTheme.colorScheme.onSurfaceVariant,
-        )
+      AnimatedVisibility(
+        visible = showExtendedControls,
+        enter =
+          fadeIn() +
+            expandIn(
+              animationSpec = extendedControlsAnimationSpec,
+              expandFrom = Alignment.Center,
+              clip = false,
+            ),
+        exit =
+          fadeOut() +
+            shrinkOut(
+              animationSpec = extendedControlsAnimationSpec,
+              shrinkTowards = Alignment.Center,
+              clip = false,
+            ),
+      ) {
+        IconButton(
+          onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onSeekBackward()
+          }
+        ) {
+          Icon(
+            imageVector = TwineIcons.Replay30,
+            contentDescription = stringResource(Res.string.seek_backward),
+            tint = AppTheme.colorScheme.onSurfaceVariant,
+          )
+        }
       }
 
       val progress by animateFloatAsState(if (isPlaying) 1f else 0f)
       val buttonSize by
         animateDpAsState(
           if (isPlaying) {
-            56.dp
+            64.dp
           } else {
-            48.dp
+            56.dp
           },
           animationSpec =
             spring(
@@ -798,7 +886,7 @@ private fun MediaControls(
           label = "playButtonRotatingAngle",
         )
 
-      Box(contentAlignment = Alignment.Center, modifier = Modifier.size(56.dp)) {
+      Box(contentAlignment = Alignment.Center, modifier = Modifier.size(64.dp)) {
         // Rotating shape background
         Box(
           modifier =
@@ -815,18 +903,22 @@ private fun MediaControls(
               .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-                onClick = if (isPlaying) onPauseClick else onPlayClick,
+                onClick = {
+                  haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                  if (isPlaying) onPauseClick() else onPlayClick()
+                },
               ),
           contentAlignment = Alignment.Center,
         ) {
           if (playbackState.buffering) {
             CircularProgressIndicator(
-              modifier = Modifier.size(24.dp),
+              modifier = Modifier.size(32.dp),
               color = AppTheme.colorScheme.onPrimaryContainer,
               strokeWidth = 2.dp,
             )
           } else {
             Icon(
+              modifier = Modifier.size(32.dp),
               imageVector = if (isPlaying) TwineIcons.Pause else TwineIcons.Play,
               contentDescription =
                 if (isPlaying) stringResource(Res.string.pause)
@@ -837,30 +929,76 @@ private fun MediaControls(
         }
       }
 
-      IconButton(onClick = onSeekForward) {
-        Icon(
-          imageVector = TwineIcons.Forward30,
-          contentDescription = stringResource(Res.string.seek_forward),
-          tint = AppTheme.colorScheme.onSurfaceVariant,
-        )
+      AnimatedVisibility(
+        visible = showExtendedControls,
+        enter =
+          fadeIn() +
+            expandIn(
+              animationSpec = extendedControlsAnimationSpec,
+              expandFrom = Alignment.Center,
+              clip = false,
+            ),
+        exit =
+          fadeOut() +
+            shrinkOut(
+              animationSpec = extendedControlsAnimationSpec,
+              shrinkTowards = Alignment.Center,
+              clip = false,
+            ),
+      ) {
+        IconButton(
+          onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onSeekForward()
+          }
+        ) {
+          Icon(
+            imageVector = TwineIcons.Forward30,
+            contentDescription = stringResource(Res.string.seek_forward),
+            tint = AppTheme.colorScheme.onSurfaceVariant,
+          )
+        }
       }
 
-      IconButton(onClick = onSleepTimerClick) {
-        val sleepTimerRemaining = playbackState.sleepTimerRemaining
-        val text =
-          if (sleepTimerRemaining != null && sleepTimerRemaining > 0) {
-            formatDuration(sleepTimerRemaining)
-          } else if (sleepTimerRemaining == -1L) {
-            stringResource(Res.string.sleep_timer_end_of_track)
-          } else {
-            stringResource(Res.string.sleep_timer)
+      AnimatedVisibility(
+        visible = showExtendedControls,
+        enter =
+          fadeIn() +
+            expandIn(
+              animationSpec = extendedControlsAnimationSpec,
+              expandFrom = Alignment.Center,
+              clip = false,
+            ),
+        exit =
+          fadeOut() +
+            shrinkOut(
+              animationSpec = extendedControlsAnimationSpec,
+              shrinkTowards = Alignment.Center,
+              clip = false,
+            ),
+      ) {
+        IconButton(
+          onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onSleepTimerClick()
           }
+        ) {
+          val sleepTimerRemaining = playbackState.sleepTimerRemaining
+          val text =
+            if (sleepTimerRemaining != null && sleepTimerRemaining > 0) {
+              formatDuration(sleepTimerRemaining)
+            } else if (sleepTimerRemaining == -1L) {
+              stringResource(Res.string.sleep_timer_end_of_track)
+            } else {
+              stringResource(Res.string.sleep_timer)
+            }
 
-        Icon(
-          imageVector = TwineIcons.Timer,
-          contentDescription = text,
-          tint = AppTheme.colorScheme.onSurfaceVariant,
-        )
+          Icon(
+            imageVector = TwineIcons.Timer,
+            contentDescription = text,
+            tint = AppTheme.colorScheme.onSurfaceVariant,
+          )
+        }
       }
     }
   }

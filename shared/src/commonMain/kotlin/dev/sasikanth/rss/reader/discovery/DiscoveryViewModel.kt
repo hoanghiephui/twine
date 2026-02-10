@@ -19,6 +19,7 @@ package dev.sasikanth.rss.reader.discovery
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.sasikanth.rss.reader.core.model.DiscoveryFeed
 import dev.sasikanth.rss.reader.core.network.fetcher.FeedFetchResult
 import dev.sasikanth.rss.reader.core.network.fetcher.FeedFetcher
 import dev.sasikanth.rss.reader.data.repository.RssRepository
@@ -50,7 +51,7 @@ class DiscoveryViewModel(
     rssRepository
       .allFeeds()
       .onEach { feeds ->
-        val addedFeedLinks = feeds.map { it.link }.toSet()
+        val addedFeedLinks = feeds.filterNot { it.isDeleted }.map { it.link }.toSet()
         _state.update { it.copy(addedFeedLinks = addedFeedLinks) }
       }
       .launchIn(viewModelScope)
@@ -59,28 +60,34 @@ class DiscoveryViewModel(
   fun dispatch(event: DiscoveryEvent) {
     when (event) {
       DiscoveryEvent.LoadDiscoveryGroups -> loadDiscoveryGroups()
+      DiscoveryEvent.Refresh -> loadDiscoveryGroups(forceRefresh = true)
       is DiscoveryEvent.SearchQueryChanged -> {
         _state.update { it.copy(searchQuery = event.query) }
       }
-      is DiscoveryEvent.AddFeedClicked -> addFeed(event.link)
+      is DiscoveryEvent.AddFeedClicked -> addFeed(event.feed)
     }
   }
 
-  private fun loadDiscoveryGroups() {
+  private fun loadDiscoveryGroups(forceRefresh: Boolean = false) {
     viewModelScope.launch(dispatchersProvider.io) {
       _state.update { it.copy(isLoading = true) }
-      val groups = discoveryRepository.groups()
+      val groups = discoveryRepository.groups(forceRefresh = forceRefresh)
       _state.update { it.copy(groups = groups.toImmutableList(), isLoading = false) }
     }
   }
 
-  private fun addFeed(link: String) {
+  private fun addFeed(feed: DiscoveryFeed) {
     viewModelScope.launch(dispatchersProvider.io) {
+      val link = feed.link
       _state.update { it.copy(inProgressFeedLinks = it.inProgressFeedLinks + link) }
       try {
         when (val result = feedFetcher.fetch(link)) {
           is FeedFetchResult.Success -> {
-            rssRepository.upsertFeedWithPosts(feedPayload = result.feedPayload)
+            rssRepository.upsertFeedWithPosts(
+              title = feed.name,
+              feedPayload = result.feedPayload,
+              showWebsiteFavIcon = !(feed.useFeedIcon),
+            )
           }
           else -> {
             // Handle error or just ignore for now in discovery

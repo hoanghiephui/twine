@@ -54,6 +54,7 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
   private val readerFontScaleFactorKey = floatPreferencesKey("reader_font_scale")
   private val readerLineHeightScaleFactorKey = floatPreferencesKey("reader_line_height_scale")
   private val readerFontStyleKey = stringPreferencesKey("reader_font_style")
+  private val readerColorSchemeKey = stringPreferencesKey("reader_color_scheme")
   private val blockImagesKey = booleanPreferencesKey("block_images")
   private val enableNotificationsKey = booleanPreferencesKey("enable_notifications")
   private val downloadFullContentKey = booleanPreferencesKey("download_full_content")
@@ -63,6 +64,8 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
   private val appIconKey = stringPreferencesKey("app_icon")
   private val isOnboardingDoneKey = booleanPreferencesKey("is_onboarding_done")
   private val dynamicColorEnabledKey = booleanPreferencesKey("dynamic_color_enabled")
+  private val discoveryFeedsLastFetchTimeKey = longPreferencesKey("discovery_feeds_last_fetch_time")
+  private val discoveryFeedsCacheKey = stringPreferencesKey("discovery_feeds_cache")
 
   val browserType: Flow<BrowserType> =
     dataStore.data.map { preferences ->
@@ -128,6 +131,9 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
   val readerFontStyle: Flow<ReaderFont> =
     dataStore.data.map { preferences -> mapToReaderFont(preferences[readerFontStyleKey]) }
 
+  val readerColorScheme: Flow<ReaderColorScheme> =
+    dataStore.data.map { preferences -> mapToReaderColorScheme(preferences[readerColorSchemeKey]) }
+
   val blockImages: Flow<Boolean> =
     dataStore.data.map { preferences -> preferences[blockImagesKey] ?: false }
 
@@ -152,6 +158,14 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
 
   val appIcon: Flow<AppIcon> =
     dataStore.data.map { preferences -> mapToAppIcon(preferences[appIconKey]) }
+
+  val discoveryFeedsCache: Flow<Pair<Instant?, String?>> =
+    dataStore.data.map { preferences ->
+      val lastFetchTime =
+        preferences[discoveryFeedsLastFetchTimeKey]?.let(Instant::fromEpochMilliseconds)
+      val cache = preferences[discoveryFeedsCacheKey]
+      lastFetchTime to cache
+    }
 
   suspend fun enableAutoSyncImmediate(): Boolean {
     return enableAutoSync.first()
@@ -237,6 +251,10 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
     dataStore.edit { preferences -> preferences[readerFontStyleKey] = value.name }
   }
 
+  suspend fun updateReaderColorScheme(value: ReaderColorScheme) {
+    dataStore.edit { preferences -> preferences[readerColorSchemeKey] = value.name }
+  }
+
   suspend fun toggleBlockImages(value: Boolean) {
     dataStore.edit { preferences -> preferences[blockImagesKey] = value }
   }
@@ -267,6 +285,13 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
     dataStore.edit { preferences ->
       val currentSessionCount = preferences[userSessionCountKey] ?: 0
       preferences[userSessionCountKey] = currentSessionCount + 1
+    }
+  }
+
+  suspend fun updateDiscoveryFeedsCache(cache: String, lastFetchTime: Instant) {
+    dataStore.edit { preferences ->
+      preferences[discoveryFeedsCacheKey] = cache
+      preferences[discoveryFeedsLastFetchTimeKey] = lastFetchTime.toEpochMilliseconds()
     }
   }
 
@@ -331,6 +356,15 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
     }
   }
 
+  private fun mapToReaderColorScheme(pref: String?): ReaderColorScheme {
+    if (pref.isNullOrBlank()) return ReaderColorScheme.Dynamic
+    return try {
+      ReaderColorScheme.valueOf(pref)
+    } catch (e: Exception) {
+      ReaderColorScheme.Dynamic
+    }
+  }
+
   private fun mapToAppIcon(pref: String?): AppIcon {
     if (pref.isNullOrBlank()) return AppIcon.DarkJade
     return try {
@@ -389,3 +423,23 @@ val ReaderFont.isPremium: Boolean
       ReaderFont.GoogleSans -> true
       else -> false
     }
+
+enum class ReaderColorScheme(
+  val isPremium: Boolean,
+  val isDarkModeOnly: Boolean = false,
+  val isLightModeOnly: Boolean = false,
+) {
+  Dynamic(isPremium = false),
+  Sepia(isPremium = false, isLightModeOnly = true),
+  Solarized(isPremium = false),
+  Parchment(isPremium = true, isLightModeOnly = true),
+  Midnight(isPremium = true, isDarkModeOnly = true),
+  Forest(isPremium = true, isDarkModeOnly = true),
+  Slate(isPremium = true, isDarkModeOnly = true);
+
+  fun isDark(isSystemDark: Boolean): Boolean {
+    if (isDarkModeOnly) return true
+    if (isLightModeOnly) return false
+    return isSystemDark
+  }
+}

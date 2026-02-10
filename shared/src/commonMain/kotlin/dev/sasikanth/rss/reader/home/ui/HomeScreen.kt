@@ -216,7 +216,7 @@ internal fun HomeScreen(
   }
 
   featuredPostsPagerState.CollectItemTransition(
-    key = featuredPosts,
+    featuredPosts,
     itemProvider = { index -> featuredPosts.getOrNull(index) },
   ) { fromItem, toItem, offset ->
     val fromSeedColor = fromItem?.seedColor?.let { Color(it) }
@@ -428,7 +428,7 @@ internal fun HomeScreen(
             },
           )
 
-          val navBarScrimColor = AppTheme.colorScheme.backdrop
+          val colorScheme = AppTheme.colorScheme
           AnimatedVisibility(
             modifier =
               Modifier.fillMaxWidth()
@@ -440,8 +440,9 @@ internal fun HomeScreen(
           ) {
             Box(
               modifier =
-                Modifier.matchParentSize()
-                  .background(Brush.verticalGradient(listOf(Color.Transparent, navBarScrimColor)))
+                Modifier.matchParentSize().drawBehind {
+                  drawRect(Brush.verticalGradient(listOf(Color.Transparent, colorScheme.backdrop)))
+                }
             )
           }
 
