@@ -68,8 +68,6 @@ class HomeViewModel(
   private val inAppRating: InAppRating,
 ) : ViewModel() {
 
-  private val scrolledPostItems = mutableSetOf<String>()
-
   private val defaultState = HomeState.default()
   private val _state = MutableStateFlow(defaultState)
   val state: StateFlow<HomeState>
@@ -94,8 +92,7 @@ class HomeViewModel(
       is HomeEvent.UpdatePostReadStatus ->
         updatePostReadStatus(event.postId, event.updatedReadStatus)
       is HomeEvent.MarkPostsAsRead -> markPostsAsRead(event.source)
-      is HomeEvent.OnPostItemsScrolled -> onPostItemsScrolled(event.postIds)
-      HomeEvent.MarkScrolledPostsAsRead -> markScrolledPostsAsRead()
+      is HomeEvent.MarkPostsAsReadByIds -> markPostsAsReadByIds(event.postIds)
       is HomeEvent.MarkFeaturedPostsAsRead -> markFeaturedPostAsRead(event.postId)
       is HomeEvent.ChangeHomeViewMode -> changeHomeViewMode(event.homeViewMode)
       is HomeEvent.UpdateVisibleItemIndex -> updateVisibleItemIndex(event.index, event.postId)
@@ -104,6 +101,15 @@ class HomeViewModel(
       is HomeEvent.OnPostsSortFilterApplied -> onPostsSortFilterApplied(event)
       is HomeEvent.ShowPostsSortFilter -> showPostsSortFilter(event.show)
       is HomeEvent.OnPostClicked -> onPostClicked(event.post)
+    }
+  }
+
+  private fun markPostsAsReadByIds(postIds: Set<String>) {
+    viewModelScope.launch {
+      val markPostsAsReadOn = settingsRepository.markAsReadOn.first()
+      if (markPostsAsReadOn != MarkAsReadOn.Scroll) return@launch
+
+      rssRepository.markPostsAsRead(postIds = postIds)
     }
   }
 
@@ -125,7 +131,9 @@ class HomeViewModel(
           postsUpperBound = postsUpperBound,
         )
 
-      _openPost.emit(position to post)
+      if (position != null) {
+        _openPost.emit(position to post)
+      }
     }
   }
 
@@ -276,8 +284,12 @@ class HomeViewModel(
               postsUpperBound = lastRefreshedAt,
             )
 
-          val adjustedIndex = position + featuredPosts.size
-          _state.update { it.copy(activePostIndex = adjustedIndex) }
+          if (position != null) {
+            val adjustedIndex = position + featuredPosts.size
+            _state.update { it.copy(activePostIndex = adjustedIndex) }
+          } else {
+            _state.update { it.copy(activePostIndex = index) }
+          }
         }
       } else {
         _state.update { it.copy(activePostIndex = index) }
@@ -297,22 +309,6 @@ class HomeViewModel(
 
       rssRepository.updatePostReadStatus(read = true, id = postId)
     }
-  }
-
-  private fun markScrolledPostsAsRead() {
-    viewModelScope.launch {
-      val markPostsAsReadOn = settingsRepository.markAsReadOn.first()
-
-      if (markPostsAsReadOn != MarkAsReadOn.Scroll) return@launch
-
-      val postIds = scrolledPostItems.toSet()
-      scrolledPostItems.clear()
-      rssRepository.markPostsAsRead(postIds = postIds)
-    }
-  }
-
-  private fun onPostItemsScrolled(postIds: List<String>) {
-    scrolledPostItems += postIds
   }
 
   private fun markPostsAsRead(source: Source?) {

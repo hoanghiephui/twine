@@ -16,7 +16,12 @@
  */
 package dev.sasikanth.rss.reader.app
 
-import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
@@ -266,12 +271,28 @@ fun App(
       NavHost(
         navController = navController,
         startDestination = Screen.Placeholder,
-        popEnterTransition = { EnterTransition.None },
-        popExitTransition = {
-          scaleOut(
-            targetScale = 0.9f,
-            transformOrigin = TransformOrigin(pivotFractionX = 0.5f, pivotFractionY = 0.5f),
+        popEnterTransition = {
+          fadeIn(
+            animationSpec =
+              spring(
+                dampingRatio = 1.0f, // reflects material3 motionScheme.defaultEffectsSpec()
+                stiffness = 1600.0f, // reflects material3 motionScheme.defaultEffectsSpec()
+              )
           )
+        },
+        popExitTransition = {
+          if (platform == Platform.Apple) {
+            slideOutOfContainer(
+              towards = AnimatedContentTransitionScope.SlideDirection.End,
+              animationSpec = tween(durationMillis = 200, easing = LinearEasing),
+              targetOffset = { fullOffset -> (fullOffset * 0.3f).toInt() },
+            )
+          } else {
+            scaleOut(
+              targetScale = 0.7f,
+              transformOrigin = TransformOrigin(pivotFractionX = 0.5f, pivotFractionY = 0.5f),
+            ) + fadeOut()
+          }
         },
       ) {
         composable<Screen.Placeholder> {

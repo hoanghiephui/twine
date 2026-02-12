@@ -393,9 +393,8 @@ internal fun HomeScreen(
                       featuredPostsPagerState = featuredPostsPagerState,
                       homeViewMode = state.homeViewMode,
                       posts = { posts },
-                      postsScrolled = { viewModel.dispatch(HomeEvent.OnPostItemsScrolled(it)) },
-                      markScrolledPostsAsRead = {
-                        viewModel.dispatch(HomeEvent.MarkScrolledPostsAsRead)
+                      markPostsAsReadByIds = {
+                        viewModel.dispatch(HomeEvent.MarkPostsAsReadByIds(it))
                       },
                       markPostAsReadOnScroll = {
                         viewModel.dispatch(HomeEvent.MarkFeaturedPostsAsRead(it))
@@ -567,7 +566,7 @@ private fun NoFeeds(onNoFeedsSwipeUp: () -> Unit) {
     Text(
       text = stringResource(Res.string.noFeeds),
       style = MaterialTheme.typography.headlineMedium,
-      color = AppTheme.colorScheme.textEmphasisHigh,
+      color = AppTheme.colorScheme.onSurface,
       textAlign = TextAlign.Center,
     )
 
@@ -576,7 +575,7 @@ private fun NoFeeds(onNoFeedsSwipeUp: () -> Unit) {
     Text(
       text = stringResource(Res.string.swipeUpGetStarted),
       style = MaterialTheme.typography.labelLarge,
-      color = AppTheme.colorScheme.textEmphasisMed,
+      color = AppTheme.colorScheme.onSurfaceVariant,
       textAlign = TextAlign.Center,
     )
 
@@ -585,7 +584,7 @@ private fun NoFeeds(onNoFeedsSwipeUp: () -> Unit) {
     Icon(
       imageVector = Icons.Rounded.KeyboardArrowUp,
       contentDescription = null,
-      tint = AppTheme.colorScheme.tintedForeground,
+      tint = AppTheme.colorScheme.primary,
     )
   }
 }
@@ -601,7 +600,7 @@ private fun NoNewPosts() {
     Icon(
       imageVector = TwineIcons.Newsstand,
       contentDescription = null,
-      tint = AppTheme.colorScheme.textEmphasisHigh,
+      tint = AppTheme.colorScheme.onSurface,
       modifier = Modifier.requiredSize(80.dp),
     )
 
@@ -610,7 +609,7 @@ private fun NoNewPosts() {
     Text(
       text = stringResource(Res.string.noNewPosts),
       style = MaterialTheme.typography.headlineMedium,
-      color = AppTheme.colorScheme.textEmphasisHigh,
+      color = AppTheme.colorScheme.onSurface,
       textAlign = TextAlign.Center,
     )
 
@@ -619,7 +618,7 @@ private fun NoNewPosts() {
     Text(
       text = stringResource(Res.string.noNewPostsSubtitle),
       style = MaterialTheme.typography.labelLarge,
-      color = AppTheme.colorScheme.textEmphasisMed,
+      color = AppTheme.colorScheme.onSurfaceVariant,
       textAlign = TextAlign.Center,
     )
   }
