@@ -26,12 +26,10 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.SheetValue
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -47,69 +45,40 @@ import androidx.navigation.NavDeepLinkRequest
 import androidx.navigation.NavHostController
 import androidx.navigation.NavUri
 import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.dialog
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navDeepLink
-import androidx.navigation.toRoute
 import coil3.ImageLoader
 import coil3.compose.setSingletonImageLoaderFactory
-import dev.sasikanth.rss.reader.about.ui.AboutScreen
-import dev.sasikanth.rss.reader.addfeed.AddFeedEvent
+import dev.sasikanth.rss.reader.accountselection.AccountSelectionViewModel
 import dev.sasikanth.rss.reader.addfeed.AddFeedViewModel
-import dev.sasikanth.rss.reader.addfeed.ui.AddFeedScreen
-import dev.sasikanth.rss.reader.blockedwords.BlockedWordsScreen
 import dev.sasikanth.rss.reader.blockedwords.BlockedWordsViewModel
 import dev.sasikanth.rss.reader.bookmarks.BookmarksViewModel
-import dev.sasikanth.rss.reader.bookmarks.ui.BookmarksScreen
 import dev.sasikanth.rss.reader.core.model.local.ResolvedPost
 import dev.sasikanth.rss.reader.data.repository.AppThemeMode
 import dev.sasikanth.rss.reader.data.repository.HomeViewMode
 import dev.sasikanth.rss.reader.discovery.DiscoveryViewModel
-import dev.sasikanth.rss.reader.discovery.ui.DiscoveryScreen
 import dev.sasikanth.rss.reader.feed.FeedViewModel
-import dev.sasikanth.rss.reader.feed.ui.FeedInfoBottomSheet
-import dev.sasikanth.rss.reader.feeds.FeedsEvent
 import dev.sasikanth.rss.reader.feeds.FeedsViewModel
-import dev.sasikanth.rss.reader.freshrss.ui.FRESH_RSS_LOGIN_SUCCESS_KEY
-import dev.sasikanth.rss.reader.freshrss.ui.FreshRssLoginScreen
-import dev.sasikanth.rss.reader.group.GroupEvent
 import dev.sasikanth.rss.reader.group.GroupViewModel
-import dev.sasikanth.rss.reader.group.ui.GroupScreen
 import dev.sasikanth.rss.reader.groupselection.GroupSelectionViewModel
-import dev.sasikanth.rss.reader.groupselection.ui.GroupSelectionSheet
-import dev.sasikanth.rss.reader.groupselection.ui.SELECTED_GROUPS_KEY
-import dev.sasikanth.rss.reader.home.HomeEvent
 import dev.sasikanth.rss.reader.home.HomeViewModel
-import dev.sasikanth.rss.reader.home.ui.HomeScreen
-import dev.sasikanth.rss.reader.main.ui.MainScreen
+import dev.sasikanth.rss.reader.media.AudioPlayer
 import dev.sasikanth.rss.reader.miniflux.MinifluxLoginViewModel
-import dev.sasikanth.rss.reader.miniflux.ui.MINIFLUX_LOGIN_SUCCESS_KEY
-import dev.sasikanth.rss.reader.miniflux.ui.MinifluxLoginScreen
 import dev.sasikanth.rss.reader.onboarding.OnboardingViewModel
-import dev.sasikanth.rss.reader.onboarding.ui.OnboardingScreen
-import dev.sasikanth.rss.reader.placeholder.PlaceholderScreen
 import dev.sasikanth.rss.reader.placeholder.PlaceholderViewModel
 import dev.sasikanth.rss.reader.platform.LinkHandler
 import dev.sasikanth.rss.reader.platform.LocalLinkHandler
-import dev.sasikanth.rss.reader.premium.PremiumPaywallScreen
 import dev.sasikanth.rss.reader.premium.PremiumPaywallViewModel
 import dev.sasikanth.rss.reader.reader.ReaderScreenArgs
 import dev.sasikanth.rss.reader.reader.ReaderScreenArgs.FromScreen
 import dev.sasikanth.rss.reader.reader.ReaderViewModel
 import dev.sasikanth.rss.reader.reader.page.ReaderPageViewModel
-import dev.sasikanth.rss.reader.reader.ui.ReaderScreen
 import dev.sasikanth.rss.reader.resources.icons.Platform
 import dev.sasikanth.rss.reader.resources.icons.platform
 import dev.sasikanth.rss.reader.search.SearchViewModel
-import dev.sasikanth.rss.reader.search.ui.SearchScreen
-import dev.sasikanth.rss.reader.settings.SettingsEvent
 import dev.sasikanth.rss.reader.settings.SettingsViewModel
-import dev.sasikanth.rss.reader.settings.ui.SettingsScreen
 import dev.sasikanth.rss.reader.share.LocalShareHandler
 import dev.sasikanth.rss.reader.share.ShareHandler
 import dev.sasikanth.rss.reader.statistics.StatisticsViewModel
-import dev.sasikanth.rss.reader.statistics.ui.StatisticsScreen
 import dev.sasikanth.rss.reader.ui.AppTheme
 import dev.sasikanth.rss.reader.ui.LocalDynamicColorState
 import dev.sasikanth.rss.reader.ui.LocalSeedColorExtractor
@@ -123,13 +92,7 @@ import dev.sasikanth.rss.reader.utils.LocalBlockImage
 import dev.sasikanth.rss.reader.utils.LocalDynamicColorEnabled
 import dev.sasikanth.rss.reader.utils.LocalShowFeedFavIconSetting
 import dev.sasikanth.rss.reader.utils.LocalWindowSizeClass
-import kotlin.reflect.typeOf
-import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import me.tatarka.inject.annotations.Assisted
@@ -147,6 +110,7 @@ typealias App =
 @Composable
 @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
 fun App(
+  audioPlayer: AudioPlayer,
   shareHandler: ShareHandler,
   linkHandler: LinkHandler,
   imageLoader: ImageLoader,
@@ -164,6 +128,7 @@ fun App(
   searchViewModel: () -> SearchViewModel,
   bookmarksViewModel: () -> BookmarksViewModel,
   settingsViewModel: () -> SettingsViewModel,
+  accountSelectionViewModel: () -> AccountSelectionViewModel,
   freshRssLoginViewModel: () -> dev.sasikanth.rss.reader.freshrss.FreshRssLoginViewModel,
   minifluxLoginViewModel: () -> MinifluxLoginViewModel,
   groupViewModel: (SavedStateHandle) -> GroupViewModel,
@@ -219,7 +184,7 @@ fun App(
             openLink = {
               coroutineScope.launch {
                 linkHandler.openLink(post.link)
-                appViewModel.onPostOpened(post.id, index)
+                appViewModel.onPostOpened(post.id)
               }
             },
           )
@@ -244,27 +209,48 @@ fun App(
       }
     }
 
-    DisposableEffect(Unit) {
-      ExternalUriHandler.listener = { uri ->
-        if (uri.startsWith("twine://oauth")) {
-          appViewModel.onOAuthRedirect(uri)
-        } else {
-          val deepLinkRequest =
-            NavDeepLinkRequest(uri = NavUri(uri), action = null, mimeType = null)
-          if (navController.graph.hasDeepLink(deepLinkRequest)) {
-            if (!navController.popBackStack(Screen.Main, inclusive = false)) {
-              navController.navigate(Screen.Main) {
-                popUpTo<Screen.Placeholder> { inclusive = true }
-                launchSingleTop = true
-              }
+    LaunchedEffect(Unit) {
+      appViewModel.navigateToReader
+        .onEach { args ->
+          val route = Screen.Reader(args)
+          if (!navController.popBackStack(Screen.Main(), inclusive = false)) {
+            navController.navigate(Screen.Main()) {
+              popUpTo<Screen.Placeholder> { inclusive = true }
+              launchSingleTop = true
             }
-
-            navController.navigate(NavUri(uri))
           }
+          navController.navigate(route)
+        }
+        .launchIn(this)
+    }
+
+    LaunchedEffect(Unit) {
+      ExternalUriHandler.uri.collect { uri ->
+        if (uri != null) {
+          if (uri.startsWith("twine://oauth")) {
+            appViewModel.onOAuthRedirect(uri)
+          } else if (uri == "twine://reader/currently-playing") {
+            val playingPostId = audioPlayer.playbackState.value.playingPostId
+            if (playingPostId != null) {
+              appViewModel.onCurrentlyPlayingDeepLink(playingPostId)
+            }
+          } else {
+            val deepLinkRequest =
+              NavDeepLinkRequest(uri = NavUri(uri), action = null, mimeType = null)
+            if (navController.graph.hasDeepLink(deepLinkRequest)) {
+              if (!navController.popBackStack(Screen.Main(), inclusive = false)) {
+                navController.navigate(Screen.Main()) {
+                  popUpTo<Screen.Placeholder> { inclusive = true }
+                  launchSingleTop = true
+                }
+              }
+
+              navController.navigate(NavUri(uri))
+            }
+          }
+          ExternalUriHandler.consume()
         }
       }
-
-      onDispose { ExternalUriHandler.listener = null }
     }
 
     AppTheme(useDarkTheme = useDarkTheme) {
@@ -295,381 +281,99 @@ fun App(
           }
         },
       ) {
-        composable<Screen.Placeholder> {
-          val viewModel = viewModel { placeholderViewModel() }
-          PlaceholderScreen(
-            modifier = roundedCornerScreenModifier,
-            viewModel = viewModel,
-            navigateHome = {
-              navController.navigate(Screen.Main) {
-                popUpTo<Screen.Placeholder> { inclusive = true }
-              }
-            },
-            navigateOnboarding = {
-              navController.navigate(Screen.Onboarding) {
-                popUpTo<Screen.Placeholder> { inclusive = true }
-              }
-            },
-          )
-        }
+        placeholderScreen(
+          modifier = roundedCornerScreenModifier,
+          placeholderViewModel = placeholderViewModel,
+          navController = navController,
+        )
 
-        composable<Screen.Onboarding> {
-          val viewModel = viewModel { onboardingViewModel() }
-          OnboardingScreen(
-            viewModel = viewModel,
-            onOnboardingDone = {
-              navController.navigate(Screen.Main) {
-                popUpTo<Screen.Onboarding> { inclusive = true }
-              }
-            },
-            onNavigateToDiscovery = {
-              navController.navigate(Screen.Discovery(isFromOnboarding = true)) {
-                popUpTo<Screen.Onboarding> { inclusive = true }
-              }
-            },
-          )
-        }
+        onboardingScreen(onboardingViewModel = onboardingViewModel, navController = navController)
 
-        composable<Screen.Main> {
-          LaunchedEffect(useDarkTheme) {
-            toggleLightStatusBar(!useDarkTheme)
-            toggleLightNavBar(!useDarkTheme)
-          }
+        accountSelectionScreen(
+          accountSelectionViewModel = accountSelectionViewModel,
+          navController = navController,
+        )
 
-          MainScreen(
-            homeContent = { openDrawer ->
-              val viewModel = viewModel { homeViewModel() }
-              val feedsViewModel = viewModel { feedsViewModel() }
+        mainScreen(
+          navController = navController,
+          useDarkTheme = useDarkTheme,
+          toggleLightStatusBar = toggleLightStatusBar,
+          toggleLightNavBar = toggleLightNavBar,
+          homeViewModel = homeViewModel,
+          feedsViewModel = feedsViewModel,
+          searchViewModel = searchViewModel,
+          bookmarksViewModel = bookmarksViewModel,
+          settingsViewModel = settingsViewModel,
+          discoveryViewModel = discoveryViewModel,
+          openPost = openPost,
+          screenModifier = screenModifier,
+        )
 
-              LaunchedEffect(Unit) {
-                it.savedStateHandle
-                  .getStateFlow<Set<String>>(SELECTED_GROUPS_KEY, emptySet())
-                  .filterNotNull()
-                  .onEach { selectedGroupIds ->
-                    if (selectedGroupIds.isNotEmpty()) {
-                      feedsViewModel.dispatch(FeedsEvent.OnGroupsSelected(selectedGroupIds))
-                      it.savedStateHandle[SELECTED_GROUPS_KEY] = emptySet<String>()
-                    }
-                  }
-                  .launchIn(this)
-              }
+        freshRssLoginScreen(
+          freshRssLoginViewModel = freshRssLoginViewModel,
+          navController = navController,
+        )
 
-              LaunchedEffect(Unit) {
-                feedsViewModel.state
-                  .map { it.openGroupSelection }
-                  .filterNotNull()
-                  .onEach { selectedGroupIds ->
-                    navController.navigate(Modals.GroupSelection(selectedGroupIds.toList()))
-                    feedsViewModel.dispatch(FeedsEvent.MarkOpenGroupSelectionDone)
-                  }
-                  .launchIn(this)
-              }
+        minifluxLoginScreen(
+          minifluxLoginViewModel = minifluxLoginViewModel,
+          navController = navController,
+        )
 
-              LaunchedEffect(appState.activePostIndex, appState.activePostId) {
-                viewModel.dispatch(
-                  HomeEvent.UpdateVisibleItemIndex(
-                    index = appState.activePostIndex,
-                    postId = appState.activePostId,
-                  )
-                )
-              }
+        readerScreen(
+          readerViewModel = readerViewModel,
+          readerPageViewModel = readerPageViewModel,
+          navController = navController,
+          toggleLightStatusBar = toggleLightStatusBar,
+          toggleLightNavBar = toggleLightNavBar,
+          modifier = roundedCornerScreenModifier,
+        )
 
-              HomeScreen(
-                viewModel = viewModel,
-                feedsViewModel = feedsViewModel,
-                onVisiblePostChanged = { index, postId ->
-                  appViewModel.updateActivePostIndex(index, postId)
-                },
-                openPost = { index, post -> openPost(index, post, FromScreen.Home) },
-                openGroupSelectionSheet = {
-                  feedsViewModel.dispatch(FeedsEvent.OnAddToGroupClicked)
-                },
-                openFeedInfoSheet = { feedId -> navController.navigate(Modals.FeedInfo(feedId)) },
-                openAddFeedScreen = { navController.navigate(Screen.AddFeed) },
-                openGroupScreen = { groupId -> navController.navigate(Screen.FeedGroup(groupId)) },
-                openPaywall = { navController.navigate(Screen.Paywall) },
-                onMenuClicked = openDrawer,
-                onBottomSheetStateChanged = { sheetValue ->
-                  val showDarkSystemBars =
-                    if (sheetValue == SheetValue.Expanded) {
-                      true
-                    } else {
-                      useDarkTheme
-                    }
+        addFeedScreen(
+          addFeedViewModel = addFeedViewModel,
+          navController = navController,
+          useDarkTheme = useDarkTheme,
+          toggleLightStatusBar = toggleLightStatusBar,
+          toggleLightNavBar = toggleLightNavBar,
+        )
 
-                  toggleLightStatusBar(!showDarkSystemBars)
-                  toggleLightNavBar(!showDarkSystemBars)
-                },
-                modifier = screenModifier,
-              )
-            },
-            searchContent = { goBack ->
-              val viewModel = viewModel { searchViewModel() }
+        discoveryScreen(
+          discoveryViewModel = discoveryViewModel,
+          navController = navController,
+          screenModifier = screenModifier,
+        )
 
-              SearchScreen(
-                searchViewModel = viewModel,
-                goBack = goBack,
-                openPost = { searchQuery, sortOrder, index, post ->
-                  openPost(index, post, FromScreen.Search(searchQuery, sortOrder))
-                },
-                modifier = screenModifier,
-              )
-            },
-            bookmarksContent = { goBack ->
-              val viewModel = viewModel { bookmarksViewModel() }
+        aboutScreen(modifier = roundedCornerScreenModifier, navController = navController)
 
-              BookmarksScreen(
-                bookmarksViewModel = viewModel,
-                goBack = goBack,
-                openPost = { index, post -> openPost(index, post, FromScreen.Bookmarks) },
-                modifier = screenModifier,
-              )
-            },
-            settingsContent = { goBack ->
-              val viewModel = viewModel { settingsViewModel() }
+        statisticsScreen(
+          modifier = roundedCornerScreenModifier,
+          statisticsViewModel = statisticsViewModel,
+          navController = navController,
+        )
 
-              LaunchedEffect(Unit) {
-                merge(
-                    navController.currentBackStackEntry
-                      ?.savedStateHandle
-                      ?.getStateFlow(FRESH_RSS_LOGIN_SUCCESS_KEY, false)
-                      ?.filter { it }
-                      ?.onEach {
-                        navController.currentBackStackEntry
-                          ?.savedStateHandle
-                          ?.set(FRESH_RSS_LOGIN_SUCCESS_KEY, false)
-                      } ?: emptyFlow(),
-                    navController.currentBackStackEntry
-                      ?.savedStateHandle
-                      ?.getStateFlow(MINIFLUX_LOGIN_SUCCESS_KEY, false)
-                      ?.filter { it }
-                      ?.onEach {
-                        navController.currentBackStackEntry
-                          ?.savedStateHandle
-                          ?.set(MINIFLUX_LOGIN_SUCCESS_KEY, false)
-                      } ?: emptyFlow(),
-                  )
-                  .onEach { viewModel.dispatch(SettingsEvent.TriggerSync) }
-                  .launchIn(this)
-              }
+        feedGroupScreen(
+          modifier = roundedCornerScreenModifier,
+          groupViewModel = groupViewModel,
+          navController = navController,
+        )
 
-              SettingsScreen(
-                viewModel = viewModel,
-                goBack = goBack,
-                openAbout = { navController.navigate(Screen.About) },
-                openStatistics = { navController.navigate(Screen.Statistics) },
-                openBlockedWords = { navController.navigate(Screen.BlockedWords) },
-                openPaywall = { navController.navigate(Screen.Paywall) },
-                openFreshRssLogin = { navController.navigate(Screen.FreshRssLogin) },
-                openMinifluxLogin = { navController.navigate(Screen.MinifluxLogin) },
-                modifier = screenModifier,
-              )
-            },
-            discoveryContent = { goBack ->
-              val viewModel = viewModel { discoveryViewModel() }
+        blockedWordsScreen(
+          modifier = roundedCornerScreenModifier,
+          blockedWordsViewModel = blockedWordsViewModel,
+          navController = navController,
+        )
 
-              DiscoveryScreen(
-                viewModel = viewModel,
-                showDoneButton = false,
-                goBack = goBack,
-                modifier = screenModifier,
-              )
-            },
-          )
-        }
+        paywallScreen(
+          modifier = roundedCornerScreenModifier,
+          premiumPaywallViewModel = premiumPaywallViewModel,
+          navController = navController,
+        )
 
-        composable<Screen.FreshRssLogin> {
-          val viewModel = viewModel { freshRssLoginViewModel() }
-          FreshRssLoginScreen(
-            viewModel = viewModel,
-            onLoginSuccess = {
-              navController.previousBackStackEntry
-                ?.savedStateHandle
-                ?.set(FRESH_RSS_LOGIN_SUCCESS_KEY, true)
-              navController.popBackStack()
-            },
-            goBack = { navController.popBackStack() },
-          )
-        }
+        feedInfoDialog(feedViewModel = feedViewModel, navController = navController)
 
-        composable<Screen.MinifluxLogin> {
-          val viewModel = viewModel { minifluxLoginViewModel() }
-          MinifluxLoginScreen(
-            viewModel = viewModel,
-            onLoginSuccess = {
-              navController.previousBackStackEntry
-                ?.savedStateHandle
-                ?.set(MINIFLUX_LOGIN_SUCCESS_KEY, true)
-              navController.popBackStack()
-            },
-            goBack = { navController.popBackStack() },
-          )
-        }
-
-        composable<Screen.Reader>(
-          typeMap = mapOf(typeOf<ReaderScreenArgs>() to ReaderScreenArgs.navTypeMap),
-          deepLinks =
-            listOf(
-              navDeepLink<Screen.Reader>(
-                basePath = Screen.Reader.ROUTE,
-                typeMap = mapOf(typeOf<ReaderScreenArgs>() to ReaderScreenArgs.navTypeMap),
-              )
-            ),
-        ) {
-          val viewModel = viewModel { readerViewModel(it.savedStateHandle) }
-          val fromScreen = it.toRoute<Screen.Reader>().readerScreenArgs.fromScreen
-
-          ReaderScreen(
-            viewModel = viewModel,
-            pageViewModelFactory = { post ->
-              viewModel(key = post.id) { readerPageViewModel(post) }
-            },
-            onPostChanged = { activePostIndex, postId ->
-              if (fromScreen !is FromScreen.UnreadWidget) {
-                appViewModel.updateActivePostIndex(activePostIndex, postId)
-              }
-            },
-            onBack = { navController.popBackStack() },
-            openPaywall = { navController.navigate(Screen.Paywall) },
-            toggleLightStatusBar = toggleLightStatusBar,
-            toggleLightNavBar = toggleLightNavBar,
-            modifier = roundedCornerScreenModifier,
-          )
-        }
-
-        composable<Screen.AddFeed>(
-          deepLinks = listOf(navDeepLink<Screen.AddFeed>(basePath = Screen.AddFeed.ROUTE))
-        ) {
-          val viewModel = viewModel { addFeedViewModel() }
-
-          LaunchedEffect(Unit) {
-            it.savedStateHandle
-              .getStateFlow<Set<String>>(SELECTED_GROUPS_KEY, emptySet())
-              .filterNotNull()
-              .onEach { selectedGroupIds ->
-                if (selectedGroupIds.isNotEmpty()) {
-                  viewModel.dispatch(AddFeedEvent.OnGroupsSelected(selectedGroupIds))
-                  it.savedStateHandle[SELECTED_GROUPS_KEY] = emptySet<String>()
-                }
-              }
-              .launchIn(this)
-          }
-
-          LaunchedEffect(useDarkTheme) {
-            toggleLightStatusBar(!useDarkTheme)
-            toggleLightNavBar(!useDarkTheme)
-          }
-
-          AddFeedScreen(
-            viewModel = viewModel,
-            goBack = { navController.popBackStack() },
-            openGroupSelection = { selectedGroupIds ->
-              navController.navigate(Modals.GroupSelection(selectedGroupIds.toList()))
-            },
-            openDiscovery = { navController.navigate(Screen.Discovery()) },
-          )
-        }
-
-        composable<Screen.Discovery> {
-          val viewModel = viewModel { discoveryViewModel() }
-          val isFromOnboarding = it.toRoute<Screen.Discovery>().isFromOnboarding
-
-          DiscoveryScreen(
-            viewModel = viewModel,
-            showDoneButton = isFromOnboarding,
-            onDone = {
-              if (isFromOnboarding) {
-                navController.navigate(Screen.Main) {
-                  popUpTo<Screen.Discovery> { inclusive = true }
-                }
-              } else {
-                navController.popBackStack()
-              }
-            },
-            goBack = { navController.popBackStack() },
-            modifier = screenModifier,
-          )
-        }
-
-        composable<Screen.About> {
-          AboutScreen(
-            modifier = roundedCornerScreenModifier,
-            goBack = { navController.popBackStack() },
-          )
-        }
-
-        composable<Screen.Statistics> {
-          val viewModel = viewModel { statisticsViewModel() }
-          StatisticsScreen(
-            modifier = roundedCornerScreenModifier,
-            viewModel = viewModel,
-            goBack = { navController.popBackStack() },
-          )
-        }
-
-        composable<Screen.FeedGroup> {
-          val viewModel = viewModel { groupViewModel(it.savedStateHandle) }
-
-          LaunchedEffect(Unit) {
-            it.savedStateHandle
-              .getStateFlow<Set<String>>(SELECTED_GROUPS_KEY, emptySet())
-              .filterNotNull()
-              .onEach { selectedGroupIds ->
-                if (selectedGroupIds.isNotEmpty()) {
-                  viewModel.dispatch(GroupEvent.OnGroupsSelected(selectedGroupIds))
-                  it.savedStateHandle[SELECTED_GROUPS_KEY] = emptySet<String>()
-                }
-              }
-              .launchIn(this)
-          }
-
-          GroupScreen(
-            modifier = roundedCornerScreenModifier,
-            viewModel = viewModel,
-            goBack = { navController.popBackStack() },
-            openGroupSelection = { navController.navigate(Modals.GroupSelection()) },
-          )
-        }
-
-        composable<Screen.BlockedWords> {
-          val viewModel = viewModel { blockedWordsViewModel() }
-          BlockedWordsScreen(
-            modifier = roundedCornerScreenModifier,
-            viewModel = viewModel,
-            goBack = { navController.popBackStack() },
-          )
-        }
-
-        composable<Screen.Paywall> {
-          val viewModel = viewModel { premiumPaywallViewModel() }
-          val hasPremium by viewModel.hasPremium.collectAsStateWithLifecycle()
-
-          PremiumPaywallScreen(
-            modifier = roundedCornerScreenModifier,
-            hasPremium = hasPremium,
-            goBack = { navController.popBackStack() },
-          )
-        }
-
-        dialog<Modals.FeedInfo> {
-          val viewModel = viewModel { feedViewModel(it.savedStateHandle) }
-          FeedInfoBottomSheet(feedViewModel = viewModel, dismiss = { navController.popBackStack() })
-        }
-
-        dialog<Modals.GroupSelection> {
-          val viewModel = viewModel { groupSelectionViewModel(it.savedStateHandle) }
-          GroupSelectionSheet(
-            viewModel = viewModel,
-            dismiss = { navController.popBackStack() },
-            onGroupsSelected = { selectedGroupIds ->
-              navController.previousBackStackEntry
-                ?.savedStateHandle
-                ?.set(SELECTED_GROUPS_KEY, selectedGroupIds)
-
-              navController.popBackStack()
-            },
-          )
-        }
+        groupSelectionDialog(
+          groupSelectionViewModel = groupSelectionViewModel,
+          navController = navController,
+        )
       }
     }
   }

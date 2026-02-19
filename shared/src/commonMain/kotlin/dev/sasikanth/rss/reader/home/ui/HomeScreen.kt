@@ -54,6 +54,7 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -61,6 +62,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -125,7 +127,7 @@ import twine.shared.generated.resources.swipeUpGetStarted
 internal fun HomeScreen(
   viewModel: HomeViewModel,
   feedsViewModel: FeedsViewModel,
-  onVisiblePostChanged: (Int, String?) -> Unit,
+  triggerSync: Boolean,
   openPost: (Int, ResolvedPost) -> Unit,
   openGroupSelectionSheet: () -> Unit,
   openFeedInfoSheet: (feedId: String) -> Unit,
@@ -194,6 +196,12 @@ internal fun HomeScreen(
     rememberBottomSheetScaffoldState(bottomSheetState = bottomSheetState)
   val showScrollToTop by remember { derivedStateOf { postsListState.firstVisibleItemIndex > 0 } }
   val unreadSinceLastSync = state.unreadSinceLastSync
+
+  LaunchedEffect(triggerSync) {
+    if (triggerSync) {
+      viewModel.dispatch(HomeEvent.OnSwipeToRefresh)
+    }
+  }
 
   LaunchedEffect(state.activeSource) {
     if (state.activeSource != state.prevActiveSource) {
@@ -330,35 +338,28 @@ internal fun HomeScreen(
                 }
               }
 
-              LifecycleEventEffect(event = Lifecycle.Event.ON_STOP) {
-                val firstVisibleItemInfoAfterOffset =
-                  postsListState.layoutInfo.visibleItemsInfo.firstOrNull { itemInfo ->
-                    itemInfo.offset >= topOffset || itemInfo.offset == 0
-                  }
-                val firstVisibleItemIndexAfterOffset = firstVisibleItemInfoAfterOffset?.index ?: 0
+              val saveVisibleItemIndex by
+                rememberUpdatedState({
+                  val firstVisibleItemInfoAfterOffset =
+                    postsListState.layoutInfo.visibleItemsInfo.firstOrNull { itemInfo ->
+                      itemInfo.offset >= topOffset || itemInfo.offset == 0
+                    }
+                  val firstVisibleItemIndexAfterOffset = firstVisibleItemInfoAfterOffset?.index ?: 0
+                  val firstVisibleItemKey = firstVisibleItemInfoAfterOffset?.key as? String
+                  val settledPage = featuredPostsPagerState.settledPage
 
-                val (adjustedIndex, postId) =
-                  if (featuredPosts.isEmpty()) {
-                    val postId =
-                      (firstVisibleItemInfoAfterOffset?.key as? String)?.let {
-                        PostListKey.decode(it).postId
-                      }
-                    firstVisibleItemIndexAfterOffset to postId
-                  } else if (firstVisibleItemIndexAfterOffset == 0) {
-                    val settledPage = featuredPostsPagerState.settledPage
-                    val postId = featuredPosts.getOrNull(settledPage)?.resolvedPost?.id
-                    settledPage to postId
-                  } else {
-                    val postId =
-                      (firstVisibleItemInfoAfterOffset?.key as? String)?.let {
-                        PostListKey.decode(it).postId
-                      }
-                    (firstVisibleItemIndexAfterOffset + featuredPosts.lastIndex.coerceAtLeast(0)) to
-                      postId
-                  }
+                  viewModel.dispatch(
+                    HomeEvent.OnScreenStopped(
+                      firstVisibleItemIndex = firstVisibleItemIndexAfterOffset,
+                      firstVisibleItemKey = firstVisibleItemKey,
+                      settledPage = settledPage,
+                    )
+                  )
+                })
 
-                onVisiblePostChanged(adjustedIndex, postId)
-              }
+              LifecycleEventEffect(event = Lifecycle.Event.ON_STOP) { saveVisibleItemIndex() }
+
+              DisposableEffect(Unit) { onDispose { saveVisibleItemIndex() } }
 
               val pullToRefreshState = rememberPullToRefreshState()
 
@@ -393,11 +394,16 @@ internal fun HomeScreen(
                       featuredPostsPagerState = featuredPostsPagerState,
                       homeViewMode = state.homeViewMode,
                       posts = { posts },
-                      markPostsAsReadByIds = {
-                        viewModel.dispatch(HomeEvent.MarkPostsAsReadByIds(it))
-                      },
-                      markPostAsReadOnScroll = {
+                      markFeaturedPostAsReadOnScroll = {
                         viewModel.dispatch(HomeEvent.MarkFeaturedPostsAsRead(it))
+                      },
+                      onVisiblePostsChanged = { visiblePosts, firstVisibleItemIndex ->
+                        viewModel.dispatch(
+                          HomeEvent.OnVisiblePostsChanged(
+                            visiblePosts = visiblePosts,
+                            firstVisibleItemIndex = firstVisibleItemIndex,
+                          )
+                        )
                       },
                       onPostClicked = { post, _ ->
                         viewModel.dispatch(HomeEvent.OnPostClicked(post))

@@ -26,6 +26,7 @@ import app.cash.paging.createPagingConfig
 import dev.sasikanth.rss.reader.app.Screen
 import dev.sasikanth.rss.reader.billing.BillingHandler
 import dev.sasikanth.rss.reader.core.model.local.ResolvedPost
+import dev.sasikanth.rss.reader.data.repository.ObservableSelectedPost
 import dev.sasikanth.rss.reader.data.repository.ReaderColorScheme
 import dev.sasikanth.rss.reader.data.repository.ReaderFont
 import dev.sasikanth.rss.reader.data.repository.RssRepository
@@ -33,6 +34,7 @@ import dev.sasikanth.rss.reader.data.repository.SettingsRepository
 import dev.sasikanth.rss.reader.data.repository.WidgetDataRepository
 import dev.sasikanth.rss.reader.data.repository.isPremium
 import dev.sasikanth.rss.reader.posts.AllPostsPager
+import dev.sasikanth.rss.reader.reader.ReaderScreenArgs.FromScreen.AudioPlayer
 import dev.sasikanth.rss.reader.reader.ReaderScreenArgs.FromScreen.Bookmarks
 import dev.sasikanth.rss.reader.reader.ReaderScreenArgs.FromScreen.Home
 import dev.sasikanth.rss.reader.reader.ReaderScreenArgs.FromScreen.Search
@@ -62,6 +64,7 @@ class ReaderViewModel(
   private val allPostsPager: AllPostsPager,
   private val settingsRepository: SettingsRepository,
   private val billingHandler: BillingHandler,
+  private val observableSelectedPost: ObservableSelectedPost,
   @Assisted private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -154,6 +157,7 @@ class ReaderViewModel(
   private fun postPageChange(postIndex: Int, post: ResolvedPost) {
     openedPostItems += post.id
     _state.update { it.copy(activePostIndex = postIndex, activePostId = post.id) }
+    observableSelectedPost.updateSelectedPost(postIndex, post.id)
   }
 
   private fun markPostsAsRead(): Job {
@@ -162,7 +166,7 @@ class ReaderViewModel(
 
   private fun init() {
     coroutineScope.launch {
-      if (readerScreenArgs.fromScreen == Home) {
+      if (readerScreenArgs.fromScreen == Home || readerScreenArgs.fromScreen == AudioPlayer) {
         val allPostsPagingData = allPostsPager.allPostsPagingData.cachedIn(coroutineScope)
         _state.update { it.copy(posts = allPostsPagingData) }
       } else {

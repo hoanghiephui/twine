@@ -60,7 +60,7 @@ class FreshRSSSyncCoordinator(
   private val fullArticleFetcher: FullArticleFetcher,
 ) : SyncCoordinator {
   private companion object {
-    private const val ARTICLE_PAGE_SIZE = 250
+    private const val ARTICLE_PAGE_SIZE = 500
     private const val LOCAL_POSTS_PAGE_SIZE = 1000
     private const val STATUS_BATCH_SIZE = 500
   }
@@ -114,22 +114,20 @@ class FreshRSSSyncCoordinator(
 
       // 3. Sync Articles
       val lastSyncedAt =
-        refreshPolicy.fetchLastSyncedAt()?.minus(24.hours) ?: syncStartTime.minus(30.days)
+        refreshPolicy.fetchLastSyncedAt()?.minus(24.hours) ?: syncStartTime.minus(14.days)
       val newerThan = lastSyncedAt.toEpochMilliseconds()
 
-      val hasNewArticles = syncArticles(newerThan = newerThan)
-      syncArticles(streamId = FreshRssSource.USER_STATE_STARRED, newerThan = newerThan)
-      updateSyncState(SyncState.InProgress(0.7f))
-
-      // 4. Sync Statuses (Read/Bookmark)
-      syncStatuses()
-      updateSyncState(SyncState.InProgress(0.9f))
+      syncArticles(newerThan = newerThan)
 
       // Always update lastSyncedAt after a successful sync. The 24-hour overlap
       // when fetching articles handles cases where articles might be added to
       // the server with older timestamps.
       refreshPolicy.updateLastSyncedAt()
       updateSyncState(SyncState.Complete)
+
+      // After finishing feeds, categories and articles, we continue syncing statuses and bookmarks.
+      syncArticles(streamId = FreshRssSource.USER_STATE_STARRED, newerThan = newerThan)
+      syncStatuses()
 
       true
     } catch (e: Exception) {
@@ -170,7 +168,7 @@ class FreshRSSSyncCoordinator(
   }
 
   private suspend fun pushChangesForFeed(feedId: String) {
-    pushStatusChangesForFeed(feedId)
+    pushStatusChanges(feedId)
   }
 
   private suspend fun purgeDeletedSources() {
@@ -560,38 +558,22 @@ class FreshRSSSyncCoordinator(
     } while (localPosts.size >= LOCAL_POSTS_PAGE_SIZE)
   }
 
-  private suspend fun pushStatusChanges() {
+  private suspend fun pushStatusChanges(feedId: String? = null) {
     while (true) {
       val dirtyPosts =
-        rssRepository.postsWithLocalChangesPaged(limit = LOCAL_POSTS_PAGE_SIZE.toLong(), offset = 0)
-      if (dirtyPosts.isEmpty()) return
+        if (feedId != null) {
+          rssRepository.postsWithLocalChangesForFeedPaged(
+            feedId = feedId,
+            limit = LOCAL_POSTS_PAGE_SIZE.toLong(),
+            offset = 0,
+          )
+        } else {
+          rssRepository.postsWithLocalChangesPaged(
+            limit = LOCAL_POSTS_PAGE_SIZE.toLong(),
+            offset = 0,
+          )
+        }
 
-      val toMarkRead = dirtyPosts.filter { it.read }.mapNotNull { it.remoteId }
-      val toMarkUnread = dirtyPosts.filter { !it.read }.mapNotNull { it.remoteId }
-      val toBookmark = dirtyPosts.filter { it.bookmarked }.mapNotNull { it.remoteId }
-      val toUnbookmark = dirtyPosts.filter { !it.bookmarked }.mapNotNull { it.remoteId }
-
-      toMarkRead.chunked(STATUS_BATCH_SIZE).forEach { ids ->
-        freshRssSource.markArticlesAsRead(ids)
-      }
-      toMarkUnread.chunked(STATUS_BATCH_SIZE).forEach { ids ->
-        freshRssSource.markArticlesAsUnRead(ids)
-      }
-      toBookmark.chunked(STATUS_BATCH_SIZE).forEach { ids -> freshRssSource.addBookmarks(ids) }
-      toUnbookmark.chunked(STATUS_BATCH_SIZE).forEach { ids -> freshRssSource.removeBookmarks(ids) }
-
-      dirtyPosts.forEach { post -> rssRepository.updatePostSyncedAt(post.id, post.updatedAt) }
-    }
-  }
-
-  private suspend fun pushStatusChangesForFeed(feedId: String) {
-    while (true) {
-      val dirtyPosts =
-        rssRepository.postsWithLocalChangesForFeedPaged(
-          feedId = feedId,
-          limit = LOCAL_POSTS_PAGE_SIZE.toLong(),
-          offset = 0,
-        )
       if (dirtyPosts.isEmpty()) return
 
       val toMarkRead = dirtyPosts.filter { it.read }.mapNotNull { it.remoteId }
