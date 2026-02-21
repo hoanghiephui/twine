@@ -68,7 +68,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -88,10 +87,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationEventHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import androidx.window.core.layout.WindowSizeClass
 import app.cash.paging.compose.collectAsLazyPagingItems
 import dev.sasikanth.rss.reader.components.NewArticlesScrollToTopButton
 import dev.sasikanth.rss.reader.core.model.local.ResolvedPost
+import dev.sasikanth.rss.reader.core.model.local.ThemeVariant
 import dev.sasikanth.rss.reader.data.repository.HomeViewMode
 import dev.sasikanth.rss.reader.feeds.FeedsViewModel
 import dev.sasikanth.rss.reader.feeds.ui.sheet.BOTTOM_SHEET_PEEK_HEIGHT
@@ -109,7 +112,6 @@ import dev.sasikanth.rss.reader.ui.LocalDynamicColorState
 import dev.sasikanth.rss.reader.ui.SYSTEM_SCRIM
 import dev.sasikanth.rss.reader.utils.CollectItemTransition
 import dev.sasikanth.rss.reader.utils.LocalBlockImage
-import dev.sasikanth.rss.reader.utils.LocalDynamicColorEnabled
 import dev.sasikanth.rss.reader.utils.LocalWindowSizeClass
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.FlowPreview
@@ -144,7 +146,6 @@ internal fun HomeScreen(
   val linkHandler = LocalLinkHandler.current
   val density = LocalDensity.current
   val dynamicColorState = LocalDynamicColorState.current
-  val dynamicColorEnabled = LocalDynamicColorEnabled.current
   val sizeClass = LocalWindowSizeClass.current
   val shouldBlockImage = LocalBlockImage.current
 
@@ -164,7 +165,7 @@ internal fun HomeScreen(
       }
       ?.collectAsLazyPagingItems()
   val featuredPosts by
-    remember(state.featuredPosts, dynamicColorEnabled, sizeClass, shouldBlockImage) {
+    remember(state.featuredPosts, state.themeVariant, sizeClass, shouldBlockImage) {
         if (
           shouldBlockImage ||
             sizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_LARGE_LOWER_BOUND)
@@ -230,7 +231,7 @@ internal fun HomeScreen(
     val fromSeedColor = fromItem?.seedColor?.let { Color(it) }
     val toSeedColor = toItem?.seedColor?.let { Color(it) }
 
-    if (dynamicColorEnabled) {
+    if (state.themeVariant == ThemeVariant.Dynamic) {
       dynamicColorState.animate(
         fromSeedColor = fromSeedColor,
         toSeedColor = toSeedColor,
@@ -239,10 +240,13 @@ internal fun HomeScreen(
     }
   }
 
-  BackHandler(
-    enabled = state.feedsSheetState == SheetValue.Expanded && !(feedsState.isInMultiSelectMode),
-    onBack = { coroutineScope.launch { bottomSheetState.partialExpand() } },
-  )
+  NavigationEventHandler(
+    state = rememberNavigationEventState(NavigationEventInfo.None),
+    isBackEnabled =
+      state.feedsSheetState == SheetValue.Expanded && !(feedsState.isInMultiSelectMode),
+  ) {
+    coroutineScope.launch { bottomSheetState.partialExpand() }
+  }
 
   Scaffold(
     modifier =
