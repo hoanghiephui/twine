@@ -19,13 +19,11 @@ package dev.sasikanth.rss.reader.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.expandIn
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.animation.shrinkOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -37,12 +35,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -52,13 +47,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.dp
 import dev.sasikanth.rss.reader.components.image.FeedIcon
 import dev.sasikanth.rss.reader.core.model.local.UnreadSinceLastSync
+import dev.sasikanth.rss.reader.resources.icons.ArrowUp
+import dev.sasikanth.rss.reader.resources.icons.TwineIcons
 import dev.sasikanth.rss.reader.ui.AppTheme
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -76,97 +77,106 @@ internal fun BoxScope.NewArticlesScrollToTopButton(
 ) {
   if (unreadSinceLastSync != null) {
     val coroutineScope = rememberCoroutineScope()
+    val colorScheme = AppTheme.colorScheme
+    val shape = CircleShape
+
     AnimatedVisibility(
       visible = unreadSinceLastSync.hasNewArticles || canShowScrollToTop,
-      enter = slideInVertically { it },
-      exit = slideOutVertically { it },
-      modifier = modifier.align(Alignment.BottomCenter),
+      enter = fadeIn() + expandIn(expandFrom = Alignment.Center, clip = false),
+      exit = fadeOut() + shrinkOut(shrinkTowards = Alignment.Center, clip = false),
+      modifier =
+        modifier
+          .align(Alignment.BottomCenter)
+          .padding(bottom = 16.dp)
+          .dropShadow(shape = CircleShape) {
+            color = Color.Black.copy(alpha = 0.4f)
+            offset = Offset(0f, 16.dp.toPx())
+            radius = 32.dp.toPx()
+            spread = 0f
+          }
+          .dropShadow(shape = CircleShape) {
+            color = Color.Black.copy(alpha = 0.016f)
+            offset = Offset(0f, 4.dp.toPx())
+            radius = 8.dp.toPx()
+            spread = 0f
+          }
+          .drawBehind {
+            val outline = shape.createOutline(size, layoutDirection, this)
+            drawOutline(outline = outline, color = colorScheme.bottomSheet)
+          }
+          .drawWithContent {
+            drawContent()
+            val outline = shape.createOutline(size, layoutDirection, this)
+            drawOutline(
+              outline = outline,
+              color = colorScheme.bottomSheetBorder,
+              style = Stroke(width = 1.dp.toPx()),
+            )
+          }
+          .padding(4.dp),
     ) {
-      val buttonShape = RoundedCornerShape(50)
-      Box(
-        modifier =
-          Modifier.padding(bottom = 16.dp)
-            .background(AppTheme.colorScheme.bottomSheet, buttonShape)
-            .border(1.dp, AppTheme.colorScheme.bottomSheetBorder, buttonShape)
-            .dropShadow(shape = buttonShape) {
-              color = Color.Black.copy(alpha = 0.4f)
-              offset = Offset(0f, 16.dp.toPx())
-              radius = 32.dp.toPx()
-              spread = 0f
-            }
-            .dropShadow(shape = buttonShape) {
-              color = Color.Black.copy(alpha = 0.016f)
-              offset = Offset(0f, 4.dp.toPx())
-              radius = 8.dp.toPx()
-              spread = 0f
-            }
-            .padding(4.dp)
-      ) {
-        AppTheme(useDarkTheme = true) {
-          Row(modifier = Modifier.height(IntrinsicSize.Min)) {
-            AnimatedVisibility(visible = unreadSinceLastSync.hasNewArticles) {
-              Row {
-                val endPadding by
-                  animateDpAsState(targetValue = if (canShowScrollToTop) 12.dp else 16.dp)
+      AppTheme(useDarkTheme = true) {
+        Row(
+          modifier = Modifier.height(IntrinsicSize.Min),
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          AnimatedVisibility(visible = unreadSinceLastSync.hasNewArticles) {
+            Row {
+              val endPadding by
+                animateDpAsState(targetValue = if (canShowScrollToTop) 12.dp else 16.dp)
 
-                TextButton(
-                  modifier = Modifier.fillMaxHeight(),
-                  onClick = onLoadNewArticlesClick,
-                  shape = RoundedCornerShape(50),
-                  colors =
-                    ButtonDefaults.textButtonColors(contentColor = AppTheme.colorScheme.onSurface),
-                  contentPadding =
-                    PaddingValues(start = 12.dp, top = 8.dp, end = endPadding, bottom = 8.dp),
-                  content = {
-                    unreadSinceLastSync.apply {
-                      OverlappedFeedIcons(
-                        feedHomepageLinks = feedHomepageLinks,
-                        feedIcons = feedIcons,
-                        feedShowFavIconSettings = feedShowFavIconSettings,
-                      )
-                    }
-
-                    Spacer(modifier = Modifier.requiredWidth(12.dp))
-
-                    Text(
-                      text = stringResource(Res.string.newArticles),
-                      style = MaterialTheme.typography.labelLarge,
-                    )
-                  },
-                )
-              }
-            }
-
-            AnimatedVisibility(visible = unreadSinceLastSync.hasNewArticles && canShowScrollToTop) {
-              VerticalDivider(modifier = Modifier.fillMaxHeight().padding(vertical = 16.dp))
-            }
-
-            AnimatedVisibility(
-              visible = canShowScrollToTop,
-              enter =
-                if (unreadSinceLastSync.hasNewArticles) {
-                  fadeIn() + expandHorizontally()
-                } else {
-                  fadeIn()
-                },
-              exit =
-                if (unreadSinceLastSync.hasNewArticles) {
-                  fadeOut() + shrinkHorizontally()
-                } else {
-                  fadeOut()
-                },
-            ) {
-              IconButton(
-                onClick = { coroutineScope.launch { onScrollToTopClick() } },
+              TextButton(
+                modifier = Modifier.fillMaxHeight(),
+                onClick = onLoadNewArticlesClick,
+                shape = RoundedCornerShape(50),
+                colors =
+                  ButtonDefaults.textButtonColors(contentColor = AppTheme.colorScheme.onSurface),
+                contentPadding =
+                  PaddingValues(start = 12.dp, top = 8.dp, end = endPadding, bottom = 8.dp),
                 content = {
-                  Icon(
-                    imageVector = Icons.Rounded.KeyboardArrowUp,
-                    contentDescription = stringResource(Res.string.scrollToTop),
-                    tint = AppTheme.colorScheme.onSurface,
+                  unreadSinceLastSync.apply {
+                    OverlappedFeedIcons(
+                      feedHomepageLinks = feedHomepageLinks,
+                      feedIcons = feedIcons,
+                      feedShowFavIconSettings = feedShowFavIconSettings,
+                    )
+                  }
+
+                  Spacer(modifier = Modifier.requiredWidth(12.dp))
+
+                  Text(
+                    text = stringResource(Res.string.newArticles),
+                    style = MaterialTheme.typography.labelLarge,
                   )
                 },
               )
             }
+          }
+
+          AnimatedVisibility(visible = unreadSinceLastSync.hasNewArticles && canShowScrollToTop) {
+            VerticalDivider(modifier = Modifier.fillMaxHeight().padding(vertical = 16.dp))
+          }
+
+          AnimatedVisibility(
+            visible = canShowScrollToTop,
+            enter =
+              if (unreadSinceLastSync.hasNewArticles) {
+                fadeIn() + expandHorizontally()
+              } else {
+                fadeIn()
+              },
+            exit =
+              if (unreadSinceLastSync.hasNewArticles) {
+                fadeOut() + shrinkHorizontally()
+              } else {
+                fadeOut()
+              },
+          ) {
+            IconButton(
+              icon = TwineIcons.ArrowUp,
+              contentDescription = stringResource(Res.string.scrollToTop),
+              onClick = { coroutineScope.launch { onScrollToTopClick() } },
+            )
           }
         }
       }
@@ -181,6 +191,9 @@ private fun OverlappedFeedIcons(
   feedShowFavIconSettings: List<Boolean>,
   modifier: Modifier = Modifier,
 ) {
+  val colorScheme = AppTheme.colorScheme
+  val extraSmallShape = MaterialTheme.shapes.extraSmall
+
   Layout(
     modifier = modifier,
     content = {
@@ -193,7 +206,10 @@ private fun OverlappedFeedIcons(
         if (!homepageLink.isNullOrBlank() || !icon.isNullOrBlank()) {
           Box(
             modifier =
-              Modifier.background(AppTheme.colorScheme.bottomSheet, MaterialTheme.shapes.extraSmall)
+              Modifier.drawBehind {
+                  val outline = extraSmallShape.createOutline(size, layoutDirection, this)
+                  drawOutline(outline, colorScheme.bottomSheet)
+                }
                 .padding(horizontal = 2.dp, vertical = 1.dp)
           ) {
             FeedIcon(
@@ -201,7 +217,6 @@ private fun OverlappedFeedIcons(
               homepageLink = homepageLink.orEmpty(),
               showFeedFavIcon = showFeedFavIcon,
               contentDescription = null,
-              shape = MaterialTheme.shapes.extraSmall,
               modifier = Modifier.requiredSize(20.dp),
             )
           }

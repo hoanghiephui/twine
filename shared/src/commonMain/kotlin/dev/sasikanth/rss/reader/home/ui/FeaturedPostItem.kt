@@ -40,15 +40,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.window.core.layout.WindowSizeClass
 import dev.sasikanth.rss.reader.core.model.local.ResolvedPost
 import dev.sasikanth.rss.reader.ui.AppTheme
-import dev.sasikanth.rss.reader.util.relativeDurationString
 import dev.sasikanth.rss.reader.utils.Constants
 import dev.sasikanth.rss.reader.utils.LocalWindowSizeClass
+import dev.sasikanth.rss.reader.utils.formatRelativeTime
 
 private val featuredItemPadding: PaddingValues
   @Composable
@@ -57,7 +56,7 @@ private val featuredItemPadding: PaddingValues
     val sizeClass = LocalWindowSizeClass.current
     return when {
       sizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_EXPANDED_LOWER_BOUND) ->
-        PaddingValues(horizontal = 128.dp)
+        PaddingValues(horizontal = 64.dp)
       else -> PaddingValues(0.dp)
     }
   }
@@ -65,6 +64,7 @@ private val featuredItemPadding: PaddingValues
 @Composable
 internal fun FeaturedPostItem(
   item: ResolvedPost,
+  contentAlphaProvider: () -> Float,
   onClick: () -> Unit,
   onBookmarkClick: () -> Unit,
   onCommentsClick: () -> Unit,
@@ -89,16 +89,17 @@ internal fun FeaturedPostItem(
     val density = LocalDensity.current
     val titleTextStyle = MaterialTheme.typography.headlineMedium
     val titleMaxLines = 3
-    var descriptionBottomPadding by remember(item.link) { mutableStateOf(0.dp) }
+    var dynamicTitlePadding by remember(item.link) { mutableStateOf(0.dp) }
 
     featuredImage()
 
-    Spacer(modifier = Modifier.requiredHeight(8.dp))
+    Spacer(Modifier.height(16.dp))
 
     val isDarkTheme = AppTheme.isDark
     Text(
       modifier =
-        Modifier.padding(all = 8.dp).graphicsLayer {
+        Modifier.graphicsLayer {
+          this.alpha = contentAlphaProvider.invoke()
           blendMode =
             if (isDarkTheme) {
               BlendMode.Screen
@@ -108,21 +109,22 @@ internal fun FeaturedPostItem(
         },
       text = item.title.ifBlank { item.description },
       style = titleTextStyle,
-      fontWeight = FontWeight.Bold,
-      color = AppTheme.colorScheme.secondary,
+      color = AppTheme.colorScheme.onSurfaceVariant,
       maxLines = titleMaxLines,
       overflow = TextOverflow.Ellipsis,
       onTextLayout = { textLayoutResult ->
         val numberOfLines = textLayoutResult.lineCount
         if (numberOfLines < titleMaxLines) {
           val lineHeight = with(density) { titleTextStyle.lineHeight.toDp() }
-          descriptionBottomPadding = lineHeight * (titleMaxLines - numberOfLines)
+          dynamicTitlePadding = lineHeight * (titleMaxLines - numberOfLines)
         }
       },
     )
 
+    Spacer(Modifier.height(8.dp))
+
     Text(
-      modifier = Modifier.padding(horizontal = 8.dp),
+      modifier = Modifier.graphicsLayer { this.alpha = contentAlphaProvider.invoke() },
       text = item.description,
       style = MaterialTheme.typography.bodyMedium,
       color = AppTheme.colorScheme.outline,
@@ -131,15 +133,18 @@ internal fun FeaturedPostItem(
       overflow = TextOverflow.Ellipsis,
     )
 
-    Spacer(Modifier.requiredHeight(descriptionBottomPadding + 4.dp))
+    Spacer(Modifier.requiredHeight(dynamicTitlePadding))
+
+    Spacer(modifier = Modifier.requiredHeight(4.dp))
 
     PostActionBar(
+      modifier = Modifier.graphicsLayer { this.alpha = contentAlphaProvider.invoke() },
       feedName = item.feedName,
       feedIcon = item.feedIcon,
       feedHomepageLink = item.feedHomepageLink,
       showFeedFavIcon = item.showFeedFavIcon,
       postRead = readStatus,
-      postRelativeTimestamp = item.date.relativeDurationString(),
+      postRelativeTimestamp = item.date.formatRelativeTime(),
       postLink = item.link,
       postBookmarked = item.bookmarked,
       commentsLink = item.commentsLink,
@@ -155,6 +160,6 @@ internal fun FeaturedPostItem(
       onSourceClick = onSourceClick,
     )
 
-    Spacer(modifier = Modifier.height(8.dp))
+    Spacer(Modifier.requiredHeight(16.dp))
   }
 }

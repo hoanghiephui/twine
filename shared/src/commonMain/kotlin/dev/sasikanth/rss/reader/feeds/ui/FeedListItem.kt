@@ -16,29 +16,29 @@
  */
 package dev.sasikanth.rss.reader.feeds.ui
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.requiredWidth
-import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.Badge
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,8 +48,15 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.sasikanth.rss.reader.components.DropdownMenu
+import dev.sasikanth.rss.reader.components.IconButton
+import dev.sasikanth.rss.reader.components.UnreadBadge
 import dev.sasikanth.rss.reader.components.image.FeedIcon
 import dev.sasikanth.rss.reader.core.model.local.Feed
+import dev.sasikanth.rss.reader.resources.icons.MoreVert
+import dev.sasikanth.rss.reader.resources.icons.Pin
+import dev.sasikanth.rss.reader.resources.icons.PinFilled
+import dev.sasikanth.rss.reader.resources.icons.TwineIcons
 import dev.sasikanth.rss.reader.ui.AppTheme
 import dev.sasikanth.rss.reader.ui.LocalTranslucentStyles
 
@@ -62,19 +69,21 @@ internal fun FeedListItem(
   isFeedSelected: Boolean,
   onFeedClick: (Feed) -> Unit,
   onFeedSelected: (Feed) -> Unit,
-  onOptionsClick: () -> Unit,
+  onPinClick: ((Feed) -> Unit)? = null,
   modifier: Modifier = Modifier,
-  dragHandle: (@Composable () -> Unit)? = null,
   interactionSource: MutableInteractionSource? = null,
+  dropdownMenuContent: (@Composable ColumnScope.(onDismiss: () -> Unit) -> Unit)? = null,
 ) {
   val haptic = LocalHapticFeedback.current
-  val backgroundColor =
-    if (isFeedSelected) {
-      AppTheme.colorScheme.primaryContainer
-    } else {
-      Color.Transparent
-    }
   val translucentStyle = LocalTranslucentStyles.current
+  val backgroundColor by
+    animateColorAsState(
+      if (isFeedSelected) {
+        translucentStyle.default.background
+      } else {
+        Color.Transparent
+      }
+    )
 
   Box(
     modifier =
@@ -99,14 +108,16 @@ internal fun FeedListItem(
           },
         )
   ) {
-    Row(modifier = Modifier.padding(all = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+      modifier = Modifier.padding(start = 12.dp, top = 8.dp, end = 8.dp, bottom = 8.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
       FeedIcon(
         icon = feed.icon,
         homepageLink = feed.homepageLink,
         showFeedFavIcon = feed.showFeedFavIcon,
         contentDescription = null,
-        shape = MaterialTheme.shapes.medium,
-        modifier = Modifier.requiredSize(36.dp),
+        modifier = Modifier.requiredSize(24.dp),
         contentScale = ContentScale.Crop,
       )
 
@@ -115,7 +126,7 @@ internal fun FeedListItem(
       Text(
         modifier = Modifier.weight(1f),
         text = feed.name,
-        style = MaterialTheme.typography.titleSmall,
+        style = MaterialTheme.typography.bodyMedium,
         color = AppTheme.colorScheme.onSurface,
         maxLines = 1,
         overflow = TextOverflow.Clip,
@@ -125,17 +136,9 @@ internal fun FeedListItem(
 
       val numberOfUnreadPosts = feed.numberOfUnreadPosts
       if (canShowUnreadPostsCount && numberOfUnreadPosts > 0 && !isInMultiSelectMode) {
-        Badge(
-          containerColor = translucentStyle.prominent.background,
-          contentColor = AppTheme.colorScheme.secondary,
-          modifier = Modifier.sizeIn(minWidth = 36.dp, minHeight = 24.dp),
-        ) {
-          Text(
-            text = feed.numberOfUnreadPosts.toString(),
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.align(Alignment.CenterVertically),
-          )
-        }
+        UnreadBadge(numberOfUnreadPosts)
+
+        Spacer(Modifier.width(16.dp))
       }
 
       if (isInMultiSelectMode) {
@@ -143,17 +146,29 @@ internal fun FeedListItem(
       }
 
       if (!isInMultiSelectMode) {
-        dragHandle?.invoke()
+        if (onPinClick != null) {
+          val pinIcon = if (feed.pinnedAt != null) TwineIcons.PinFilled else TwineIcons.Pin
+
+          IconButton(icon = pinIcon, contentDescription = null) { onPinClick(feed) }
+        }
       }
 
-      if (!isInMultiSelectMode && dragHandle == null) {
-        IconButton(modifier = Modifier.requiredSize(40.dp), onClick = onOptionsClick) {
-          Icon(
-            modifier = Modifier.requiredSize(20.dp),
-            imageVector = Icons.Filled.MoreVert,
+      if (!isInMultiSelectMode && dropdownMenuContent != null) {
+        Box {
+          var showDropdownMenu by remember { mutableStateOf(false) }
+
+          IconButton(
+            icon = TwineIcons.MoreVert,
             contentDescription = null,
-            tint = AppTheme.colorScheme.secondary,
+            onClick = { showDropdownMenu = true },
           )
+
+          DropdownMenu(
+            expanded = showDropdownMenu,
+            onDismissRequest = { showDropdownMenu = false },
+          ) {
+            dropdownMenuContent { showDropdownMenu = false }
+          }
         }
       }
     }

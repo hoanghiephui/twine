@@ -16,7 +16,7 @@
  */
 package dev.sasikanth.rss.reader.app
 
-import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.AnimatedContentTransitionScope.SlideDirection
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -35,7 +35,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.dropShadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.SavedStateHandle
@@ -52,13 +53,14 @@ import dev.sasikanth.rss.reader.accountselection.AccountSelectionViewModel
 import dev.sasikanth.rss.reader.addfeed.AddFeedViewModel
 import dev.sasikanth.rss.reader.blockedwords.BlockedWordsViewModel
 import dev.sasikanth.rss.reader.bookmarks.BookmarksViewModel
+import dev.sasikanth.rss.reader.changelog.ui.ChangelogSheet
 import dev.sasikanth.rss.reader.core.model.local.ResolvedPost
 import dev.sasikanth.rss.reader.core.model.local.ThemeVariant
 import dev.sasikanth.rss.reader.data.repository.AppThemeMode
-import dev.sasikanth.rss.reader.data.repository.HomeViewMode
 import dev.sasikanth.rss.reader.discovery.DiscoveryViewModel
 import dev.sasikanth.rss.reader.feed.FeedViewModel
 import dev.sasikanth.rss.reader.feeds.FeedsViewModel
+import dev.sasikanth.rss.reader.freshrss.FreshRssLoginViewModel
 import dev.sasikanth.rss.reader.group.GroupViewModel
 import dev.sasikanth.rss.reader.groupselection.GroupSelectionViewModel
 import dev.sasikanth.rss.reader.home.HomeViewModel
@@ -88,6 +90,7 @@ import dev.sasikanth.rss.reader.ui.darkAppColorScheme
 import dev.sasikanth.rss.reader.ui.getOverriddenColorScheme
 import dev.sasikanth.rss.reader.ui.lightAppColorScheme
 import dev.sasikanth.rss.reader.ui.rememberDynamicColorState
+import dev.sasikanth.rss.reader.ui.systemDynamicColorScheme
 import dev.sasikanth.rss.reader.utils.ExternalUriHandler
 import dev.sasikanth.rss.reader.utils.InAppRating
 import dev.sasikanth.rss.reader.utils.LocalAmoledSetting
@@ -133,7 +136,7 @@ fun App(
   bookmarksViewModel: () -> BookmarksViewModel,
   settingsViewModel: () -> SettingsViewModel,
   accountSelectionViewModel: () -> AccountSelectionViewModel,
-  freshRssLoginViewModel: () -> dev.sasikanth.rss.reader.freshrss.FreshRssLoginViewModel,
+  freshRssLoginViewModel: () -> FreshRssLoginViewModel,
   minifluxLoginViewModel: () -> MinifluxLoginViewModel,
   groupViewModel: (SavedStateHandle) -> GroupViewModel,
   blockedWordsViewModel: () -> BlockedWordsViewModel,
@@ -178,9 +181,15 @@ fun App(
           }
         )
       }
+    val systemDynamicColors =
+      if (appState.themeVariant == ThemeVariant.SystemDynamic) {
+        systemDynamicColorScheme(useDarkTheme)
+      } else {
+        null
+      }
     val overriddenColorScheme =
-      remember(appState.themeVariant, useDarkTheme) {
-        appState.themeVariant.getOverriddenColorScheme(useDarkTheme)
+      remember(appState.themeVariant, useDarkTheme, systemDynamicColors) {
+        systemDynamicColors ?: appState.themeVariant.getOverriddenColorScheme(useDarkTheme)
       }
     val navController = rememberNavController()
     val openPost: (Int, ResolvedPost, FromScreen) -> Unit =
@@ -206,21 +215,19 @@ fun App(
       } else {
         24.dp
       }
-    val screenModifier = Modifier.fillMaxSize()
-    val roundedCornerScreenModifier = screenModifier.clip(RoundedCornerShape(screenCornerRadius))
+    val screenModifier =
+      Modifier.fillMaxSize().let {
+        if (platform == Platform.Apple) {
+          it.dropShadow(shape = RoundedCornerShape(screenCornerRadius)) {
+            color = Color.Black.copy(alpha = 0.1f)
+            radius = 32.dp.toPx()
+          }
+        } else {
+          it
+        }
+      }
 
     LaunchedEffect(useDarkTheme) { onThemeChange(useDarkTheme) }
-
-    LaunchedEffect(appState.homeViewMode, appState.themeVariant) {
-      if (
-        appState.homeViewMode == HomeViewMode.Default &&
-          appState.themeVariant == ThemeVariant.Dynamic
-      ) {
-        dynamicColorState.refresh()
-      } else {
-        dynamicColorState.reset()
-      }
-    }
 
     LaunchedEffect(Unit) {
       appViewModel.navigateToReader
@@ -242,6 +249,11 @@ fun App(
         if (uri != null) {
           if (uri.startsWith("twine://oauth")) {
             appViewModel.onOAuthRedirect(uri, linkHandler)
+          } else if (uri == "twine://bookmarks") {
+            navController.navigate(Screen.Main(startTab = Screen.Main.TAB_BOOKMARKS)) {
+              popUpTo<Screen.Placeholder> { inclusive = true }
+              launchSingleTop = true
+            }
           } else if (uri == "twine://reader/currently-playing") {
             val playingPostId = audioPlayer.playbackState.value.playingPostId
             if (playingPostId != null) {
@@ -271,20 +283,28 @@ fun App(
         navController = navController,
         startDestination = Screen.Placeholder,
         popEnterTransition = {
-          fadeIn(
-            animationSpec =
-              spring(
-                dampingRatio = 1.0f, // reflects material3 motionScheme.defaultEffectsSpec()
-                stiffness = 1600.0f, // reflects material3 motionScheme.defaultEffectsSpec()
-              )
-          )
+          if (platform == Platform.Apple) {
+            slideIntoContainer(
+              towards = SlideDirection.End,
+              animationSpec = tween(durationMillis = 200, easing = LinearEasing),
+              initialOffset = { fullOffset -> (fullOffset * 0.4f).toInt() },
+            )
+          } else {
+            fadeIn(
+              animationSpec =
+                spring(
+                  dampingRatio = 1.0f, // reflects material3 motionScheme.defaultEffectsSpec()
+                  stiffness = 1600.0f, // reflects material3 motionScheme.defaultEffectsSpec()
+                )
+            )
+          }
         },
         popExitTransition = {
           if (platform == Platform.Apple) {
             slideOutOfContainer(
-              towards = AnimatedContentTransitionScope.SlideDirection.End,
+              towards = SlideDirection.End,
               animationSpec = tween(durationMillis = 200, easing = LinearEasing),
-              targetOffset = { fullOffset -> (fullOffset * 0.3f).toInt() },
+              targetOffset = { fullOffset -> fullOffset },
             )
           } else {
             scaleOut(
@@ -295,7 +315,7 @@ fun App(
         },
       ) {
         placeholderScreen(
-          modifier = roundedCornerScreenModifier,
+          modifier = screenModifier,
           placeholderViewModel = placeholderViewModel,
           navController = navController,
         )
@@ -303,6 +323,7 @@ fun App(
         onboardingScreen(onboardingViewModel = onboardingViewModel, navController = navController)
 
         accountSelectionScreen(
+          modifier = screenModifier,
           accountSelectionViewModel = accountSelectionViewModel,
           navController = navController,
         )
@@ -323,11 +344,13 @@ fun App(
         )
 
         freshRssLoginScreen(
+          modifier = screenModifier,
           freshRssLoginViewModel = freshRssLoginViewModel,
           navController = navController,
         )
 
         minifluxLoginScreen(
+          modifier = screenModifier,
           minifluxLoginViewModel = minifluxLoginViewModel,
           navController = navController,
         )
@@ -338,10 +361,11 @@ fun App(
           navController = navController,
           toggleLightStatusBar = toggleLightStatusBar,
           toggleLightNavBar = toggleLightNavBar,
-          modifier = roundedCornerScreenModifier,
+          modifier = screenModifier,
         )
 
         addFeedScreen(
+          modifier = screenModifier,
           addFeedViewModel = addFeedViewModel,
           navController = navController,
           useDarkTheme = useDarkTheme,
@@ -355,29 +379,61 @@ fun App(
           screenModifier = screenModifier,
         )
 
-        aboutScreen(modifier = roundedCornerScreenModifier, navController = navController)
-
-        statisticsScreen(
-          modifier = roundedCornerScreenModifier,
-          statisticsViewModel = statisticsViewModel,
-          navController = navController,
-        )
+        aboutScreen(modifier = screenModifier, navController = navController)
 
         feedGroupScreen(
-          modifier = roundedCornerScreenModifier,
+          modifier = screenModifier,
           groupViewModel = groupViewModel,
           navController = navController,
         )
 
         blockedWordsScreen(
-          modifier = roundedCornerScreenModifier,
+          modifier = screenModifier,
           blockedWordsViewModel = blockedWordsViewModel,
           navController = navController,
         )
 
         paywallScreen(
-          modifier = roundedCornerScreenModifier,
+          modifier = screenModifier,
           premiumPaywallViewModel = premiumPaywallViewModel,
+          navController = navController,
+        )
+
+        imageViewerScreen(
+          modifier = screenModifier,
+          navController = navController,
+          toggleLightStatusBar = toggleLightStatusBar,
+          toggleLightNavBar = toggleLightNavBar,
+        )
+
+        settingsAppearanceScreen(
+          modifier = screenModifier,
+          settingsViewModel = settingsViewModel,
+          navController = navController,
+        )
+
+        settingsBehaviorScreen(
+          modifier = screenModifier,
+          settingsViewModel = settingsViewModel,
+          navController = navController,
+        )
+
+        settingsServicesScreen(
+          modifier = screenModifier,
+          settingsViewModel = settingsViewModel,
+          navController = navController,
+        )
+
+        settingsDataScreen(
+          statisticsViewModel = statisticsViewModel,
+          navController = navController,
+          modifier = screenModifier,
+        )
+
+        settingsAppInfoScreen(
+          modifier = screenModifier,
+          settingsViewModel = settingsViewModel,
+          openChangelog = { appViewModel.openChangelog() },
           navController = navController,
         )
 
@@ -386,6 +442,13 @@ fun App(
         groupSelectionDialog(
           groupSelectionViewModel = groupSelectionViewModel,
           navController = navController,
+        )
+      }
+
+      if (appState.showChangelog) {
+        ChangelogSheet(
+          versionName = appState.versionName,
+          onDismiss = appViewModel::onChangelogDismissed,
         )
       }
     }

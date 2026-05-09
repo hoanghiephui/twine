@@ -30,7 +30,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -52,22 +52,29 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.cash.paging.compose.collectAsLazyPagingItems
-import app.cash.paging.compose.itemContentType
-import app.cash.paging.compose.itemKey
+import androidx.paging.compose.LazyPagingItems
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.compose.itemContentType
+import androidx.paging.compose.itemKey
 import dev.sasikanth.rss.reader.components.CircularIconButton
 import dev.sasikanth.rss.reader.components.ContextActionItem
 import dev.sasikanth.rss.reader.components.ContextActionsBottomBar
+import dev.sasikanth.rss.reader.components.DropdownMenuDivider
+import dev.sasikanth.rss.reader.components.DropdownMenuItem
+import dev.sasikanth.rss.reader.core.model.local.Feed
+import dev.sasikanth.rss.reader.feeds.ui.DeleteConfirmationDialog
 import dev.sasikanth.rss.reader.feeds.ui.FeedListItem
 import dev.sasikanth.rss.reader.feeds.ui.common.AllFeedsHeader
-import dev.sasikanth.rss.reader.feeds.ui.sheet.expanded.DeleteConfirmationDialog
 import dev.sasikanth.rss.reader.group.GroupEvent
+import dev.sasikanth.rss.reader.group.GroupState
 import dev.sasikanth.rss.reader.group.GroupViewModel
 import dev.sasikanth.rss.reader.resources.icons.ArrowBack
 import dev.sasikanth.rss.reader.resources.icons.Delete
 import dev.sasikanth.rss.reader.resources.icons.NewGroup
+import dev.sasikanth.rss.reader.resources.icons.RemoveFeed
 import dev.sasikanth.rss.reader.resources.icons.TwineIcons
 import dev.sasikanth.rss.reader.resources.icons.UnGroup
 import dev.sasikanth.rss.reader.ui.AppTheme
@@ -79,6 +86,7 @@ import twine.shared.generated.resources.actionDelete
 import twine.shared.generated.resources.actionMoveTo
 import twine.shared.generated.resources.actionUngroup
 import twine.shared.generated.resources.buttonGoBack
+import twine.shared.generated.resources.feedOptionRemove
 import twine.shared.generated.resources.groupNameHint
 
 @Composable
@@ -88,125 +96,177 @@ fun GroupScreen(
   openGroupSelection: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  val layoutDirection = LocalLayoutDirection.current
   val state by viewModel.state.collectAsStateWithLifecycle()
   val feeds = state.feeds.collectAsLazyPagingItems()
 
-  AppTheme(useDarkTheme = true) {
-    if (state.showDeleteConfirmation) {
-      DeleteConfirmationDialog(
-        onDelete = { viewModel.dispatch(GroupEvent.DeleteSelectedSources) },
-        dismiss = { viewModel.dispatch(GroupEvent.DismissDeleteConfirmation) },
-      )
-    }
+  GroupContent(
+    state = state,
+    feeds = feeds,
+    groupName = viewModel.groupName,
+    dispatch = viewModel::dispatch,
+    goBack = goBack,
+    openGroupSelection = openGroupSelection,
+    modifier = modifier,
+  )
+}
 
-    Scaffold(
-      modifier = modifier,
-      topBar = {
-        Box {
-          Column {
-            CenterAlignedTopAppBar(
-              modifier = Modifier.padding(horizontal = 4.dp),
-              title = {
-                GroupNameTextField(
-                  value = viewModel.groupName,
-                  onValueChanged = { viewModel.dispatch(GroupEvent.OnGroupNameChanged(it.text)) },
-                  modifier = Modifier.weight(1f),
-                )
-              },
-              navigationIcon = {
-                CircularIconButton(
-                  modifier = Modifier.padding(start = 12.dp),
-                  icon = TwineIcons.ArrowBack,
-                  label = stringResource(Res.string.buttonGoBack),
-                  onClick = { goBack() },
-                )
-              },
-              actions = { Spacer(Modifier.requiredSize(48.dp)) },
-              colors =
-                TopAppBarDefaults.topAppBarColors(
-                  containerColor = AppTheme.colorScheme.bottomSheet,
-                  navigationIconContentColor = AppTheme.colorScheme.onSurface,
-                  titleContentColor = AppTheme.colorScheme.onSurface,
-                  actionIconContentColor = AppTheme.colorScheme.onSurface,
-                ),
-            )
+@Composable
+private fun GroupContent(
+  state: GroupState,
+  feeds: LazyPagingItems<Feed>,
+  groupName: TextFieldValue,
+  dispatch: (GroupEvent) -> Unit,
+  goBack: () -> Unit,
+  openGroupSelection: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val layoutDirection = LocalLayoutDirection.current
 
-            AllFeedsHeader(
-              modifier = Modifier.background(AppTheme.colorScheme.surface),
-              feedsCount = feeds.itemCount,
-              feedsSortOrder = state.feedsOrderBy,
-              showAddButton = false,
-              onFeedsSortChanged = { viewModel.dispatch(GroupEvent.OnFeedsSortOrderChanged(it)) },
-            )
-          }
+  if (state.showDeleteConfirmation) {
+    DeleteConfirmationDialog(
+      onDelete = { dispatch(GroupEvent.DeleteSelectedSources) },
+      dismiss = { dispatch(GroupEvent.DismissDeleteConfirmation) },
+    )
+  }
 
-          HorizontalDivider(
-            modifier = Modifier.fillMaxWidth().align(Alignment.BottomStart),
-            color = AppTheme.colorScheme.surfaceContainerLow,
+  Scaffold(
+    modifier = modifier,
+    topBar = {
+      Box {
+        Column {
+          CenterAlignedTopAppBar(
+            modifier = Modifier.padding(horizontal = 4.dp),
+            title = {
+              GroupNameTextField(
+                value = groupName,
+                onValueChanged = { dispatch(GroupEvent.OnGroupNameChanged(it.text)) },
+                modifier = Modifier.weight(1f),
+              )
+            },
+            navigationIcon = {
+              CircularIconButton(
+                modifier = Modifier.padding(start = 12.dp),
+                icon = TwineIcons.ArrowBack,
+                label = stringResource(Res.string.buttonGoBack),
+                onClick = { goBack() },
+              )
+            },
+            actions = { Spacer(Modifier.requiredSize(48.dp)) },
+            colors =
+              TopAppBarDefaults.topAppBarColors(
+                containerColor = AppTheme.colorScheme.backdrop,
+                navigationIconContentColor = AppTheme.colorScheme.onSurface,
+                titleContentColor = AppTheme.colorScheme.onSurface,
+                actionIconContentColor = AppTheme.colorScheme.onSurface,
+              ),
+          )
+
+          AllFeedsHeader(
+            modifier = Modifier.background(AppTheme.colorScheme.backdrop),
+            feedsCount = feeds.itemCount,
+            feedsSortOrder = state.feedsOrderBy,
+            showAddButton = false,
+            onFeedsSortChanged = { dispatch(GroupEvent.OnFeedsSortOrderChanged(it)) },
           )
         }
-      },
-      bottomBar = {
-        if (state.isInMultiSelectMode) {
-          ContextActionsBottomBar(
-            tooltip = null,
-            onCancel = { viewModel.dispatch(GroupEvent.OnCancelSelectionClicked) },
-          ) {
-            ContextActionItem(
-              modifier = Modifier.weight(1f),
-              icon = TwineIcons.NewGroup,
-              label = stringResource(Res.string.actionMoveTo),
-              onClick = { openGroupSelection() },
-            )
 
-            ContextActionItem(
-              modifier = Modifier.weight(1f),
-              icon = TwineIcons.Delete,
-              label = stringResource(Res.string.actionDelete),
-              onClick = { viewModel.dispatch(GroupEvent.OnDeleteSelectedFeedsClicked) },
-            )
+        HorizontalDivider(
+          modifier = Modifier.fillMaxWidth().align(Alignment.BottomStart),
+          color = AppTheme.colorScheme.surfaceContainerLow,
+        )
+      }
+    },
+    bottomBar = {
+      if (state.isInMultiSelectMode) {
+        ContextActionsBottomBar(
+          tooltip = null,
+          onCancel = { dispatch(GroupEvent.OnCancelSelectionClicked) },
+        ) {
+          ContextActionItem(
+            modifier = Modifier.weight(1f),
+            icon = TwineIcons.NewGroup,
+            label = stringResource(Res.string.actionMoveTo),
+            onClick = { openGroupSelection() },
+          )
 
-            ContextActionItem(
-              modifier = Modifier.weight(1f),
-              icon = TwineIcons.UnGroup,
-              label = stringResource(Res.string.actionUngroup),
-              onClick = { viewModel.dispatch(GroupEvent.OnUngroupClicked) },
-            )
-          }
+          ContextActionItem(
+            modifier = Modifier.weight(1f),
+            icon = TwineIcons.Delete,
+            label = stringResource(Res.string.actionDelete),
+            onClick = { dispatch(GroupEvent.OnDeleteSelectedFeedsClicked) },
+          )
+
+          ContextActionItem(
+            modifier = Modifier.weight(1f),
+            icon = TwineIcons.UnGroup,
+            label = stringResource(Res.string.actionUngroup),
+            onClick = { dispatch(GroupEvent.OnUngroupClicked) },
+          )
         }
-      },
-      containerColor = AppTheme.colorScheme.bottomSheet,
-    ) { innerPadding ->
-      LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding =
-          PaddingValues(
-            start = innerPadding.calculateStartPadding(layoutDirection),
-            top = innerPadding.calculateTopPadding() + 24.dp,
-            end = innerPadding.calculateEndPadding(layoutDirection),
-            bottom = innerPadding.calculateBottomPadding() + 200.dp,
-          ),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-      ) {
-        items(
-          count = feeds.itemCount,
-          key = feeds.itemKey { it.id },
-          contentType = feeds.itemContentType { it.id },
-        ) { index ->
-          val feed = feeds[index]
-          if (feed != null) {
-            FeedListItem(
-              modifier = Modifier.padding(horizontal = 24.dp),
-              feed = feed,
-              canShowUnreadPostsCount = false,
-              isInMultiSelectMode = state.isInMultiSelectMode,
-              isFeedSelected = state.selectedSources.any { it.id == feed.id },
-              onFeedClick = { viewModel.dispatch(GroupEvent.OnFeedClicked(feed)) },
-              onFeedSelected = { viewModel.dispatch(GroupEvent.OnFeedClicked(feed)) },
-              onOptionsClick = { viewModel.dispatch(GroupEvent.OnFeedClicked(feed)) },
-            )
-          }
+      }
+    },
+    containerColor = AppTheme.colorScheme.backdrop,
+  ) { innerPadding ->
+    LazyColumn(
+      modifier = Modifier.fillMaxSize(),
+      contentPadding =
+        PaddingValues(
+          start = innerPadding.calculateStartPadding(layoutDirection),
+          top = innerPadding.calculateTopPadding() + 24.dp,
+          end = innerPadding.calculateEndPadding(layoutDirection),
+          bottom = innerPadding.calculateBottomPadding() + 200.dp,
+        ),
+      verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+      items(
+        count = feeds.itemCount,
+        key = feeds.itemKey { it.id },
+        contentType = feeds.itemContentType { it.id },
+      ) { index ->
+        val feed = feeds[index]
+        if (feed != null) {
+          FeedListItem(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            feed = feed,
+            canShowUnreadPostsCount = false,
+            isInMultiSelectMode = state.isInMultiSelectMode,
+            isFeedSelected = state.selectedSources.any { it.id == feed.id },
+            onFeedClick = { dispatch(GroupEvent.OnFeedClicked(feed)) },
+            onFeedSelected = { dispatch(GroupEvent.OnFeedClicked(feed)) },
+            dropdownMenuContent = { onDismiss ->
+              DropdownMenuItem(
+                text = stringResource(Res.string.actionMoveTo),
+                leadingIcon = TwineIcons.NewGroup,
+                onClick = {
+                  dispatch(GroupEvent.OnFeedSelected(feed))
+                  openGroupSelection()
+                  onDismiss()
+                },
+              )
+
+              DropdownMenuItem(
+                text = stringResource(Res.string.actionUngroup),
+                leadingIcon = TwineIcons.UnGroup,
+                onClick = {
+                  dispatch(GroupEvent.OnFeedSelected(feed))
+                  dispatch(GroupEvent.OnUngroupClicked)
+                  onDismiss()
+                },
+              )
+
+              DropdownMenuDivider()
+
+              DropdownMenuItem(
+                text = stringResource(Res.string.feedOptionRemove),
+                leadingIcon = TwineIcons.RemoveFeed,
+                onClick = {
+                  dispatch(GroupEvent.OnFeedSelected(feed))
+                  dispatch(GroupEvent.OnDeleteSelectedFeedsClicked)
+                  onDismiss()
+                },
+              )
+            },
+          )
         }
       }
     }
@@ -232,7 +292,7 @@ fun GroupNameTextField(
     colorScheme = MaterialTheme.colorScheme.copy(primary = AppTheme.colorScheme.primary)
   ) {
     OutlinedTextField(
-      modifier = modifier,
+      modifier = modifier.padding(horizontal = 16.dp),
       value = input.copy(selection = TextRange(input.text.length)),
       onValueChange = { input = it },
       placeholder = {
@@ -242,7 +302,7 @@ fun GroupNameTextField(
           style = MaterialTheme.typography.bodyLarge,
         )
       },
-      shape = RoundedCornerShape(16.dp),
+      shape = CircleShape,
       singleLine = true,
       textStyle = MaterialTheme.typography.bodyLarge.copy(textAlign = TextAlign.Center),
       colors =
@@ -253,6 +313,21 @@ fun GroupNameTextField(
           focusedTextColor = AppTheme.colorScheme.onSurface,
           disabledTextColor = Color.Transparent,
         ),
+    )
+  }
+}
+
+@Preview(locale = "en")
+@Composable
+private fun GroupPreview() {
+  AppTheme {
+    GroupContent(
+      state = GroupState.DEFAULT,
+      feeds = GroupState.DEFAULT.feeds.collectAsLazyPagingItems(),
+      groupName = TextFieldValue(),
+      dispatch = {},
+      goBack = {},
+      openGroupSelection = {},
     )
   }
 }

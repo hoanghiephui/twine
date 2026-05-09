@@ -33,10 +33,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -55,6 +52,7 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.sasikanth.rss.reader.app.AppIcon
+import dev.sasikanth.rss.reader.resources.icons.CheckCircle
 import dev.sasikanth.rss.reader.resources.icons.StarShine
 import dev.sasikanth.rss.reader.resources.icons.TwineIcons
 import dev.sasikanth.rss.reader.ui.AppTheme
@@ -85,7 +83,7 @@ internal fun AppIconSettingItem(
       Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
           text = stringResource(Res.string.settingsAppIconTitle),
-          style = MaterialTheme.typography.titleMedium,
+          style = MaterialTheme.typography.titleSmall,
           color = AppTheme.colorScheme.onSurface,
         )
 
@@ -103,7 +101,7 @@ internal fun AppIconSettingItem(
 
       Text(
         text = stringResource(Res.string.settingsAppIconSubtitle),
-        style = MaterialTheme.typography.labelLarge,
+        style = MaterialTheme.typography.bodyMedium,
         color = AppTheme.colorScheme.onSurfaceVariant,
       )
     }
@@ -141,7 +139,7 @@ internal fun AppIconSelectionSheet(
               .padding(8.dp),
         ) {
           Box(contentAlignment = Alignment.Center) {
-            val shape = RoundedCornerShape(28.dp)
+            val shape = RoundedCornerShape(25)
 
             AppIconPreview(appIcon = appIcon, shape = shape, modifier = Modifier.size(64.dp))
 
@@ -151,7 +149,7 @@ internal fun AppIconSelectionSheet(
                 contentAlignment = Alignment.Center,
               ) {
                 Icon(
-                  imageVector = Icons.Default.CheckCircle,
+                  imageVector = TwineIcons.CheckCircle,
                   contentDescription = null,
                   tint = Color.White,
                   modifier = Modifier.size(24.dp),
@@ -180,7 +178,7 @@ internal fun AppIconSelectionSheet(
 private fun AppIconPreview(
   appIcon: AppIcon,
   modifier: Modifier = Modifier,
-  shape: Shape = CircleShape,
+  shape: Shape = RoundedCornerShape(25),
 ) {
   val backgroundColor =
     when (appIcon) {

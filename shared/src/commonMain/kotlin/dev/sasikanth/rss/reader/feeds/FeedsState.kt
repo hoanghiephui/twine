@@ -21,12 +21,14 @@ import androidx.paging.PagingData
 import dev.sasikanth.rss.reader.core.model.local.Feed
 import dev.sasikanth.rss.reader.core.model.local.Source
 import dev.sasikanth.rss.reader.data.repository.FeedsOrderBy
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 
 @Immutable
 data class FeedsState(
-  val pinnedSources: List<Source>,
+  val pinnedSources: ImmutableList<Source>,
   val sources: Flow<PagingData<SourceListItem>>,
   val feedsSearchResults: Flow<PagingData<Feed>>,
   val activeSource: Source?,
@@ -36,6 +38,8 @@ data class FeedsState(
   val selectedSources: Set<Source>,
   val numberOfFeeds: Int,
   val numberOfFeedGroups: Int,
+  val sourceToDelete: Source? = null,
+  val sourceToAddToGroup: Source? = null,
   val showDeleteConfirmation: Boolean,
   val openPaywall: Boolean,
   val openAddFeedScreen: Boolean,
@@ -50,7 +54,7 @@ data class FeedsState(
     val DEFAULT =
       FeedsState(
         feedsSearchResults = emptyFlow(),
-        pinnedSources = emptyList(),
+        pinnedSources = persistentListOf(),
         sources = emptyFlow(),
         activeSource = null,
         canShowUnreadPostsCount = false,
@@ -59,6 +63,8 @@ data class FeedsState(
         selectedSources = emptySet(),
         numberOfFeeds = 0,
         numberOfFeedGroups = 0,
+        sourceToDelete = null,
+        sourceToAddToGroup = null,
         showDeleteConfirmation = false,
         openPaywall = false,
         openAddFeedScreen = false,

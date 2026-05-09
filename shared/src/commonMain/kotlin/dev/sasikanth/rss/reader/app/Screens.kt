@@ -26,7 +26,12 @@ sealed interface Screen {
 
   @Serializable data object Onboarding : Screen
 
-  @Serializable data class Main(val triggerSync: Boolean = false) : Screen
+  @Serializable
+  data class Main(val triggerSync: Boolean = false, val startTab: String? = null) : Screen {
+    companion object {
+      const val TAB_BOOKMARKS = "bookmarks"
+    }
+  }
 
   @Serializable data object Home : Screen
 
@@ -48,13 +53,21 @@ sealed interface Screen {
 
   @Serializable data object Settings : Screen
 
+  @Serializable data object SettingsAppearance : Screen
+
+  @Serializable data object SettingsBehavior : Screen
+
+  @Serializable data object SettingsServices : Screen
+
+  @Serializable data object SettingsData : Screen
+
+  @Serializable data object SettingsAppInfo : Screen
+
   @Serializable data object AccountSelection : Screen
 
   @Serializable data class Discovery(val isFromOnboarding: Boolean = false) : Screen
 
   @Serializable data object About : Screen
-
-  @Serializable data object Statistics : Screen
 
   @Serializable
   data object AddFeed : Screen {
@@ -72,5 +85,17 @@ sealed interface Screen {
 
   @Serializable data object Paywall : Screen
 
-  data object None : Screen
+  @Serializable data class ImageViewer(val imageUrl: String) : Screen
+
+  @Serializable data object None : Screen
+
+  @Serializable data object MainHome : Screen
+
+  @Serializable data object MainSearch : Screen
+
+  @Serializable data object MainBookmarks : Screen
+
+  @Serializable data object MainSettings : Screen
+
+  @Serializable data object MainDiscovery : Screen
 }

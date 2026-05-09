@@ -43,6 +43,8 @@ data class ResolvedPost(
   val articleContentReadingTime: Int? = null,
   val seedColor: Int? = null,
   val remoteId: String? = null,
+  val audioProgress: Long = 0L,
+  val audioDuration: Long = 0L,
 ) {
   val bookmarked: Boolean
     get() = PostFlag.Bookmarked in flags

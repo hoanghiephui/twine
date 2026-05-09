@@ -18,16 +18,13 @@ package dev.sasikanth.rss.reader.ui
 
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextDirection
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.sasikanth.rss.reader.utils.toSp
 import org.jetbrains.compose.resources.Font
 import twine.shared.generated.resources.Res
 import twine.shared.generated.resources.comic_neue_bold
@@ -42,6 +39,9 @@ import twine.shared.generated.resources.lora_regular
 import twine.shared.generated.resources.merriweather_bold
 import twine.shared.generated.resources.merriweather_medium
 import twine.shared.generated.resources.merriweather_regular
+import twine.shared.generated.resources.outfit_bold
+import twine.shared.generated.resources.outfit_medium
+import twine.shared.generated.resources.outfit_regular
 import twine.shared.generated.resources.robot_serif_bold
 import twine.shared.generated.resources.roboto_serif_medium
 import twine.shared.generated.resources.roboto_serif_regular
@@ -60,15 +60,18 @@ internal fun typography(
   fontScalingFactor: Float = 1f,
   lineHeightScalingFactor: Float = 1f,
 ): Typography {
-  val titleLargeFontSize = 20.sp * fontScalingFactor
-  val titleMediumFontSize = 17.sp * fontScalingFactor
-  val titleSmallFontSize = 15.sp * fontScalingFactor
-  val bodyLargeFontSize = 17.sp * fontScalingFactor
-  val bodyMediumFontSize = 15.sp * fontScalingFactor
+  val titleLargeFontSize = 22.sp * fontScalingFactor
+  val titleMediumFontSize = 16.sp * fontScalingFactor
+  val titleSmallFontSize = 14.sp * fontScalingFactor
+  val bodyLargeFontSize = 16.sp * fontScalingFactor
+  val bodyMediumFontSize = 14.sp * fontScalingFactor
   val bodySmallFontSize = 12.sp * fontScalingFactor
-  val labelLargeFontSize = 15.sp * fontScalingFactor
+  val labelLargeFontSize = 14.sp * fontScalingFactor
   val labelMediumFontSize = 12.sp * fontScalingFactor
-  val labelSmallFontSize = 11.sp * fontScalingFactor
+  val labelSmallFontSize = 10.sp * fontScalingFactor
+  val headlineLargeFontSize = 32.sp * fontScalingFactor
+  val headlineMediumFontSize = 28.sp * fontScalingFactor
+  val headlineSmallFontSize = 24.sp * fontScalingFactor
 
   return Typography(
     displayLarge =
@@ -99,33 +102,35 @@ internal fun typography(
     headlineLarge =
       defaultTextStyle.copy(
         fontFamily = fontFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 32.sp * fontScalingFactor,
+        fontWeight = FontWeight.Bold,
+        fontSize = headlineLargeFontSize,
         lineHeight = 40.sp * lineHeightScalingFactor,
+        letterSpacing = -(headlineLargeFontSize * 0.02), // applying 2% letter spacing,
         lineHeightStyle = figmaLineHeightStyle,
       ),
     headlineMedium =
       defaultTextStyle.copy(
         fontFamily = fontFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 28.sp * fontScalingFactor,
-        lineHeight = 36.sp * lineHeightScalingFactor,
+        fontWeight = FontWeight.Bold,
+        fontSize = headlineMediumFontSize,
+        lineHeight = 32.sp * lineHeightScalingFactor,
+        letterSpacing = -(headlineMediumFontSize * 0.02), // applying 2% letter spacing,
         lineHeightStyle = figmaLineHeightStyle,
       ),
     headlineSmall =
       defaultTextStyle.copy(
         fontFamily = fontFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 24.sp * fontScalingFactor,
+        fontWeight = FontWeight.Bold,
+        fontSize = headlineSmallFontSize,
         lineHeight = 32.sp * lineHeightScalingFactor,
+        letterSpacing = -(headlineSmallFontSize * 0.02), // applying 2% letter spacing,
         lineHeightStyle = figmaLineHeightStyle,
       ),
     titleLarge =
       defaultTextStyle.copy(
         fontFamily = fontFamily,
-        fontWeight = FontWeight.Normal,
+        fontWeight = FontWeight.Medium,
         fontSize = titleLargeFontSize,
-        letterSpacing = titleLargeFontSize * 0.02, // applying 2% letter spacing
         lineHeight = 28.sp * lineHeightScalingFactor,
         lineHeightStyle = figmaLineHeightStyle,
       ),
@@ -134,7 +139,6 @@ internal fun typography(
         fontFamily = fontFamily,
         fontWeight = FontWeight.Medium,
         fontSize = titleMediumFontSize,
-        letterSpacing = titleMediumFontSize * 0.03, // applying 3% letter spacing
         lineHeight = 24.sp * lineHeightScalingFactor,
         lineHeightStyle = figmaLineHeightStyle,
       ),
@@ -143,7 +147,6 @@ internal fun typography(
         fontFamily = fontFamily,
         fontWeight = FontWeight.Medium,
         fontSize = titleSmallFontSize,
-        letterSpacing = titleSmallFontSize * 0.03, // applying 3% letter spacing
         lineHeight = 20.sp * lineHeightScalingFactor,
         lineHeightStyle = figmaLineHeightStyle,
       ),
@@ -152,7 +155,6 @@ internal fun typography(
         fontFamily = fontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = bodyLargeFontSize,
-        letterSpacing = bodyLargeFontSize * 0.03, // applying 3% letter spacing
         lineHeight = 24.sp * lineHeightScalingFactor,
         lineHeightStyle = figmaLineHeightStyle,
       ),
@@ -161,7 +163,6 @@ internal fun typography(
         fontFamily = fontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = bodyMediumFontSize,
-        letterSpacing = bodyMediumFontSize * 0.02, // applying 2% letter spacing
         lineHeight = 20.sp * lineHeightScalingFactor,
         lineHeightStyle = figmaLineHeightStyle,
       ),
@@ -170,7 +171,7 @@ internal fun typography(
         fontFamily = fontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = bodySmallFontSize,
-        letterSpacing = bodySmallFontSize * 0.05, // applying 5% letter spacing
+        letterSpacing = bodySmallFontSize * 0.02, // applying 2% letter spacing
         lineHeight = 16.sp * lineHeightScalingFactor,
         lineHeightStyle = figmaLineHeightStyle,
       ),
@@ -179,35 +180,29 @@ internal fun typography(
         fontFamily = fontFamily,
         fontWeight = FontWeight.Medium,
         fontSize = labelLargeFontSize,
-        letterSpacing = labelLargeFontSize * 0.03, // applying 3% letter spacing
         lineHeight = 20.sp * lineHeightScalingFactor,
         lineHeightStyle = figmaLineHeightStyle,
       ),
     labelMedium =
       defaultTextStyle.copy(
         fontFamily = fontFamily,
-        fontWeight = FontWeight.Medium,
+        fontWeight = FontWeight.Normal,
         fontSize = labelMediumFontSize,
-        letterSpacing = labelMediumFontSize * 0.05, // applying 5% letter spacing
+        letterSpacing = labelMediumFontSize * 0.02, // applying 2% letter spacing
         lineHeight = 16.sp * lineHeightScalingFactor,
         lineHeightStyle = figmaLineHeightStyle,
       ),
     labelSmall =
       defaultTextStyle.copy(
         fontFamily = fontFamily,
-        fontWeight = FontWeight.Medium,
+        fontWeight = FontWeight.Normal,
         fontSize = labelSmallFontSize,
-        letterSpacing = labelSmallFontSize * 0.05, // applying 5% letter spacing
-        lineHeight = 16.sp * lineHeightScalingFactor,
+        letterSpacing = labelSmallFontSize * 0.04, // applying 4% letter spacing
+        lineHeight = 12.sp * lineHeightScalingFactor,
         lineHeightStyle = figmaLineHeightStyle,
       ),
   )
 }
-
-internal val Typography.bottomSheetItemLabel
-  @Composable
-  @ReadOnlyComposable
-  get() = labelSmall.copy(fontSize = 10.dp.toSp(), lineHeight = 24.dp.toSp())
 
 internal val ComicNeueFontFamily: FontFamily
   @Composable
@@ -220,6 +215,15 @@ internal val ComicNeueFontFamily: FontFamily
 
 internal val GoogleSansFontFamily: FontFamily
   @Composable get() = FontFamily(Font(Res.font.google_sans))
+
+internal val OutfitFontFamily: FontFamily
+  @Composable
+  get() =
+    FontFamily(
+      Font(Res.font.outfit_regular, weight = FontWeight.Normal),
+      Font(Res.font.outfit_medium, weight = FontWeight.Medium),
+      Font(Res.font.outfit_bold, weight = FontWeight.Bold),
+    )
 
 internal val GolosFontFamily: FontFamily
   @Composable

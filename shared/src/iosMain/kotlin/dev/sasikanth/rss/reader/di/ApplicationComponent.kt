@@ -19,6 +19,7 @@ package dev.sasikanth.rss.reader.di
 import dev.sasikanth.rss.reader.app.AppInfo
 import dev.sasikanth.rss.reader.app.isFoss
 import dev.sasikanth.rss.reader.billing.BillingHandler
+import dev.sasikanth.rss.reader.core.base.widget.di.WidgetPlatformComponent
 import dev.sasikanth.rss.reader.data.repository.RssRepository
 import dev.sasikanth.rss.reader.data.repository.SettingsRepository
 import dev.sasikanth.rss.reader.data.repository.WidgetDataRepository
@@ -41,7 +42,7 @@ import platform.UIKit.UIViewController
 @Component
 abstract class ApplicationComponent(
   @get:Provides val uiViewControllerProvider: () -> UIViewController
-) : SharedApplicationComponent() {
+) : SharedApplicationComponent(), WidgetPlatformComponent {
 
   abstract val rssRepository: RssRepository
 

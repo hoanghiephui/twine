@@ -17,10 +17,13 @@
 
 package dev.sasikanth.rss.reader.core.model.local
 
+import androidx.compose.runtime.Stable
 import kotlin.time.Instant
 
+@Stable
 interface Source {
   val id: String
+  val name: String
   val sourceType: SourceType
   val pinnedAt: Instant?
   val pinnedPosition: Double

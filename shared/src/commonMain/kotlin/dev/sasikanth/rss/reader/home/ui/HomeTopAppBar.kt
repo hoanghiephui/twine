@@ -19,31 +19,25 @@ package dev.sasikanth.rss.reader.home.ui
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Menu
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.FloatingToolbarDefaults.animationSpec
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
@@ -52,26 +46,26 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import dev.sasikanth.rss.reader.components.CircularIconButton
+import dev.sasikanth.rss.reader.components.TranslucentButton
 import dev.sasikanth.rss.reader.core.model.local.Feed
 import dev.sasikanth.rss.reader.core.model.local.FeedGroup
 import dev.sasikanth.rss.reader.core.model.local.PostsType
 import dev.sasikanth.rss.reader.core.model.local.Source
+import dev.sasikanth.rss.reader.resources.icons.ArrowDown
 import dev.sasikanth.rss.reader.resources.icons.MarkAllAsRead
-import dev.sasikanth.rss.reader.resources.icons.Sort
+import dev.sasikanth.rss.reader.resources.icons.Menu
 import dev.sasikanth.rss.reader.resources.icons.TwineIcons
 import dev.sasikanth.rss.reader.ui.AppTheme
 import org.jetbrains.compose.resources.stringResource
 import twine.shared.generated.resources.Res
+import twine.shared.generated.resources.appBarAllFeeds
 import twine.shared.generated.resources.markAllAsRead
 import twine.shared.generated.resources.moreMenuOptions
 import twine.shared.generated.resources.postsAll
-import twine.shared.generated.resources.postsFilter
 import twine.shared.generated.resources.postsLast24Hours
 import twine.shared.generated.resources.postsToday
 import twine.shared.generated.resources.postsUnread
@@ -103,45 +97,52 @@ internal fun HomeTopAppBar(
     }
   var hasUnreadPosts by remember(hasUnreadPosts) { mutableStateOf(hasUnreadPosts) }
 
-  CenterAlignedTopAppBar(
+  TopAppBar(
     modifier = modifier.background(AppTheme.colorScheme.surface.copy(alpha = backgroundAlpha)),
     scrollBehavior = scrollBehavior,
     contentPadding = PaddingValues(start = 0.dp, top = 8.dp, end = 12.dp, bottom = 8.dp),
-    title = { SourceInfo(source = source, postsType = postsType) },
+    title = { SourceInfo(source = source) },
     navigationIcon = {
       if (onMenuClicked != null) {
         CircularIconButton(
           modifier = Modifier.padding(start = 12.dp),
-          icon = Icons.Rounded.Menu,
+          icon = TwineIcons.Menu,
           label = stringResource(Res.string.moreMenuOptions),
           onClick = onMenuClicked,
         )
       }
     },
     actions = {
-      AnimatedVisibility(
-        visible = hasUnreadPosts,
-        enter = fadeIn() + scaleIn(),
-        exit = fadeOut() + scaleOut(),
-      ) {
-        CircularIconButton(
-          icon = TwineIcons.MarkAllAsRead,
-          label = stringResource(Res.string.markAllAsRead),
-          enabled = hasUnreadPosts,
-          onClick = {
-            hasUnreadPosts = false
-            onMarkPostsAsRead(source)
-          },
-        )
+      AnimatedContent(hasUnreadPosts, transitionSpec = { fadeIn().togetherWith(fadeOut()) }) {
+        Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+          Spacer(Modifier.width(12.dp))
+
+          PostTypePill(postsType = postsType, onClick = onShowPostsSortFilter)
+
+          AnimatedVisibility(
+            visible = it,
+            enter = fadeIn() + scaleIn(),
+            exit = fadeOut() + scaleOut(),
+          ) {
+            Row {
+              Spacer(Modifier.width(12.dp))
+
+              CircularIconButton(
+                icon = TwineIcons.MarkAllAsRead,
+                label = stringResource(Res.string.markAllAsRead),
+                enabled = it,
+                backgroundColor = AppTheme.colorScheme.inverseSurface,
+                contentColor = AppTheme.colorScheme.inverseOnSurface,
+                borderColor = Color.Transparent,
+                onClick = {
+                  hasUnreadPosts = false
+                  onMarkPostsAsRead(source)
+                },
+              )
+            }
+          }
+        }
       }
-
-      Spacer(Modifier.width(8.dp))
-
-      CircularIconButton(
-        icon = TwineIcons.Sort,
-        label = stringResource(Res.string.postsFilter),
-        onClick = onShowPostsSortFilter,
-      )
     },
     colors =
       TopAppBarDefaults.topAppBarColors(
@@ -152,53 +153,40 @@ internal fun HomeTopAppBar(
 }
 
 @Composable
-private fun SourceInfo(source: Source?, postsType: PostsType, modifier: Modifier = Modifier) {
-  Row(
-    modifier = modifier.clip(MaterialTheme.shapes.small),
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.Center,
-  ) {
-    Column(
-      modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-      horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-      val title =
-        when (source) {
-          is Feed -> source.name
-          is FeedGroup -> source.name
-          else -> stringResource(Res.string.screenHome)
-        }
-
-      Text(
-        modifier = Modifier.basicMarquee(),
-        text = title,
-        style = MaterialTheme.typography.titleMedium,
-        color = AppTheme.colorScheme.onSurface,
-        maxLines = 1,
-      )
-
-      AnimatedContent(
-        targetState = postsType,
-        transitionSpec = {
-          (fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMedium)) +
-              slideInVertically(animationSpec = spring(stiffness = Spring.StiffnessMedium)) { -it })
-            .togetherWith(
-              fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMedium)) +
-                slideOutVertically(animationSpec = spring(stiffness = Spring.StiffnessMedium)) {
-                  it
-                }
-            )
-        },
-        contentAlignment = Alignment.Center,
-      ) {
-        Text(
-          text = getPostTypeLabel(postsType),
-          style = MaterialTheme.typography.labelMedium,
-          color = AppTheme.colorScheme.secondary,
-        )
+private fun SourceInfo(source: Source?, modifier: Modifier = Modifier) {
+  Column(modifier = modifier.padding(start = 12.dp)) {
+    val title = stringResource(Res.string.screenHome)
+    val subtitle =
+      when (source) {
+        is Feed -> source.name
+        is FeedGroup -> source.name
+        else -> stringResource(Res.string.appBarAllFeeds)
       }
-    }
+
+    Text(
+      text = title,
+      style = MaterialTheme.typography.titleMedium,
+      color = AppTheme.colorScheme.onSurface,
+      maxLines = 1,
+    )
+
+    Text(
+      modifier = Modifier.basicMarquee(),
+      text = subtitle,
+      style = MaterialTheme.typography.bodySmall,
+      color = AppTheme.colorScheme.onSurfaceVariant,
+      maxLines = 1,
+    )
   }
+}
+
+@Composable
+private fun PostTypePill(postsType: PostsType, onClick: () -> Unit, modifier: Modifier = Modifier) {
+  TranslucentButton(
+    text = getPostTypeLabel(postsType),
+    trailingIcon = TwineIcons.ArrowDown,
+    onClick = onClick,
+  )
 }
 
 @Composable

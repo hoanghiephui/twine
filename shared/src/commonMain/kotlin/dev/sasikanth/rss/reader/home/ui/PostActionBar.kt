@@ -16,54 +16,61 @@
  */
 package dev.sasikanth.rss.reader.home.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.dropShadow
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import dev.sasikanth.rss.reader.components.DropdownMenu
 import dev.sasikanth.rss.reader.components.DropdownMenuItem
 import dev.sasikanth.rss.reader.components.IconButton
+import dev.sasikanth.rss.reader.components.IconButtonSize
 import dev.sasikanth.rss.reader.components.image.FeedIcon
 import dev.sasikanth.rss.reader.platform.LocalLinkHandler
 import dev.sasikanth.rss.reader.resources.icons.Bookmark
 import dev.sasikanth.rss.reader.resources.icons.Bookmarked
 import dev.sasikanth.rss.reader.resources.icons.Comments
+import dev.sasikanth.rss.reader.resources.icons.MoreHorizFilled
 import dev.sasikanth.rss.reader.resources.icons.Share
 import dev.sasikanth.rss.reader.resources.icons.TwineIcons
 import dev.sasikanth.rss.reader.resources.icons.Visibility
@@ -71,6 +78,7 @@ import dev.sasikanth.rss.reader.resources.icons.VisibilityOff
 import dev.sasikanth.rss.reader.resources.icons.Website
 import dev.sasikanth.rss.reader.share.LocalShareHandler
 import dev.sasikanth.rss.reader.ui.AppTheme
+import dev.sasikanth.rss.reader.utils.Constants
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -102,52 +110,69 @@ internal fun PostActionBar(
   onTogglePostReadClick: () -> Unit,
   modifier: Modifier = Modifier,
   showDropdown: Boolean = false,
+  alwaysShowMarkAsUnread: Boolean = false,
+  hideMarkAsOptions: Boolean = false,
   onDropdownChange: (Boolean) -> Unit = {},
   config: PostMetadataConfig = PostMetadataConfig.DEFAULT,
   onSourceClick: () -> Unit,
 ) {
+  val colorScheme = AppTheme.colorScheme
   Row(
-    modifier = Modifier.padding(top = 8.dp, bottom = 8.dp).then(modifier),
+    modifier = Modifier.height(IntrinsicSize.Min).then(modifier),
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    PostSourcePill(
-      modifier = Modifier.weight(1f).padding(end = 8.dp).clearAndSetSemantics {},
-      feedName = feedName,
-      feedIcon = feedIcon,
-      feedHomepageLink = feedHomepageLink,
-      showFeedFavIcon = showFeedFavIcon,
-      config = config,
-      onSourceClick = onSourceClick,
-    )
+    Row(
+      modifier = Modifier.fillMaxHeight().weight(1f),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      SourceInfo(
+        modifier = Modifier.weight(1f, fill = false).widthIn(max = 120.dp).clearAndSetSemantics {},
+        feedName = feedName,
+        feedIcon = feedIcon,
+        feedHomepageLink = feedHomepageLink,
+        showFeedFavIcon = showFeedFavIcon,
+        config = config,
+        postRead = postRead,
+        onSourceClick = onSourceClick,
+      )
 
-    Text(
-      modifier = Modifier.clearAndSetSemantics {},
-      style = MaterialTheme.typography.labelSmall,
-      maxLines = 1,
-      text = postRelativeTimestamp.uppercase(),
-      color = AppTheme.colorScheme.outline,
-      textAlign = TextAlign.Start,
-      overflow = TextOverflow.Ellipsis,
-    )
-
-    if (postReadingTimeEstimate > 0) {
       Text(
-        modifier = Modifier.padding(horizontal = 4.dp).clearAndSetSemantics {},
-        style = MaterialTheme.typography.labelSmall,
+        modifier = Modifier.padding(horizontal = 8.dp).clearAndSetSemantics {},
+        style = MaterialTheme.typography.labelMedium,
         maxLines = 1,
-        text = "\u2022",
-        color = AppTheme.colorScheme.outline,
+        text = Constants.BULLET_POINT,
+        color = colorScheme.outline,
       )
 
       Text(
         modifier = Modifier.clearAndSetSemantics {},
-        style = MaterialTheme.typography.labelSmall,
+        style = MaterialTheme.typography.labelMedium,
         maxLines = 1,
-        text = stringResource(Res.string.readingTimeEstimate, postReadingTimeEstimate).uppercase(),
-        color = AppTheme.colorScheme.outline,
+        text = postRelativeTimestamp,
+        color = colorScheme.outline,
         textAlign = TextAlign.Start,
         overflow = TextOverflow.Ellipsis,
       )
+
+      if (postReadingTimeEstimate > 0) {
+        Text(
+          modifier = Modifier.padding(horizontal = 8.dp).clearAndSetSemantics {},
+          style = MaterialTheme.typography.labelMedium,
+          maxLines = 1,
+          text = Constants.BULLET_POINT,
+          color = colorScheme.outline,
+        )
+
+        Text(
+          modifier = Modifier.clearAndSetSemantics {},
+          style = MaterialTheme.typography.labelMedium,
+          maxLines = 1,
+          text = stringResource(Res.string.readingTimeEstimate, postReadingTimeEstimate),
+          color = colorScheme.outline,
+          textAlign = TextAlign.Start,
+          overflow = TextOverflow.Ellipsis,
+        )
+      }
     }
 
     PostActions(
@@ -157,6 +182,8 @@ internal fun PostActionBar(
       config = config,
       commentsLink = commentsLink,
       showDropdown = showDropdown,
+      alwaysShowMarkAsUnread = alwaysShowMarkAsUnread,
+      hideMarkAsOptions = hideMarkAsOptions,
       onDropdownChange = onDropdownChange,
       onBookmarkClick = onBookmarkClick,
       onCommentsClick = onCommentsClick,
@@ -166,59 +193,81 @@ internal fun PostActionBar(
 }
 
 @Composable
-private fun PostSourcePill(
+private fun SourceInfo(
   feedIcon: String,
   feedHomepageLink: String,
   showFeedFavIcon: Boolean,
   feedName: String,
+  postRead: Boolean,
   config: PostMetadataConfig,
   onSourceClick: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  Box(modifier = modifier) {
-    val postSourceTextColor =
-      if (config.enablePostSource) {
-        AppTheme.colorScheme.onSurface
-      } else {
-        AppTheme.colorScheme.onSurfaceVariant
-      }
+  val colorScheme = AppTheme.colorScheme
+  val postSourceTextColor =
+    if (config.enablePostSource) {
+      colorScheme.onSurface
+    } else {
+      colorScheme.onSurfaceVariant
+    }
 
-    Row(
+  Row(
+    modifier =
+      modifier
+        .fillMaxHeight()
+        .clip(MaterialTheme.shapes.extraSmall)
+        .clickable(onClick = onSourceClick, enabled = config.enablePostSource),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Box(
       modifier =
-        Modifier.background(
-            MaterialTheme.colorScheme.secondary.copy(alpha = 0.08f),
-            RoundedCornerShape(50),
-          )
-          .border(
-            1.dp,
-            MaterialTheme.colorScheme.secondary.copy(alpha = 0.16f),
-            RoundedCornerShape(50),
-          )
-          .clip(RoundedCornerShape(50))
-          .clickable(onClick = onSourceClick, enabled = config.enablePostSource)
-          .padding(vertical = 6.dp)
-          .padding(start = 8.dp, end = 12.dp),
-      verticalAlignment = Alignment.CenterVertically,
+        Modifier.requiredSize(18.dp)
+          .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
     ) {
+      val feedIconShape = RoundedCornerShape(25)
       FeedIcon(
-        modifier = Modifier.requiredSize(16.dp),
         icon = feedIcon,
         homepageLink = feedHomepageLink,
         showFeedFavIcon = showFeedFavIcon,
-        shape = MaterialTheme.shapes.extraSmall,
         contentDescription = null,
+        modifier =
+          Modifier.requiredSize(16.dp)
+            .drawWithContent {
+              drawContent()
+              val outline = feedIconShape.createOutline(size, layoutDirection, this)
+              drawOutline(
+                outline = outline,
+                color = colorScheme.outlineVariant,
+                style = Stroke(width = 1.dp.toPx()),
+              )
+            }
+            .align(Alignment.Center),
       )
 
-      Spacer(Modifier.requiredWidth(6.dp))
-
-      Text(
-        style = MaterialTheme.typography.labelMedium,
-        maxLines = 1,
-        text = feedName,
-        color = postSourceTextColor,
-        overflow = TextOverflow.Ellipsis,
-      )
+      if (!postRead) {
+        Box(
+          modifier =
+            Modifier.align(Alignment.TopEnd)
+              .requiredSize(6.dp)
+              .dropShadow(CircleShape) {
+                color = Color.Black
+                spread = 1.dp.toPx()
+                blendMode = BlendMode.DstOut
+              }
+              .drawBehind { drawCircle(colorScheme.error) }
+        )
+      }
     }
+
+    Spacer(Modifier.requiredWidth(4.dp))
+
+    Text(
+      style = MaterialTheme.typography.labelMedium,
+      maxLines = 1,
+      text = feedName,
+      color = postSourceTextColor,
+      overflow = TextOverflow.Ellipsis,
+    )
   }
 }
 
@@ -229,20 +278,54 @@ internal fun PostActions(
   postRead: Boolean,
   config: PostMetadataConfig,
   commentsLink: String?,
+  modifier: Modifier = Modifier,
   showDropdown: Boolean = false,
+  alwaysShowMarkAsUnread: Boolean = false,
+  hideMarkAsOptions: Boolean = false,
   onDropdownChange: (Boolean) -> Unit = {},
   onBookmarkClick: () -> Unit,
   onCommentsClick: () -> Unit,
   togglePostReadClick: () -> Unit,
 ) {
-  Row(modifier = Modifier.semantics { isTraversalGroup = true }) {
+  val colorScheme = AppTheme.colorScheme
+  val tooltipShape = RoundedCornerShape(4.dp)
+
+  Row(
+    modifier = modifier.semantics { isTraversalGroup = true },
+    horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
+  ) {
     if (!commentsLink.isNullOrBlank()) {
       val commentsLabel = stringResource(Res.string.comments)
-      IconButton(
-        icon = TwineIcons.Comments,
-        contentDescription = commentsLabel,
-        onClick = onCommentsClick,
-      )
+      TooltipBox(
+        state = rememberTooltipState(),
+        positionProvider =
+          TooltipDefaults.rememberTooltipPositionProvider(
+            positioning = TooltipAnchorPosition.Above
+          ),
+        tooltip = {
+          Box(
+            modifier =
+              Modifier.drawBehind {
+                  val outline = tooltipShape.createOutline(size, layoutDirection, this)
+                  drawOutline(outline, colorScheme.surface)
+                }
+                .padding(8.dp)
+          ) {
+            Text(
+              text = commentsLabel,
+              style = MaterialTheme.typography.labelMedium,
+              color = colorScheme.onSurface,
+            )
+          }
+        },
+      ) {
+        IconButton(
+          icon = TwineIcons.Comments,
+          contentDescription = commentsLabel,
+          size = IconButtonSize.Small,
+          onClick = onCommentsClick,
+        )
+      }
     }
 
     val bookmarkLabel =
@@ -251,43 +334,85 @@ internal fun PostActions(
       } else {
         stringResource(Res.string.bookmark)
       }
-    IconButton(
-      icon =
-        if (postBookmarked) {
-          TwineIcons.Bookmarked
-        } else {
-          TwineIcons.Bookmark
-        },
-      contentDescription = bookmarkLabel,
-      onClick = onBookmarkClick,
-    )
+
+    TooltipBox(
+      state = rememberTooltipState(),
+      positionProvider =
+        TooltipDefaults.rememberTooltipPositionProvider(positioning = TooltipAnchorPosition.Above),
+      tooltip = {
+        Box(
+          modifier =
+            Modifier.drawBehind {
+                val outline = tooltipShape.createOutline(size, layoutDirection, this)
+                drawOutline(outline, colorScheme.surface)
+              }
+              .padding(8.dp)
+        ) {
+          Text(
+            text = bookmarkLabel,
+            style = MaterialTheme.typography.labelMedium,
+            color = colorScheme.onSurface,
+          )
+        }
+      },
+    ) {
+      IconButton(
+        icon =
+          if (postBookmarked) {
+            TwineIcons.Bookmarked
+          } else {
+            TwineIcons.Bookmark
+          },
+        contentDescription = bookmarkLabel,
+        size = IconButtonSize.Small,
+        onClick = onBookmarkClick,
+      )
+    }
 
     Box {
       val coroutineScope = rememberCoroutineScope()
-      val density = LocalDensity.current
-      var buttonHeight by remember { mutableStateOf(Dp.Unspecified) }
       val moreMenuOptionsLabel = stringResource(Res.string.moreMenuOptions)
 
-      IconButton(
-        icon = Icons.Filled.MoreVert,
-        contentDescription = moreMenuOptionsLabel,
-        modifier =
-          Modifier.onGloballyPositioned { coordinates ->
-            buttonHeight = with(density) { coordinates.size.height.toDp() }
-          },
+      TooltipBox(
+        state = rememberTooltipState(),
+        positionProvider =
+          TooltipDefaults.rememberTooltipPositionProvider(
+            positioning = TooltipAnchorPosition.Above
+          ),
+        tooltip = {
+          Box(
+            modifier =
+              Modifier.drawBehind {
+                  val outline = tooltipShape.createOutline(size, layoutDirection, this)
+                  drawOutline(outline, colorScheme.surface)
+                }
+                .padding(8.dp)
+          ) {
+            Text(
+              text = moreMenuOptionsLabel,
+              style = MaterialTheme.typography.labelMedium,
+              color = colorScheme.onSurface,
+            )
+          }
+        },
       ) {
-        onDropdownChange(true)
+        IconButton(
+          icon = TwineIcons.MoreHorizFilled,
+          contentDescription = moreMenuOptionsLabel,
+          size = IconButtonSize.Small,
+        ) {
+          onDropdownChange(true)
+        }
       }
 
       DropdownMenu(
         modifier = Modifier.width(IntrinsicSize.Min),
         expanded = showDropdown,
         onDismissRequest = { onDropdownChange(false) },
-        offset = DpOffset(x = 0.dp, y = buttonHeight.unaryMinus()),
       ) {
-        if (config.showToggleReadUnreadOption) {
+        if (config.showToggleReadUnreadOption && !hideMarkAsOptions) {
           val markAsReadLabel =
-            if (postRead) {
+            if (alwaysShowMarkAsUnread || postRead) {
               stringResource(Res.string.markAsUnRead)
             } else {
               stringResource(Res.string.markAsRead)
@@ -295,24 +420,14 @@ internal fun PostActions(
 
           DropdownMenuItem(
             modifier = Modifier.fillMaxWidth(),
+            leadingIcon =
+              if (alwaysShowMarkAsUnread || postRead) {
+                TwineIcons.VisibilityOff
+              } else {
+                TwineIcons.Visibility
+              },
+            text = markAsReadLabel,
             contentDescription = markAsReadLabel,
-            text = {
-              Text(
-                text = markAsReadLabel,
-                color = AppTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Start,
-              )
-            },
-            leadingIcon = {
-              val icon =
-                if (postRead) {
-                  TwineIcons.VisibilityOff
-                } else {
-                  TwineIcons.Visibility
-                }
-
-              Icon(icon, contentDescription = null, tint = AppTheme.colorScheme.onSurface)
-            },
             onClick = {
               coroutineScope.launch {
                 onDropdownChange(false)
@@ -327,22 +442,9 @@ internal fun PostActions(
 
         DropdownMenuItem(
           modifier = Modifier.fillMaxWidth(),
+          leadingIcon = TwineIcons.Website,
+          text = openWebsiteLabel,
           contentDescription = openWebsiteLabel,
-          text = {
-            Text(
-              text = openWebsiteLabel,
-              color = AppTheme.colorScheme.onSurface,
-              textAlign = TextAlign.Start,
-            )
-          },
-          leadingIcon = {
-            Icon(
-              modifier = Modifier.requiredSize(24.dp),
-              imageVector = TwineIcons.Website,
-              contentDescription = null,
-              tint = AppTheme.colorScheme.onSurface,
-            )
-          },
           onClick = {
             coroutineScope.launch {
               onDropdownChange(false)
@@ -357,17 +459,9 @@ internal fun PostActions(
 
         DropdownMenuItem(
           modifier = Modifier.fillMaxWidth(),
+          leadingIcon = TwineIcons.Share,
+          text = shareLabel,
           contentDescription = shareLabel,
-          text = {
-            Text(
-              text = shareLabel,
-              color = AppTheme.colorScheme.onSurface,
-              textAlign = TextAlign.Start,
-            )
-          },
-          leadingIcon = {
-            Icon(TwineIcons.Share, contentDescription = null, tint = AppTheme.colorScheme.onSurface)
-          },
           onClick = {
             coroutineScope.launch {
               onDropdownChange(false)

@@ -23,6 +23,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -33,17 +34,14 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.requiredSize
-import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -53,6 +51,7 @@ import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -75,20 +74,22 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.sasikanth.rss.reader.addfeed.AddFeedEffect
 import dev.sasikanth.rss.reader.addfeed.AddFeedErrorType
 import dev.sasikanth.rss.reader.addfeed.AddFeedEvent
+import dev.sasikanth.rss.reader.addfeed.AddFeedState
 import dev.sasikanth.rss.reader.addfeed.AddFeedViewModel
 import dev.sasikanth.rss.reader.addfeed.FeedFetchingState
 import dev.sasikanth.rss.reader.components.Button
 import dev.sasikanth.rss.reader.components.CircularIconButton
-import dev.sasikanth.rss.reader.components.OutlinedButton
 import dev.sasikanth.rss.reader.components.Switch
 import dev.sasikanth.rss.reader.components.TextField
+import dev.sasikanth.rss.reader.components.TranslucentButton
 import dev.sasikanth.rss.reader.core.model.local.FeedGroup
-import dev.sasikanth.rss.reader.feeds.ui.sheet.collapsed.FeedGroupBottomBarItem
+import dev.sasikanth.rss.reader.feeds.ui.pinned.PinnedFeedGroupItem
 import dev.sasikanth.rss.reader.resources.icons.ArrowBack
 import dev.sasikanth.rss.reader.resources.icons.Close
 import dev.sasikanth.rss.reader.resources.icons.NewGroup
@@ -127,7 +128,6 @@ fun AddFeedScreen(
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
   val snackbarHostState = remember { SnackbarHostState() }
-  val (feedLinkFocus, feedTitleFocus) = remember { FocusRequester.createRefs() }
   val inAppRating = LocalInAppRating.current
 
   LaunchedEffect(Unit) {
@@ -139,8 +139,6 @@ fun AddFeedScreen(
   }
 
   LaunchedEffect(state.error, state.goBack) {
-    feedLinkFocus.requestFocus()
-
     when {
       state.goBack -> {
         goBack()
@@ -156,13 +154,37 @@ fun AddFeedScreen(
     }
   }
 
+  AddFeedContent(
+    state = state,
+    dispatch = viewModel::dispatch,
+    goBack = goBack,
+    openGroupSelection = openGroupSelection,
+    openDiscovery = openDiscovery,
+    snackbarHostState = snackbarHostState,
+    modifier = modifier,
+  )
+}
+
+@Composable
+private fun AddFeedContent(
+  state: AddFeedState,
+  dispatch: (AddFeedEvent) -> Unit,
+  goBack: () -> Unit,
+  openGroupSelection: (Set<String>) -> Unit,
+  openDiscovery: () -> Unit,
+  snackbarHostState: SnackbarHostState,
+  modifier: Modifier = Modifier,
+) {
+  val (feedLinkFocus, feedTitleFocus) = remember { FocusRequester.createRefs() }
   var feedLink by remember { mutableStateOf(TextFieldValue()) }
   var feedTitle by remember { mutableStateOf(TextFieldValue()) }
+
+  LaunchedEffect(Unit) { feedLinkFocus.requestFocus() }
 
   Scaffold(
     modifier = modifier,
     topBar = {
-      CenterAlignedTopAppBar(
+      TopAppBar(
         title = {},
         navigationIcon = {
           CircularIconButton(
@@ -172,26 +194,13 @@ fun AddFeedScreen(
             onClick = { goBack() },
           )
         },
+        contentPadding = PaddingValues(end = 12.dp),
         actions = {
-          OutlinedButton(
-            modifier = Modifier.padding(end = 12.dp),
+          TranslucentButton(
+            leadingIcon = TwineIcons.Newsstand,
+            text = stringResource(Res.string.discoveryTitle),
             onClick = openDiscovery,
-            shape = RoundedCornerShape(50),
-          ) {
-            Icon(
-              imageVector = TwineIcons.Newsstand,
-              contentDescription = null,
-              tint = AppTheme.colorScheme.onSurfaceVariant,
-            )
-
-            Spacer(Modifier.requiredWidth(8.dp))
-
-            Text(
-              text = stringResource(Res.string.discoveryTitle),
-              style = MaterialTheme.typography.labelLarge,
-              color = AppTheme.colorScheme.onSurfaceVariant,
-            )
-          }
+          )
         },
         colors =
           TopAppBarDefaults.topAppBarColors(
@@ -236,9 +245,7 @@ fun AddFeedScreen(
           feedLink.text.isNotBlank() && state.feedFetchingState != FeedFetchingState.Loading,
         shape = MaterialTheme.shapes.extraLarge,
         onClick = {
-          viewModel.dispatch(
-            AddFeedEvent.AddFeedClicked(feedLink = feedLink.text, name = feedTitle.text)
-          )
+          dispatch(AddFeedEvent.AddFeedClicked(feedLink = feedLink.text, name = feedTitle.text))
         },
       ) {
         if (state.feedFetchingState == FeedFetchingState.Loading) {
@@ -314,7 +321,7 @@ fun AddFeedScreen(
               title = stringResource(Res.string.alwaysFetchSourceArticle),
               checked = state.alwaysFetchSourceArticle,
               onValueChanged = { newValue ->
-                viewModel.dispatch(AddFeedEvent.OnAlwaysFetchSourceArticleChanged(newValue))
+                dispatch(AddFeedEvent.OnAlwaysFetchSourceArticleChanged(newValue))
               },
             )
 
@@ -325,7 +332,7 @@ fun AddFeedScreen(
               title = stringResource(Res.string.showFeedFavIconTitle),
               checked = state.showFeedFavIcon,
               onValueChanged = { newValue ->
-                viewModel.dispatch(AddFeedEvent.OnShowFeedFavIconChanged(newValue))
+                dispatch(AddFeedEvent.OnShowFeedFavIconChanged(newValue))
               },
             )
 
@@ -337,30 +344,15 @@ fun AddFeedScreen(
         }
 
         item(span = { GridItemSpan(maxLineSpan) }) {
-          val shape = RoundedCornerShape(50)
-          OutlinedButton(
-            modifier = Modifier.padding(horizontal = 12.dp),
-            shape = shape,
+          TranslucentButton(
+            text = stringResource(Res.string.addToGroup),
+            leadingIcon = TwineIcons.NewGroup,
             onClick = { openGroupSelection(state.selectedFeedGroups.map { it.id }.toSet()) },
-          ) {
-            Icon(
-              imageVector = TwineIcons.NewGroup,
-              contentDescription = null,
-              tint = AppTheme.colorScheme.onSurfaceVariant,
-            )
-
-            Spacer(Modifier.requiredWidth(12.dp))
-
-            Text(
-              text = stringResource(Res.string.addToGroup),
-              style = MaterialTheme.typography.titleSmall,
-              color = AppTheme.colorScheme.onSurfaceVariant,
-            )
-          }
+          )
         }
 
         items(state.selectedFeedGroups.toList()) { group ->
-          GroupItem(group) { viewModel.dispatch(AddFeedEvent.OnRemoveGroupClicked(group)) }
+          GroupItem(group) { dispatch(AddFeedEvent.OnRemoveGroupClicked(group)) }
         }
       }
     },
@@ -403,7 +395,7 @@ private fun GroupItem(group: FeedGroup, onClick: () -> Unit) {
     horizontalAlignment = Alignment.CenterHorizontally,
   ) {
     Box {
-      FeedGroupBottomBarItem(feedGroup = group, canShowUnreadPostsCount = false)
+      PinnedFeedGroupItem(feedGroup = group, canShowUnreadPostsCount = false)
 
       Box(
         modifier =
@@ -448,5 +440,20 @@ private suspend fun errorMessageForErrorType(errorType: AddFeedErrorType): Strin
       getString(Res.string.errorUnAuthorized, errorType.statusCode.value)
     is AddFeedErrorType.UnknownHttpStatusError ->
       getString(Res.string.errorUnknownHttpStatus, errorType.statusCode.value)
+  }
+}
+
+@Preview(locale = "en")
+@Composable
+private fun AddFeedPreview() {
+  AppTheme {
+    AddFeedContent(
+      state = AddFeedState.DEFAULT,
+      dispatch = {},
+      goBack = {},
+      openGroupSelection = {},
+      openDiscovery = {},
+      snackbarHostState = remember { SnackbarHostState() },
+    )
   }
 }

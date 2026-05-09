@@ -17,20 +17,34 @@
 
 package dev.sasikanth.rss.reader.components
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredHeightIn
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ButtonElevation
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -47,6 +61,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.sasikanth.rss.reader.ui.AppTheme
@@ -77,6 +92,123 @@ fun Button(
     elevation = elevation,
     content = content,
   )
+}
+
+@Composable
+fun TranslucentButton(
+  text: String,
+  modifier: Modifier = Modifier,
+  leadingIcon: ImageVector? = null,
+  trailingIcon: ImageVector? = null,
+  onClick: () -> Unit,
+) {
+  val translucentStyle = LocalTranslucentStyles.current
+
+  Box(
+    modifier =
+      modifier
+        .requiredHeightIn(min = 40.dp)
+        .clip(CircleShape)
+        .background(translucentStyle.default.background, CircleShape)
+        .clickable { onClick() },
+    contentAlignment = Alignment.Center,
+  ) {
+    val startPadding = if (leadingIcon == null) 20.dp else 16.dp
+    val endPadding = if (trailingIcon == null) 20.dp else 16.dp
+
+    Row(
+      modifier = Modifier.padding(start = startPadding, end = endPadding),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      if (leadingIcon != null) {
+        Icon(
+          modifier = Modifier.requiredSize(20.dp),
+          imageVector = leadingIcon,
+          contentDescription = null,
+          tint = AppTheme.colorScheme.onSurface,
+        )
+
+        Spacer(Modifier.width(8.dp))
+      }
+
+      AnimatedContent(
+        targetState = text,
+        contentAlignment = Alignment.Center,
+        transitionSpec = {
+          (fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMedium)) +
+              slideInVertically(animationSpec = spring(stiffness = Spring.StiffnessMedium)) { -it })
+            .togetherWith(
+              fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMedium)) +
+                slideOutVertically(animationSpec = spring(stiffness = Spring.StiffnessMedium)) {
+                  it
+                }
+            )
+        },
+        label = "ButtonText($text)",
+      ) { text ->
+        Text(
+          text = text,
+          style = MaterialTheme.typography.labelLarge,
+          maxLines = 1,
+          overflow = TextOverflow.MiddleEllipsis,
+          color = AppTheme.colorScheme.onSurface,
+        )
+      }
+
+      if (trailingIcon != null) {
+        Spacer(Modifier.width(8.dp))
+
+        Icon(
+          modifier = Modifier.requiredSize(20.dp),
+          imageVector = trailingIcon,
+          contentDescription = null,
+          tint = AppTheme.colorScheme.onSurface,
+        )
+      }
+    }
+  }
+}
+
+@Composable
+fun InverseButton(
+  text: String,
+  modifier: Modifier = Modifier,
+  icon: ImageVector? = null,
+  onClick: () -> Unit,
+) {
+  Box(
+    modifier =
+      modifier
+        .requiredHeightIn(min = 40.dp)
+        .clip(CircleShape)
+        .background(AppTheme.colorScheme.inverseSurface, CircleShape)
+        .clickable { onClick() },
+    contentAlignment = Alignment.Center,
+  ) {
+    Row(
+      modifier = Modifier.padding(start = 20.dp, end = 16.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        maxLines = 1,
+        overflow = TextOverflow.MiddleEllipsis,
+        color = AppTheme.colorScheme.inverseOnSurface,
+      )
+
+      if (icon != null) {
+        Spacer(Modifier.width(8.dp))
+
+        Icon(
+          modifier = Modifier.requiredSize(20.dp),
+          imageVector = icon,
+          contentDescription = null,
+          tint = AppTheme.colorScheme.inverseOnSurface,
+        )
+      }
+    }
+  }
 }
 
 @Composable
@@ -124,7 +256,7 @@ fun IconButton(
   contentDescription: String?,
   modifier: Modifier = Modifier,
   enabled: Boolean = true,
-  blendMode: BlendMode = if (AppTheme.isDark) BlendMode.Screen else BlendMode.Multiply,
+  size: IconButtonSize = IconButtonSize.Default,
   onClick: () -> Unit,
 ) {
   val interactionSource = remember { MutableInteractionSource() }
@@ -132,12 +264,11 @@ fun IconButton(
   Box(
     modifier =
       Modifier.semantics { role = Role.Button }
-        .requiredSize(40.dp)
-        .graphicsLayer { this.blendMode = blendMode }
-        .clip(MaterialTheme.shapes.small)
+        .requiredSize(size.containerSize)
+        .clip(CircleShape)
         .clickable(
           interactionSource = interactionSource,
-          indication = ripple(color = AppTheme.colorScheme.secondary),
+          indication = ripple(color = AppTheme.colorScheme.onSurfaceVariant),
           enabled = enabled,
           onClick = onClick,
         )
@@ -145,10 +276,10 @@ fun IconButton(
     contentAlignment = Alignment.Center,
   ) {
     Icon(
-      modifier = Modifier.requiredSize(20.dp),
+      modifier = Modifier.requiredSize(size.iconSize),
       imageVector = icon,
       contentDescription = contentDescription,
-      tint = AppTheme.colorScheme.secondary,
+      tint = AppTheme.colorScheme.onSurfaceVariant,
     )
   }
 }
@@ -159,19 +290,36 @@ fun CircularIconButton(
   label: String,
   modifier: Modifier = Modifier,
   enabled: Boolean = true,
+  backgroundColor: Color? = null,
+  borderColor: Color? = null,
+  contentColor: Color? = null,
   onClick: () -> Unit,
 ) {
   val animatedAlpha by animateFloatAsState(if (enabled) 1.0f else 0.12f)
   val translucentStyle = LocalTranslucentStyles.current
+  val primaryColor = AppTheme.colorScheme.primary
+  val interactionSource = remember { MutableInteractionSource() }
 
   Box(
     modifier =
       modifier
         .requiredSize(40.dp)
         .clip(CircleShape)
-        .clickable(enabled = enabled) { onClick() }
-        .background(translucentStyle.default.background, CircleShape)
-        .border(width = 1.dp, color = translucentStyle.default.outline, shape = CircleShape)
+        .clickable(
+          enabled = enabled,
+          indication = ripple(color = { contentColor ?: primaryColor }),
+          interactionSource = interactionSource,
+        ) {
+          onClick()
+        }
+        .background(backgroundColor ?: translucentStyle.default.background, CircleShape)
+        .then(
+          if (borderColor == null) {
+            Modifier
+          } else {
+            Modifier.border(width = 1.dp, color = borderColor, shape = CircleShape)
+          }
+        )
         .semantics {
           contentDescription = label
           role = Role.Button
@@ -183,12 +331,13 @@ fun CircularIconButton(
       modifier = Modifier.requiredSize(20.dp),
       imageVector = icon,
       contentDescription = null,
-      tint = AppTheme.colorScheme.onSurface,
+      tint = contentColor ?: AppTheme.colorScheme.onSurface,
     )
   }
 }
 
 enum class IconButtonSize(val containerSize: Dp, val iconSize: Dp) {
+  Small(containerSize = 32.dp, iconSize = 16.dp),
   Default(containerSize = 40.dp, iconSize = 20.dp),
   Large(containerSize = 56.dp, iconSize = 24.dp),
 }

@@ -21,20 +21,41 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import app.cash.paging.compose.LazyPagingItems
-import app.cash.paging.compose.itemKey
+import androidx.paging.compose.LazyPagingItems
+import androidx.paging.compose.itemKey
+import dev.sasikanth.rss.reader.components.DropdownMenuDivider
+import dev.sasikanth.rss.reader.components.DropdownMenuItem
 import dev.sasikanth.rss.reader.core.model.local.Feed
 import dev.sasikanth.rss.reader.core.model.local.Source
 import dev.sasikanth.rss.reader.feeds.ui.FeedListItem
-import dev.sasikanth.rss.reader.feeds.ui.sheet.expanded.bottomPaddingOfSourceItem
+import dev.sasikanth.rss.reader.resources.icons.Check
+import dev.sasikanth.rss.reader.resources.icons.Edit
+import dev.sasikanth.rss.reader.resources.icons.MarkAllAsRead
+import dev.sasikanth.rss.reader.resources.icons.NewGroup
+import dev.sasikanth.rss.reader.resources.icons.RemoveFeed
+import dev.sasikanth.rss.reader.resources.icons.TwineIcons
+import dev.sasikanth.rss.reader.utils.bottomPaddingOfSourceItem
+import org.jetbrains.compose.resources.stringResource
+import twine.shared.generated.resources.Res
+import twine.shared.generated.resources.actionAddTo
+import twine.shared.generated.resources.actionSelect
+import twine.shared.generated.resources.edit
+import twine.shared.generated.resources.feedOptionRemove
+import twine.shared.generated.resources.markAllAsRead
 
 internal fun LazyListScope.sourcesSearchResults(
   searchResults: LazyPagingItems<Feed>,
   selectedSources: Set<Source>,
+  activeSource: Source?,
   canShowUnreadPostsCount: Boolean,
   isInMultiSelectMode: Boolean,
   onSourceClick: (Source) -> Unit,
   onToggleSourceSelection: (Source) -> Unit,
+  onPinClick: (Source) -> Unit,
+  onSourceEditClick: (Source) -> Unit,
+  onAddToGroupClick: (Source) -> Unit,
+  onRemoveSourceClick: (Source) -> Unit,
+  onMarkAsReadClick: (Source) -> Unit,
 ) {
   items(
     count = searchResults.itemCount,
@@ -52,10 +73,15 @@ internal fun LazyListScope.sourcesSearchResults(
         feed = feed,
         canShowUnreadPostsCount = canShowUnreadPostsCount,
         isInMultiSelectMode = isInMultiSelectMode,
-        isFeedSelected = selectedSources.any { it.id == feed.id },
+        isFeedSelected =
+          if (isInMultiSelectMode) {
+            selectedSources.any { it.id == feed.id }
+          } else {
+            activeSource?.id == feed.id
+          },
         onFeedClick = onSourceClick,
         onFeedSelected = onToggleSourceSelection,
-        onOptionsClick = { onToggleSourceSelection(feed) },
+        onPinClick = onPinClick,
         modifier =
           Modifier.padding(
             start = startPadding,
@@ -63,6 +89,55 @@ internal fun LazyListScope.sourcesSearchResults(
             end = endPadding,
             bottom = bottomPadding,
           ),
+        dropdownMenuContent = { onDismiss ->
+          DropdownMenuItem(
+            text = stringResource(Res.string.markAllAsRead),
+            leadingIcon = TwineIcons.MarkAllAsRead,
+            enabled = feed.numberOfUnreadPosts > 0,
+            onClick = {
+              onMarkAsReadClick(feed)
+              onDismiss()
+            },
+          )
+
+          DropdownMenuItem(
+            text = stringResource(Res.string.actionAddTo),
+            leadingIcon = TwineIcons.NewGroup,
+            onClick = {
+              onAddToGroupClick(feed)
+              onDismiss()
+            },
+          )
+
+          DropdownMenuItem(
+            text = stringResource(Res.string.edit),
+            leadingIcon = TwineIcons.Edit,
+            onClick = {
+              onSourceEditClick(feed)
+              onDismiss()
+            },
+          )
+
+          DropdownMenuItem(
+            text = stringResource(Res.string.actionSelect),
+            leadingIcon = TwineIcons.Check,
+            onClick = {
+              onToggleSourceSelection(feed)
+              onDismiss()
+            },
+          )
+
+          DropdownMenuDivider()
+
+          DropdownMenuItem(
+            text = stringResource(Res.string.feedOptionRemove),
+            leadingIcon = TwineIcons.RemoveFeed,
+            onClick = {
+              onRemoveSourceClick(feed)
+              onDismiss()
+            },
+          )
+        },
       )
     }
   }

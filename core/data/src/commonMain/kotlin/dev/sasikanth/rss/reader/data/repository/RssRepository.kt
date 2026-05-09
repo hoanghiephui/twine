@@ -16,37 +16,35 @@
  */
 package dev.sasikanth.rss.reader.data.repository
 
-import app.cash.paging.PagingSource
+import androidx.paging.PagingSource
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import app.cash.sqldelight.coroutines.mapToOne
-import app.cash.sqldelight.coroutines.mapToOneOrNull
 import app.cash.sqldelight.paging3.QueryPagingSource
+import dev.sasikanth.rss.reader.core.base.widget.WidgetUpdater
 import dev.sasikanth.rss.reader.core.model.local.Feed
 import dev.sasikanth.rss.reader.core.model.local.FeedGroup
-import dev.sasikanth.rss.reader.core.model.local.FeedReadCount
 import dev.sasikanth.rss.reader.core.model.local.Post
 import dev.sasikanth.rss.reader.core.model.local.PostFlag
 import dev.sasikanth.rss.reader.core.model.local.PostsSortOrder
 import dev.sasikanth.rss.reader.core.model.local.ReadingStatistics
-import dev.sasikanth.rss.reader.core.model.local.ReadingTrend
 import dev.sasikanth.rss.reader.core.model.local.ResolvedPost
 import dev.sasikanth.rss.reader.core.model.local.SearchSortOrder
 import dev.sasikanth.rss.reader.core.model.local.Source
+import dev.sasikanth.rss.reader.core.model.local.SourceType
 import dev.sasikanth.rss.reader.core.model.local.UnreadSinceLastSync
+import dev.sasikanth.rss.reader.core.model.local.UnreadSinceLastSyncPerFeed
 import dev.sasikanth.rss.reader.core.model.remote.FeedPayload
 import dev.sasikanth.rss.reader.core.model.remote.PostPayload
 import dev.sasikanth.rss.reader.data.database.AppConfigQueries
 import dev.sasikanth.rss.reader.data.database.BlockedWordsQueries
-import dev.sasikanth.rss.reader.data.database.BookmarkQueries
 import dev.sasikanth.rss.reader.data.database.FeedGroupFeedQueries
 import dev.sasikanth.rss.reader.data.database.FeedGroupQueries
 import dev.sasikanth.rss.reader.data.database.FeedQueries
-import dev.sasikanth.rss.reader.data.database.FeedSearchFTSQueries
 import dev.sasikanth.rss.reader.data.database.PostContentQueries
 import dev.sasikanth.rss.reader.data.database.PostQueries
 import dev.sasikanth.rss.reader.data.database.PostSearchFTSQueries
-import dev.sasikanth.rss.reader.data.database.SourceQueries
+import dev.sasikanth.rss.reader.data.database.ReadingHistoryQueries
 import dev.sasikanth.rss.reader.data.database.TransactionRunner
 import dev.sasikanth.rss.reader.data.sync.ReadPostSyncEntity
 import dev.sasikanth.rss.reader.data.utils.Constants
@@ -58,14 +56,12 @@ import dev.sasikanth.rss.reader.util.splitAndTrim
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Instant
-import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.chunked
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import me.tatarka.inject.annotations.Inject
@@ -78,18 +74,25 @@ class RssRepository(
   private val postQueries: PostQueries,
   private val postContentQueries: PostContentQueries,
   private val postSearchFTSQueries: PostSearchFTSQueries,
-  private val bookmarkQueries: BookmarkQueries,
-  private val feedSearchFTSQueries: FeedSearchFTSQueries,
   private val feedGroupQueries: FeedGroupQueries,
   private val feedGroupFeedQueries: FeedGroupFeedQueries,
   private val blockedWordsQueries: BlockedWordsQueries,
   private val appConfigQueries: AppConfigQueries,
-  private val sourceQueries: SourceQueries,
+  private val readingHistoryQueries: ReadingHistoryQueries,
   private val readingTimeCalculator: ReadingTimeCalculator,
+  private val widgetUpdater: WidgetUpdater,
   private val dispatchersProvider: DispatchersProvider,
+  private val bookmarkRepository: BookmarkRepository,
+  private val readingHistoryRepository: ReadingHistoryRepository,
+  private val feedGroupRepository: FeedGroupRepository,
+  private val sourceRepository: SourceRepository,
+  private val postRepository: PostRepository,
+  private val feedRepository: FeedRepository,
+  private val syncRepository: SyncRepository,
 ) {
   private companion object {
     private const val POST_UPSERT_BATCH_SIZE = 200
+    private const val SQLITE_BATCH_SIZE = 990
   }
 
   suspend fun deleteAllLocalData() {
@@ -101,6 +104,7 @@ class RssRepository(
         feedQueries.deleteAll()
         feedGroupQueries.deleteAll()
         blockedWordsQueries.deleteAll()
+        readingHistoryQueries.deleteAll()
         appConfigQueries.deleteAll()
       }
     }
@@ -114,6 +118,7 @@ class RssRepository(
     feedLastCleanUpAt: Instant? = null,
     alwaysFetchSourceArticle: Boolean = false,
     showWebsiteFavIcon: Boolean = true,
+    enableNotifications: Boolean = true,
     updateFeed: Boolean = true,
   ): String {
     val finalFeedId = feedId ?: nameBasedUuidOf(feedPayload.link).toString()
@@ -132,6 +137,7 @@ class RssRepository(
           alwaysFetchSourceArticle = alwaysFetchSourceArticle,
           createdAt = Clock.System.now(),
           lastUpdatedAt = Clock.System.now(),
+          enableNotifications = enableNotifications,
         )
       }
     }
@@ -146,6 +152,7 @@ class RssRepository(
         .collect { batch -> upsertPostsBatch(batch, finalFeedId) }
     }
 
+    widgetUpdater.updateUnreadWidget()
     return finalFeedId
   }
 
@@ -187,6 +194,7 @@ class RssRepository(
           link = postPayload.link,
           commentsLink = postPayload.commentsLink,
           isDateParsedCorrectly = if (postPayload.isDateParsedCorrectly) 1 else 0,
+          remoteId = postPayload.remoteId,
         )
 
         postContentQueries.upsert(
@@ -207,9 +215,7 @@ class RssRepository(
   }
 
   suspend fun postsCountForFeed(feedId: String): Long {
-    return withContext(dispatchersProvider.databaseRead) {
-      postQueries.countPostsForFeed(feedId).executeAsOne()
-    }
+    return postRepository.postsCountForFeed(feedId)
   }
 
   suspend fun allPostsCount(
@@ -217,18 +223,15 @@ class RssRepository(
     unreadOnly: Boolean? = null,
     after: Instant = Instant.DISTANT_PAST,
     postsUpperBound: Instant = Instant.DISTANT_FUTURE,
+    sessionPostIds: List<String> = emptyList(),
   ): Long? {
-    return withContext(dispatchersProvider.databaseRead) {
-      postQueries
-        .allPostsCount(
-          isSourceIdsEmpty = activeSourceIds.isEmpty(),
-          sourceIds = activeSourceIds,
-          unreadOnly = unreadOnly,
-          postsAfter = after,
-          postsUpperBound = postsUpperBound,
-        )
-        .executeAsOneOrNull()
-    }
+    return postRepository.allPostsCount(
+      activeSourceIds,
+      unreadOnly,
+      after,
+      postsUpperBound,
+      sessionPostIds,
+    )
   }
 
   fun allPosts(
@@ -237,114 +240,60 @@ class RssRepository(
     unreadOnly: Boolean? = null,
     after: Instant = Instant.DISTANT_PAST,
     postsUpperBound: Instant = Instant.DISTANT_FUTURE,
+    sessionPostIds: List<String> = emptyList(),
   ): PagingSource<Int, ResolvedPost> {
-    return QueryPagingSource(
-      countQuery =
-        postQueries.allPostsCount(
-          isSourceIdsEmpty = activeSourceIds.isEmpty(),
-          sourceIds = activeSourceIds,
-          unreadOnly = unreadOnly,
-          postsAfter = after,
-          postsUpperBound = postsUpperBound,
-        ),
-      transacter = postQueries,
-      context = dispatchersProvider.databaseRead,
-      queryProvider = { limit, offset ->
-        when (postsSortOrder) {
-          PostsSortOrder.Latest ->
-            postQueries.allPostsLatest(
-              postsAfter = after,
-              postsUpperBound = postsUpperBound,
-              isSourceIdsEmpty = activeSourceIds.isEmpty(),
-              sourceIds = activeSourceIds,
-              unreadOnly = unreadOnly,
-              limit = limit,
-              offset = offset,
-              mapper = ::mapToResolvedPost,
-            )
-          PostsSortOrder.Oldest ->
-            postQueries.allPostsOldest(
-              postsAfter = after,
-              postsUpperBound = postsUpperBound,
-              isSourceIdsEmpty = activeSourceIds.isEmpty(),
-              sourceIds = activeSourceIds,
-              unreadOnly = unreadOnly,
-              limit = limit,
-              offset = offset,
-              mapper = ::mapToResolvedPost,
-            )
-          PostsSortOrder.AddedLatest ->
-            postQueries.allPostsAddedLatest(
-              postsAfter = after,
-              postsUpperBound = postsUpperBound,
-              isSourceIdsEmpty = activeSourceIds.isEmpty(),
-              sourceIds = activeSourceIds,
-              unreadOnly = unreadOnly,
-              limit = limit,
-              offset = offset,
-              mapper = ::mapToResolvedPost,
-            )
-          PostsSortOrder.AddedOldest ->
-            postQueries.allPostsAddedOldest(
-              postsAfter = after,
-              postsUpperBound = postsUpperBound,
-              isSourceIdsEmpty = activeSourceIds.isEmpty(),
-              sourceIds = activeSourceIds,
-              unreadOnly = unreadOnly,
-              limit = limit,
-              offset = offset,
-              mapper = ::mapToResolvedPost,
-            )
-        }
-      },
+    return postRepository.allPosts(
+      activeSourceIds,
+      postsSortOrder,
+      unreadOnly,
+      after,
+      postsUpperBound,
+      sessionPostIds,
     )
   }
 
   fun featuredPosts(
     activeSourceIds: List<String>,
+    postsSortOrder: PostsSortOrder,
     unreadOnly: Boolean? = null,
     after: Instant = Instant.DISTANT_PAST,
     featuredPostsAfter: Instant = Instant.DISTANT_PAST,
     postsUpperBound: Instant = Instant.DISTANT_FUTURE,
     limit: Long = Constants.NUMBER_OF_FEATURED_POSTS,
+    sessionPostIds: List<String> = emptyList(),
   ): Flow<List<ResolvedPost>> {
-    return postQueries
-      .featuredPosts(
-        featuredPostsAfter = featuredPostsAfter,
-        postsAfter = after,
-        postsUpperBound = postsUpperBound,
-        isSourceIdsEmpty = activeSourceIds.isEmpty(),
-        sourceIds = activeSourceIds,
-        unreadOnly = unreadOnly,
-        limit = limit,
-        mapper = ::mapToResolvedPost,
-      )
-      .asFlow()
-      .mapToList(dispatchersProvider.databaseRead)
+    return postRepository.featuredPosts(
+      activeSourceIds,
+      postsSortOrder,
+      unreadOnly,
+      after,
+      featuredPostsAfter,
+      postsUpperBound,
+      limit,
+      sessionPostIds,
+    )
   }
 
   suspend fun featuredPostsBlocking(
     activeSourceIds: List<String>,
+    postsSortOrder: PostsSortOrder,
     unreadOnly: Boolean? = null,
     after: Instant = Instant.DISTANT_PAST,
     featuredPostsAfter: Instant = Instant.DISTANT_PAST,
     postsUpperBound: Instant = Instant.DISTANT_FUTURE,
     limit: Long = Constants.NUMBER_OF_FEATURED_POSTS,
+    sessionPostIds: List<String> = emptyList(),
   ): List<ResolvedPost> {
-    return withContext(dispatchersProvider.databaseRead) {
-      postQueries
-        .featuredPosts(
-          featuredPostsAfter = featuredPostsAfter,
-          postsAfter = after,
-          postsUpperBound = postsUpperBound,
-          isSourceIdsEmpty = activeSourceIds.isEmpty(),
-          sourceIds = activeSourceIds,
-          unreadOnly = unreadOnly,
-          limit = limit,
-          mapper = ::mapToResolvedPost,
-        )
-        .executeAsList()
-    }
+    return postRepository.featuredPostsBlocking(
+      activeSourceIds,
+      postsSortOrder,
+      unreadOnly,
+      after,
+      featuredPostsAfter,
+      postsUpperBound,
+      limit,
+      sessionPostIds,
+    )
   }
 
   fun nonFeaturedPosts(
@@ -355,113 +304,44 @@ class RssRepository(
     featuredPostsAfter: Instant = Instant.DISTANT_PAST,
     postsUpperBound: Instant = Instant.DISTANT_FUTURE,
     numberOfFeaturedPosts: Long = Constants.NUMBER_OF_FEATURED_POSTS,
+    sessionPostIds: List<String> = emptyList(),
   ): PagingSource<Int, ResolvedPost> {
-    return QueryPagingSource(
-      countQuery =
-        postQueries.nonFeaturedPostsCount(
-          featuredPostsAfter = featuredPostsAfter,
-          postsAfter = after,
-          postsUpperBound = postsUpperBound,
-          isSourceIdsEmpty = activeSourceIds.isEmpty(),
-          sourceIds = activeSourceIds,
-          unreadOnly = unreadOnly,
-          numberOfFeaturedPosts = numberOfFeaturedPosts,
-        ),
-      transacter = postQueries,
-      context = dispatchersProvider.databaseRead,
-      queryProvider = { limit, offset ->
-        when (postsSortOrder) {
-          PostsSortOrder.Latest ->
-            postQueries.nonFeaturedPostsLatest(
-              featuredPostsAfter = featuredPostsAfter,
-              postsAfter = after,
-              postsUpperBound = postsUpperBound,
-              isSourceIdsEmpty = activeSourceIds.isEmpty(),
-              sourceIds = activeSourceIds,
-              unreadOnly = unreadOnly,
-              numberOfFeaturedPosts = numberOfFeaturedPosts,
-              limit = limit,
-              offset = offset,
-              mapper = ::mapToResolvedPost,
-            )
-          PostsSortOrder.Oldest ->
-            postQueries.nonFeaturedPostsOldest(
-              featuredPostsAfter = featuredPostsAfter,
-              postsAfter = after,
-              postsUpperBound = postsUpperBound,
-              isSourceIdsEmpty = activeSourceIds.isEmpty(),
-              sourceIds = activeSourceIds,
-              unreadOnly = unreadOnly,
-              numberOfFeaturedPosts = numberOfFeaturedPosts,
-              limit = limit,
-              offset = offset,
-              mapper = ::mapToResolvedPost,
-            )
-          PostsSortOrder.AddedLatest ->
-            postQueries.nonFeaturedPostsAddedLatest(
-              featuredPostsAfter = featuredPostsAfter,
-              postsAfter = after,
-              postsUpperBound = postsUpperBound,
-              isSourceIdsEmpty = activeSourceIds.isEmpty(),
-              sourceIds = activeSourceIds,
-              unreadOnly = unreadOnly,
-              numberOfFeaturedPosts = numberOfFeaturedPosts,
-              limit = limit,
-              offset = offset,
-              mapper = ::mapToResolvedPost,
-            )
-          PostsSortOrder.AddedOldest ->
-            postQueries.nonFeaturedPostsAddedOldest(
-              featuredPostsAfter = featuredPostsAfter,
-              postsAfter = after,
-              postsUpperBound = postsUpperBound,
-              isSourceIdsEmpty = activeSourceIds.isEmpty(),
-              sourceIds = activeSourceIds,
-              unreadOnly = unreadOnly,
-              numberOfFeaturedPosts = numberOfFeaturedPosts,
-              limit = limit,
-              offset = offset,
-              mapper = ::mapToResolvedPost,
-            )
-        }
-      },
+    return postRepository.nonFeaturedPosts(
+      activeSourceIds,
+      postsSortOrder,
+      unreadOnly,
+      after,
+      featuredPostsAfter,
+      postsUpperBound,
+      numberOfFeaturedPosts,
+      sessionPostIds,
     )
   }
 
   suspend fun postPosition(
     postId: String,
     activeSourceIds: List<String>,
+    postsSortOrder: PostsSortOrder,
     sourceId: String? = null,
     unreadOnly: Boolean? = null,
     after: Instant = Instant.DISTANT_PAST,
     postsUpperBound: Instant = Instant.DISTANT_FUTURE,
   ): Int? {
-    return withContext(dispatchersProvider.databaseRead) {
-      val post =
-        if (sourceId != null) {
-          postQueries.post(id = postId, sourceId = sourceId, mapper = ::Post).executeAsOneOrNull()
-        } else {
-          postQueries.postById(id = postId, mapper = ::Post).executeAsList().firstOrNull()
-        } ?: return@withContext null
-
-      postQueries
-        .postPosition(
-          isSourceIdsEmpty = activeSourceIds.isEmpty(),
-          sourceIds = activeSourceIds,
-          unreadOnly = unreadOnly,
-          postsAfter = after,
-          postsUpperBound = postsUpperBound,
-          postDate = post.postDate,
-          postCreatedAt = post.createdAt,
-        )
-        .executeAsOne()
-        .toInt()
-    }
+    return postRepository.postPosition(
+      postId,
+      activeSourceIds,
+      postsSortOrder,
+      sourceId,
+      unreadOnly,
+      after,
+      postsUpperBound,
+    )
   }
 
   suspend fun nonFeaturedPostPosition(
     postId: String,
     activeSourceIds: List<String>,
+    postsSortOrder: PostsSortOrder,
     sourceId: String? = null,
     unreadOnly: Boolean? = null,
     after: Instant = Instant.DISTANT_PAST,
@@ -469,54 +349,54 @@ class RssRepository(
     postsUpperBound: Instant = Instant.DISTANT_FUTURE,
     numberOfFeaturedPosts: Long = Constants.NUMBER_OF_FEATURED_POSTS,
   ): Int? {
-    return withContext(dispatchersProvider.databaseRead) {
-      val post =
-        if (sourceId != null) {
-          postQueries.post(id = postId, sourceId = sourceId, mapper = ::Post).executeAsOneOrNull()
-        } else {
-          postQueries.postById(id = postId, mapper = ::Post).executeAsList().firstOrNull()
-        } ?: return@withContext null
-
-      postQueries
-        .nonFeaturedPostPosition(
-          featuredPostsAfter = featuredPostsAfter,
-          postsAfter = after,
-          postsUpperBound = postsUpperBound,
-          numberOfFeaturedPosts = numberOfFeaturedPosts,
-          isSourceIdsEmpty = activeSourceIds.isEmpty(),
-          sourceIds = activeSourceIds,
-          unreadOnly = unreadOnly,
-          postDate = post.postDate,
-          postCreatedAt = post.createdAt,
-        )
-        .executeAsOne()
-        .toInt()
-    }
+    return postRepository.nonFeaturedPostPosition(
+      postId,
+      activeSourceIds,
+      postsSortOrder,
+      sourceId,
+      unreadOnly,
+      after,
+      featuredPostsAfter,
+      postsUpperBound,
+      numberOfFeaturedPosts,
+    )
   }
 
   suspend fun updateBookmarkStatus(bookmarked: Boolean, id: String) {
-    withContext(dispatchersProvider.databaseWrite) {
-      postQueries.updateBookmarkStatus(
-        bookmarked = if (bookmarked) 1L else 0L,
-        id = id,
-        updatedAt = Clock.System.now(),
-      )
-    }
+    bookmarkRepository.updateBookmarkStatus(bookmarked, id)
   }
 
-  suspend fun updatePostReadStatus(read: Boolean, id: String) {
+  suspend fun updatePostReadStatus(read: Boolean, id: String, recordHistory: Boolean = true) {
     withContext(dispatchersProvider.databaseWrite) {
-      postQueries.updateReadStatus(
-        read = if (read) 1L else 0L,
-        id = id,
-        updatedAt = Clock.System.now(),
-      )
+      transactionRunner.invoke {
+        val now = Clock.System.now()
+        postQueries.updateReadStatus(read = if (read) 1L else 0L, id = id, updatedAt = now)
+
+        if (recordHistory) {
+          if (read) {
+            readingHistoryQueries.insertReadingHistoryForPosts(readAt = now, postIds = listOf(id))
+          } else {
+            readingHistoryQueries.deleteReadingHistory(postId = id)
+          }
+        }
+      }
     }
+    widgetUpdater.updateUnreadWidget()
   }
 
   suspend fun updateSeedColor(seedColor: Int, id: String) {
     withContext(dispatchersProvider.databaseWrite) {
       postQueries.updateSeedColor(seedColor = seedColor.toLong(), id = id)
+    }
+  }
+
+  suspend fun updateSeedColors(updates: Map<String, Int>) {
+    withContext(dispatchersProvider.databaseWrite) {
+      transactionRunner.invoke {
+        updates.forEach { (id, seedColor) ->
+          postQueries.updateSeedColor(seedColor = seedColor.toLong(), id = id)
+        }
+      }
     }
   }
 
@@ -531,36 +411,27 @@ class RssRepository(
   }
 
   suspend fun deleteBookmark(id: String) {
-    withContext(dispatchersProvider.databaseWrite) { bookmarkQueries.deleteBookmark(id) }
+    bookmarkRepository.deleteBookmark(id)
   }
 
   suspend fun allBookmarkIdsBlocking(): List<String> {
-    return withContext(dispatchersProvider.databaseRead) {
-      bookmarkQueries.allBookmarkIds().executeAsList()
-    }
+    return bookmarkRepository.allBookmarkIdsBlocking()
   }
 
   fun allFeeds(): Flow<List<Feed>> {
-    return feedQueries
-      .allFeedsBlocking(mapper = ::mapToFeed)
-      .asFlow()
-      .mapToList(dispatchersProvider.databaseRead)
+    return feedRepository.allFeeds()
   }
 
   suspend fun allFeedsBlocking(): List<Feed> {
-    return withContext(dispatchersProvider.databaseRead) {
-      feedQueries.allFeedsBlocking(mapper = ::mapToFeed).executeAsList()
-    }
+    return feedRepository.allFeedsBlocking()
   }
 
   suspend fun allFeedGroupsBlocking(): List<FeedGroup> {
-    return withContext(dispatchersProvider.databaseRead) {
-      feedGroupQueries.allGroupsBlocking(mapper = ::mapToFeedGroup).executeAsList()
-    }
+    return feedGroupRepository.allFeedGroupsBlocking()
   }
 
   fun numberOfFeeds(): Flow<Long> {
-    return feedQueries.numberOfFeeds().asFlow().mapToOne(dispatchersProvider.databaseRead)
+    return feedRepository.numberOfFeeds()
   }
 
   /** Search feeds, returns all feeds if [searchQuery] is empty */
@@ -568,22 +439,7 @@ class RssRepository(
     searchQuery: String,
     postsAfter: Instant = Instant.DISTANT_PAST,
   ): PagingSource<Int, Feed> {
-    val sanitizedSearchQuery = sanitizeSearchQuery(searchQuery)
-
-    return QueryPagingSource(
-      countQuery = feedSearchFTSQueries.countSearchResults(searchQuery = sanitizedSearchQuery),
-      transacter = feedSearchFTSQueries,
-      context = dispatchersProvider.databaseRead,
-      queryProvider = { limit, offset ->
-        feedSearchFTSQueries.search(
-          searchQuery = sanitizedSearchQuery,
-          postsAfter = postsAfter,
-          limit = limit,
-          offset = offset,
-          mapper = ::mapToFeedWithUnreadCountAndRefreshInterval,
-        )
-      },
-    )
+    return feedRepository.searchFeed(searchQuery, postsAfter)
   }
 
   fun feed(
@@ -591,15 +447,7 @@ class RssRepository(
     postsAfter: Instant = Instant.DISTANT_PAST,
     postsUpperBound: Instant = Instant.DISTANT_FUTURE,
   ): Flow<Feed> {
-    return feedQueries
-      .feedWithUnreadPostsCount(
-        id = feedId,
-        postsAfter = postsAfter,
-        postsUpperBound = postsUpperBound,
-        mapper = ::mapToFeedWithUnreadCount,
-      )
-      .asFlow()
-      .mapToOne(dispatchersProvider.databaseRead)
+    return feedRepository.feedWithUnreadCount(feedId, postsAfter, postsUpperBound)
   }
 
   suspend fun feedBlocking(
@@ -607,16 +455,7 @@ class RssRepository(
     postsAfter: Instant = Instant.DISTANT_PAST,
     postsUpperBound: Instant = Instant.DISTANT_FUTURE,
   ): Feed {
-    return withContext(dispatchersProvider.databaseRead) {
-      feedQueries
-        .feedWithUnreadPostsCount(
-          id = feedId,
-          postsAfter = postsAfter,
-          postsUpperBound = postsUpperBound,
-          mapper = ::mapToFeedWithUnreadCount,
-        )
-        .executeAsOne()
-    }
+    return feedRepository.feedWithUnreadCountBlocking(feedId, postsAfter, postsUpperBound)
   }
 
   suspend fun removeFeed(feedId: String) {
@@ -626,6 +465,7 @@ class RssRepository(
         postQueries.deletePostsForFeed(feedId)
       }
     }
+    widgetUpdater.updateUnreadWidget()
   }
 
   private fun mapToFeedShowFavIconSettings(feedShowFavIconSettings: String?): List<Boolean> {
@@ -642,31 +482,19 @@ class RssRepository(
   }
 
   suspend fun updateFeedName(newFeedName: String, feedId: String) {
-    withContext(dispatchersProvider.databaseWrite) {
-      feedQueries.updateFeedName(
-        newFeedName = newFeedName,
-        id = feedId,
-        lastUpdatedAt = Clock.System.now(),
-      )
-    }
+    feedRepository.updateFeedName(newFeedName, feedId)
   }
 
   suspend fun updateFeedLastUpdatedAt(feedId: String, lastUpdatedAt: Instant) {
-    withContext(dispatchersProvider.databaseWrite) {
-      feedQueries.updateLastUpdatedAt(lastUpdatedAt = lastUpdatedAt, id = feedId)
-    }
+    feedRepository.updateFeedLastUpdatedAt(feedId, lastUpdatedAt)
   }
 
   suspend fun updateFeedGroupUpdatedAt(groupId: String, updatedAt: Instant) {
-    withContext(dispatchersProvider.databaseWrite) {
-      feedGroupQueries.updateUpdatedAt(updatedAt, groupId)
-    }
+    feedGroupRepository.updateFeedGroupUpdatedAt(groupId, updatedAt)
   }
 
   suspend fun updateFeedRefreshInterval(feedId: String, refreshInterval: Duration) {
-    withContext(dispatchersProvider.databaseWrite) {
-      feedQueries.updateRefreshInterval(refreshInterval = refreshInterval.toString(), id = feedId)
-    }
+    feedRepository.updateFeedRefreshInterval(feedId, refreshInterval)
   }
 
   fun search(
@@ -675,6 +503,7 @@ class RssRepository(
     sourceIds: List<String> = emptyList(),
     onlyBookmarked: Boolean = false,
     onlyUnread: Boolean = false,
+    sessionPostIds: List<String> = emptyList(),
   ): PagingSource<Int, ResolvedPost> {
     val sanitizedSearchQuery = sanitizeSearchQuery(searchQuery)
 
@@ -686,6 +515,7 @@ class RssRepository(
           sourceIds = sourceIds,
           onlyBookmarked = if (onlyBookmarked) 1L else 0L,
           onlyUnread = if (onlyUnread) 1L else 0L,
+          sessionPostIds = sessionPostIds,
         ),
       transacter = postSearchFTSQueries,
       context = dispatchersProvider.databaseRead,
@@ -699,6 +529,7 @@ class RssRepository(
           onlyUnread = if (onlyUnread) 1L else 0L,
           limit = limit,
           offset = offset,
+          sessionPostIds = sessionPostIds,
           mapper = {
             id: String,
             sourceId: String,
@@ -718,7 +549,9 @@ class RssRepository(
             showFeedFavIcon: Boolean,
             feedContentReadingTime: Long?,
             articleContentReadingTime: Long?,
-            seedColor: Long? ->
+            seedColor: Long?,
+            audioProgress: Long,
+            audioDuration: Long ->
             ResolvedPost(
               id = id,
               sourceId = sourceId,
@@ -739,6 +572,8 @@ class RssRepository(
               feedContentReadingTime = feedContentReadingTime?.toInt(),
               articleContentReadingTime = articleContentReadingTime?.toInt(),
               seedColor = seedColor?.toInt(),
+              audioProgress = audioProgress,
+              audioDuration = audioDuration,
             )
           },
         )
@@ -747,96 +582,56 @@ class RssRepository(
   }
 
   fun bookmarks(): PagingSource<Int, ResolvedPost> {
-    return QueryPagingSource(
-      countQuery = bookmarkQueries.countBookmarks(),
-      transacter = bookmarkQueries,
-      context = dispatchersProvider.databaseRead,
-      queryProvider = { limit, offset ->
-        bookmarkQueries.bookmarks(
-          limit,
-          offset,
-          mapper = {
-            id: String,
-            sourceId: String,
-            title: String,
-            description: String,
-            imageUrl: String?,
-            audioUrl: String?,
-            date: Instant,
-            createdAt: Instant,
-            link: String,
-            commentsLink: String?,
-            flags: Set<PostFlag>,
-            feedName: String,
-            feedIcon: String,
-            feedHomepageLink: String,
-            showFeedFavIcon: Boolean,
-            feedContentReadingTime: Long?,
-            articleContentReadingTime: Long?,
-            seedColor: Long? ->
-            ResolvedPost(
-              id = id,
-              sourceId = sourceId,
-              title = title,
-              description = description,
-              imageUrl = imageUrl,
-              audioUrl = audioUrl,
-              date = date,
-              createdAt = createdAt,
-              link = link,
-              commentsLink = commentsLink,
-              flags = flags,
-              feedName = feedName,
-              feedIcon = feedIcon,
-              feedHomepageLink = feedHomepageLink,
-              alwaysFetchFullArticle = true,
-              showFeedFavIcon = showFeedFavIcon,
-              feedContentReadingTime = feedContentReadingTime?.toInt(),
-              articleContentReadingTime = articleContentReadingTime?.toInt(),
-              seedColor = seedColor?.toInt(),
-            )
-          },
-        )
-      },
-    )
+    return bookmarkRepository.bookmarks()
   }
 
   suspend fun hasFeed(id: String): Boolean {
-    return withContext(dispatchersProvider.databaseRead) { feedQueries.hasFeed(id).executeAsOne() }
+    return feedRepository.hasFeed(id)
   }
 
   suspend fun hasPost(id: String): Boolean {
-    return withContext(dispatchersProvider.databaseRead) {
-      postQueries.postById(id).executeAsOneOrNull() != null
-    }
+    return postRepository.hasPost(id)
   }
 
-  suspend fun toggleFeedPinStatus(feed: Feed) {
+  suspend fun toggleSourcePinStatus(source: Source) {
     val now =
-      if (feed.pinnedAt == null) {
+      if (source.pinnedAt == null) {
         Clock.System.now()
       } else {
         null
       }
+
     withContext(dispatchersProvider.databaseWrite) {
-      feedQueries.updatePinnedAt(pinnedAt = now, id = feed.id, lastUpdatedAt = Clock.System.now())
+      transactionRunner.invoke {
+        feedQueries.updatePinnedAt(
+          pinnedAt = now,
+          id = source.id,
+          lastUpdatedAt = Clock.System.now(),
+        )
+        feedGroupQueries.updatePinnedAt(
+          pinnedAt = now,
+          id = source.id,
+          updatedAt = Clock.System.now(),
+        )
+      }
     }
   }
 
   fun hasFeeds(): Flow<Boolean> {
-    return feedQueries.numberOfFeeds().asFlow().mapToOne(dispatchersProvider.databaseRead).map {
-      it > 0
-    }
+    return feedRepository.hasFeeds()
   }
 
   /** @return list of feeds from which posts are deleted from */
   suspend fun deleteReadPosts(before: Instant): List<String> {
-    return withContext(dispatchersProvider.databaseWrite) {
+    val results =
+      withContext(dispatchersProvider.databaseWrite) {
         postQueries.transactionWithResult {
           postQueries.deleteReadPosts(before = before).executeAsList()
         }
       }
-      .distinct()
+
+    widgetUpdater.updateUnreadWidget()
+    return results.distinct()
   }
 
   suspend fun updateFeedsLastCleanUpAt(
@@ -855,23 +650,53 @@ class RssRepository(
 
   suspend fun markPostsAsRead(postsAfter: Instant = Instant.DISTANT_PAST) {
     withContext(dispatchersProvider.databaseWrite) {
-      postQueries.markPostsAsRead(
-        sourceId = null,
-        after = postsAfter,
-        updatedAt = Clock.System.now(),
-      )
-    }
-  }
-
-  suspend fun markPostsAsRead(postIds: Set<String>) {
-    val postIdsSnapshot = postIds.toList()
-    withContext(dispatchersProvider.databaseWrite) {
       transactionRunner.invoke {
-        postIdsSnapshot.forEach { postId ->
-          postQueries.updateReadStatus(read = 1L, id = postId, updatedAt = Clock.System.now())
+        val now = Clock.System.now()
+        val postIds =
+          postQueries.markAllPostsAsRead(after = postsAfter, updatedAt = now).executeAsList()
+        postIds.chunked(SQLITE_BATCH_SIZE).forEach { chunk ->
+          readingHistoryQueries.insertReadingHistoryForPosts(readAt = now, postIds = chunk)
         }
       }
     }
+    widgetUpdater.updateUnreadWidget()
+  }
+
+  suspend fun markPostsAsRead(postIds: Set<String>) {
+    updatePostReadStatus(postIds, read = true)
+  }
+
+  suspend fun updatePostReadStatus(
+    postIds: Set<String>,
+    read: Boolean,
+    recordHistory: Boolean = true,
+  ) {
+    val postIdsSnapshot = postIds.toList()
+    val now = Clock.System.now()
+    withContext(dispatchersProvider.databaseWrite) {
+      transactionRunner.invoke {
+        postIdsSnapshot.chunked(SQLITE_BATCH_SIZE).forEach { chunk ->
+          postQueries.updatePostsReadStatus(
+            read = if (read) 1L else 0L,
+            updatedAt = now,
+            ids = chunk,
+          )
+
+          if (recordHistory) {
+            if (read) {
+              readingHistoryQueries.insertReadingHistoryForPosts(readAt = now, postIds = chunk)
+            } else {
+              readingHistoryQueries.deleteReadingHistoryForPosts(postIds = chunk)
+            }
+          }
+        }
+      }
+    }
+    widgetUpdater.updateUnreadWidget()
+  }
+
+  suspend fun updateBookmarkStatus(postIds: Set<String>, bookmarked: Boolean) {
+    bookmarkRepository.updateBookmarkStatus(postIds, bookmarked)
   }
 
   suspend fun markPostsInFeedAsRead(
@@ -881,33 +706,31 @@ class RssRepository(
     val feedIdsSnapshot = feedIds.toList()
     withContext(dispatchersProvider.databaseWrite) {
       transactionRunner.invoke {
+        val now = Clock.System.now()
         feedIdsSnapshot.forEach { feedId ->
-          postQueries.markPostsAsRead(
-            sourceId = feedId,
-            after = postsAfter,
-            updatedAt = Clock.System.now(),
-          )
+          val postIds =
+            postQueries
+              .markPostsAsReadForFeed(sourceId = feedId, after = postsAfter, updatedAt = now)
+              .executeAsList()
+          postIds.chunked(SQLITE_BATCH_SIZE).forEach { chunk ->
+            readingHistoryQueries.insertReadingHistoryForPosts(readAt = now, postIds = chunk)
+          }
         }
       }
     }
+    widgetUpdater.updateUnreadWidget()
   }
 
   suspend fun post(postId: String): Post {
-    return withContext(dispatchersProvider.databaseRead) {
-      postQueries.postById(postId, ::Post).executeAsList().first()
-    }
+    return postRepository.post(postId)
   }
 
   suspend fun postOrNull(postId: String): Post? {
-    return withContext(dispatchersProvider.databaseRead) {
-      postQueries.postById(postId, ::Post).executeAsList().firstOrNull()
-    }
+    return postRepository.postOrNull(postId)
   }
 
   suspend fun resolvedPostById(postId: String): ResolvedPost? {
-    return withContext(dispatchersProvider.databaseRead) {
-      postQueries.resolvedPostById(id = postId, mapper = ::mapToResolvedPost).executeAsOneOrNull()
-    }
+    return postRepository.resolvedPostById(postId)
   }
 
   suspend fun updateFeedRemoteId(
@@ -915,29 +738,23 @@ class RssRepository(
     feedId: String,
     lastUpdatedAt: Instant = Clock.System.now(),
   ) {
-    withContext(dispatchersProvider.databaseWrite) {
-      feedQueries.updateFeedRemoteId(
-        remoteId = remoteId,
-        lastUpdatedAt = lastUpdatedAt,
-        id = feedId,
-      )
-    }
+    syncRepository.updateFeedRemoteId(remoteId, feedId, lastUpdatedAt)
   }
 
   suspend fun updatePostRemoteId(remoteId: String, postId: String) {
-    withContext(dispatchersProvider.databaseWrite) {
-      postQueries.updatePostRemoteId(
-        remoteId = remoteId,
-        updatedAt = Clock.System.now(),
-        id = postId,
-      )
-    }
+    syncRepository.updatePostRemoteId(remoteId, postId)
   }
 
   suspend fun updatePostSyncedAt(postId: String, syncedAt: Instant) {
-    withContext(dispatchersProvider.databaseWrite) {
-      postQueries.updatePostSyncedAt(syncedAt = syncedAt, id = postId)
-    }
+    syncRepository.updatePostSyncedAt(postId, syncedAt)
+  }
+
+  suspend fun updatePostSyncedAt(postIds: Set<String>, syncedAt: Instant) {
+    syncRepository.updatePostSyncedAt(postIds, syncedAt)
+  }
+
+  suspend fun updatePostSyncedAt(posts: List<Post>) {
+    syncRepository.updatePostSyncedAt(posts)
   }
 
   suspend fun updateFeedGroupRemoteId(
@@ -945,77 +762,39 @@ class RssRepository(
     groupId: String,
     updatedAt: Instant = Clock.System.now(),
   ) {
-    withContext(dispatchersProvider.databaseWrite) {
-      feedGroupQueries.updateFeedGroupRemoteId(
-        remoteId = remoteId,
-        updatedAt = updatedAt,
-        id = groupId,
-      )
-    }
+    feedGroupRepository.updateFeedGroupRemoteId(remoteId, groupId, updatedAt)
   }
 
   suspend fun feedGroupByRemoteId(remoteId: String): FeedGroup? {
-    return withContext(dispatchersProvider.databaseRead) {
-      feedGroupQueries
-        .feedGroupByRemoteId(
-          remoteId = remoteId,
-          mapper = {
-            id: String,
-            name: String,
-            createdAt: Instant,
-            updatedAt: Instant,
-            pinnedAt: Instant?,
-            pinnedPosition: Double,
-            isDeleted: Boolean,
-            remoteId: String? ->
-            FeedGroup(
-              id = id,
-              name = name,
-              feedIds = emptyList(),
-              feedHomepageLinks = emptyList(),
-              feedIconLinks = emptyList(),
-              feedShowFavIconSettings = emptyList(),
-              createdAt = createdAt,
-              updatedAt = updatedAt,
-              pinnedAt = pinnedAt,
-              pinnedPosition = pinnedPosition,
-              isDeleted = isDeleted,
-              remoteId = remoteId,
-            )
-          },
-        )
-        .executeAsOneOrNull()
-    }
+    return feedGroupRepository.feedGroupByRemoteId(remoteId)
+  }
+
+  suspend fun latestPostRemoteId(): String? {
+    return syncRepository.latestPostRemoteId()
+  }
+
+  suspend fun latestPostRemoteIdForFeed(feedId: String): String? {
+    return syncRepository.latestPostRemoteIdForFeed(feedId)
   }
 
   suspend fun postsWithRemoteId(): List<Post> {
-    return withContext(dispatchersProvider.databaseRead) {
-      postQueries.postsWithRemoteId(::Post).executeAsList()
-    }
+    return syncRepository.postsWithRemoteId()
   }
 
   suspend fun postsWithRemoteIdPaged(limit: Long, offset: Long): List<Post> {
-    return withContext(dispatchersProvider.databaseRead) {
-      postQueries.postsWithRemoteIdPaged(limit, offset, ::Post).executeAsList()
-    }
+    return syncRepository.postsWithRemoteIdPaged(limit, offset)
   }
 
   suspend fun postsWithLocalChanges(): List<Post> {
-    return withContext(dispatchersProvider.databaseRead) {
-      postQueries.postsWithLocalChanges(::Post).executeAsList()
-    }
+    return syncRepository.postsWithLocalChanges()
   }
 
   suspend fun postsWithLocalChangesPaged(limit: Long, offset: Long): List<Post> {
-    return withContext(dispatchersProvider.databaseRead) {
-      postQueries.postsWithLocalChangesPaged(limit, offset, ::Post).executeAsList()
-    }
+    return syncRepository.postsWithLocalChangesPaged(limit, offset)
   }
 
   suspend fun postsWithLocalChangesForFeed(feedId: String): List<Post> {
-    return withContext(dispatchersProvider.databaseRead) {
-      postQueries.postsWithLocalChangesForFeed(feedId, ::Post).executeAsList()
-    }
+    return syncRepository.postsWithLocalChangesForFeed(feedId)
   }
 
   suspend fun postsWithLocalChangesForFeedPaged(
@@ -1023,85 +802,43 @@ class RssRepository(
     limit: Long,
     offset: Long,
   ): List<Post> {
-    return withContext(dispatchersProvider.databaseRead) {
-      postQueries.postsWithLocalChangesForFeedPaged(feedId, limit, offset, ::Post).executeAsList()
-    }
+    return syncRepository.postsWithLocalChangesForFeedPaged(feedId, limit, offset)
   }
 
   suspend fun postByRemoteId(remoteId: String): Post? {
-    return withContext(dispatchersProvider.databaseRead) {
-      postQueries.postByRemoteId(remoteId, ::Post).executeAsOneOrNull()
-    }
+    return syncRepository.postByRemoteId(remoteId)
+  }
+
+  suspend fun postsByRemoteIds(remoteIds: Set<String>): List<Post> {
+    return syncRepository.postsByRemoteIds(remoteIds)
   }
 
   suspend fun postsWithImagesAndNoSeedColor(limit: Long): List<ResolvedPost> {
-    return withContext(dispatchersProvider.databaseRead) {
-      postQueries
-        .postsWithImagesAndNoSeedColor(limit = limit, mapper = ::mapToResolvedPost)
-        .executeAsList()
-    }
+    return postRepository.postsWithImagesAndNoSeedColor(limit)
   }
 
   suspend fun postByLink(link: String): Post? {
-    return withContext(dispatchersProvider.databaseRead) {
-      postQueries.postByLink(link, ::Post).executeAsOneOrNull()
-    }
+    return postRepository.postByLink(link)
+  }
+
+  suspend fun postsByLinks(links: Set<String>): List<Post> {
+    return postRepository.postsByLinks(links)
   }
 
   fun feedByRemoteId(remoteId: String): Feed? {
-    return feedQueries.feedByRemoteId(remoteId, mapper = ::mapToFeed).executeAsOneOrNull()
+    return syncRepository.feedByRemoteId(remoteId)
+  }
+
+  fun feedsByRemoteIds(remoteIds: Set<String>): List<Feed> {
+    return syncRepository.feedsByRemoteIds(remoteIds)
   }
 
   suspend fun upsertPosts(posts: List<Post>) {
-    val postsSnapshot = posts.toList()
-    withContext(dispatchersProvider.databaseWrite) {
-      transactionRunner.invoke {
-        postsSnapshot.forEach { post ->
-          postQueries.upsertSyncPost(
-            id = post.id,
-            sourceId = post.sourceId,
-            title = post.title,
-            description = post.description,
-            imageUrl = post.imageUrl,
-            audioUrl = post.audioUrl,
-            postDate = post.postDate,
-            createdAt = post.createdAt,
-            updatedAt = post.updatedAt,
-            syncedAt = post.syncedAt,
-            link = post.link,
-            commentsLink = post.commentsLink,
-            flags = post.flags,
-            remoteId = post.remoteId,
-          )
-        }
-      }
-    }
+    syncRepository.upsertPosts(posts)
   }
 
   suspend fun upsertFeeds(feeds: List<Feed>) {
-    val feedsSnapshot = feeds.toList()
-    withContext(dispatchersProvider.databaseWrite) {
-      transactionRunner.invoke {
-        feedsSnapshot.forEach { feed ->
-          feedQueries.upsertSyncFeed(
-            id = feed.id,
-            name = feed.name,
-            icon = feed.icon,
-            description = feed.description,
-            link = feed.link,
-            homepageLink = feed.homepageLink,
-            createdAt = feed.createdAt,
-            pinnedAt = feed.pinnedAt,
-            lastCleanUpAt = feed.lastCleanUpAt,
-            alwaysFetchSourceArticle = feed.alwaysFetchSourceArticle,
-            lastUpdatedAt = feed.lastUpdatedAt,
-            isDeleted = feed.isDeleted,
-            hideFromAllFeeds = feed.hideFromAllFeeds,
-            remoteId = feed.remoteId,
-          )
-        }
-      }
-    }
+    syncRepository.upsertFeeds(feeds)
   }
 
   suspend fun upsertGroup(
@@ -1112,34 +849,15 @@ class RssRepository(
     isDeleted: Boolean,
     remoteId: String? = null,
   ) {
-    withContext(dispatchersProvider.databaseWrite) {
-      feedGroupQueries.upsertSyncGroup(
-        id = id,
-        name = name,
-        createdAt = Clock.System.now(),
-        updatedAt = updatedAt,
-        pinnedAt = pinnedAt,
-        isDeleted = isDeleted,
-        remoteId = remoteId,
-      )
-    }
+    feedGroupRepository.upsertGroup(id, name, pinnedAt, updatedAt, isDeleted, remoteId)
   }
 
   suspend fun feedGroupBlocking(id: String): FeedGroup? {
-    return withContext(dispatchersProvider.databaseRead) {
-      feedGroupQueries.group(id, mapper = ::mapToFeedGroup).executeAsOneOrNull()
-    }
+    return feedGroupRepository.feedGroupBlocking(id)
   }
 
   suspend fun replaceFeedsInGroup(groupId: String, feedIds: List<String>) {
-    withContext(dispatchersProvider.databaseWrite) {
-      transactionRunner.invoke {
-        feedGroupFeedQueries.removeAllFeedsFromGroup(groupId)
-        feedIds.forEach { feedId ->
-          feedGroupFeedQueries.addFeedToGroup(feedGroupId = groupId, feedId = feedId)
-        }
-      }
-    }
+    feedGroupRepository.replaceFeedsInGroup(groupId, feedIds)
   }
 
   suspend fun deleteReadPostsForFeedOlderThan(feedId: String, before: Instant) {
@@ -1149,45 +867,34 @@ class RssRepository(
   }
 
   suspend fun updateFeedAlwaysFetchSource(feedId: String, newValue: Boolean) {
-    return withContext(dispatchersProvider.databaseWrite) {
-      feedQueries.updateAlwaysFetchSourceArticle(newValue, feedId)
-    }
+    feedRepository.updateFeedAlwaysFetchSource(feedId, newValue)
   }
 
   suspend fun updateFeedShowFavIcon(feedId: String, newValue: Boolean) {
-    return withContext(dispatchersProvider.databaseWrite) {
-      feedQueries.updateShowFeedFavIcon(newValue, feedId)
-    }
+    feedRepository.updateFeedShowFavIcon(feedId, newValue)
+  }
+
+  suspend fun updateFeedEnableNotifications(feedId: String, newValue: Boolean) {
+    feedRepository.updateFeedEnableNotifications(feedId, newValue)
   }
 
   suspend fun updateFeedHideFromAllFeeds(feedId: String, newValue: Boolean) {
-    return withContext(dispatchersProvider.databaseWrite) {
+    withContext(dispatchersProvider.databaseWrite) {
       feedQueries.updateHideFromAllFeeds(
         hideFromAllFeeds = newValue,
         lastUpdatedAt = Clock.System.now(),
         id = feedId,
       )
     }
+    widgetUpdater.updateUnreadWidget()
   }
 
   suspend fun createGroup(name: String): String {
-    return withContext(dispatchersProvider.databaseWrite) {
-      val id = nameBasedUuidOf(name).toString()
-      feedGroupQueries.createGroup(
-        id = id,
-        name = name,
-        createdAt = Clock.System.now(),
-        updatedAt = Clock.System.now(),
-      )
-
-      return@withContext id
-    }
+    return feedGroupRepository.createGroup(name)
   }
 
   suspend fun updateGroupName(groupId: String, name: String) {
-    withContext(dispatchersProvider.databaseWrite) {
-      feedGroupQueries.updateGroupName(name = name, id = groupId, updatedAt = Clock.System.now())
-    }
+    feedGroupRepository.updateGroupName(groupId, name)
   }
 
   suspend fun addFeedIdsToGroups(groupIds: Set<String>, feedIds: List<String>) {
@@ -1219,13 +926,7 @@ class RssRepository(
   }
 
   suspend fun groupIdsForFeed(feedId: String): List<String> {
-    return withContext(dispatchersProvider.io) {
-      feedGroupFeedQueries
-        .groupIdsForFeed(feedId)
-        .executeAsList()
-        .map { it.feedGroupId }
-        .filterNotNull()
-    }
+    return feedGroupRepository.groupIdsForFeed(feedId)
   }
 
   suspend fun removeFeedIdsFromGroups(groupIds: Set<String>, feedIds: List<String>) {
@@ -1281,34 +982,37 @@ class RssRepository(
         }
       }
     }
+    widgetUpdater.updateUnreadWidget()
   }
 
   suspend fun deleteSources(sources: Set<Source>) {
     val sourcesSnapshot = sources.toList()
     withContext(dispatchersProvider.databaseWrite) {
       transactionRunner.invoke {
-        val now = Clock.System.now()
         sourcesSnapshot.forEach { source ->
-          feedQueries.remove(id = source.id)
-          postQueries.deletePostsForFeed(source.id)
-          feedGroupQueries.remove(id = source.id)
+          when (source.sourceType) {
+            SourceType.Feed -> {
+              postQueries.deletePostsForFeed(source.id)
+              val postsCount = postQueries.countPostsForFeed(source.id).executeAsOne()
+              if (postsCount == 0L) {
+                feedQueries.remove(id = source.id)
+              }
+            }
+            SourceType.FeedGroup -> {
+              feedGroupQueries.remove(id = source.id)
+            }
+          }
         }
       }
     }
+    widgetUpdater.updateUnreadWidget()
   }
 
   fun pinnedSources(
     postsAfter: Instant = Instant.DISTANT_PAST,
     postsUpperBound: Instant = Instant.DISTANT_FUTURE,
   ): Flow<List<Source>> {
-    return sourceQueries
-      .pinnedSources(
-        postsAfter = postsAfter,
-        postsUpperBound = postsUpperBound,
-        mapper = ::mapToSource,
-      )
-      .asFlow()
-      .mapToList(dispatchersProvider.databaseRead)
+    return sourceRepository.pinnedSources(postsAfter, postsUpperBound)
   }
 
   fun sources(
@@ -1316,21 +1020,7 @@ class RssRepository(
     postsUpperBound: Instant = Instant.DISTANT_FUTURE,
     orderBy: FeedsOrderBy = FeedsOrderBy.Latest,
   ): PagingSource<Int, Source> {
-    return QueryPagingSource(
-      countQuery = sourceQueries.sourcesCount(),
-      transacter = sourceQueries,
-      context = dispatchersProvider.databaseRead,
-      queryProvider = { limit, offset ->
-        sourceQueries.sources(
-          postsAfter = postsAfter,
-          postsUpperBound = postsUpperBound,
-          orderBy = orderBy.value,
-          limit = limit,
-          offset = offset,
-          mapper = ::mapToSource,
-        )
-      },
-    )
+    return sourceRepository.sources(postsAfter, postsUpperBound, orderBy)
   }
 
   fun source(
@@ -1338,65 +1028,30 @@ class RssRepository(
     postsAfter: Instant = Instant.DISTANT_PAST,
     postsUpperBound: Instant = Instant.DISTANT_FUTURE,
   ): Flow<Source?> {
-    return sourceQueries
-      .source(
-        postsAfter = postsAfter,
-        postsUpperBound = postsUpperBound,
-        id = id,
-        mapper = ::mapToSource,
-      )
-      .asFlow()
-      .mapToOneOrNull(dispatchersProvider.databaseRead)
+    return sourceRepository.source(id, postsAfter, postsUpperBound)
   }
 
   fun allGroups(): PagingSource<Int, FeedGroup> {
-    return QueryPagingSource(
-      countQuery = feedGroupQueries.count(),
-      transacter = feedGroupQueries,
-      context = dispatchersProvider.databaseRead,
-      queryProvider = { limit, offset ->
-        feedGroupQueries.groups(limit = limit, offset = offset, mapper = ::mapToFeedGroupFromGroups)
-      },
-    )
+    return feedGroupRepository.allGroups()
   }
 
   fun numberOfFeedGroups(): Flow<Long> {
-    return feedGroupQueries.count().asFlow().mapToOne(dispatchersProvider.databaseRead)
+    return feedGroupRepository.numberOfFeedGroups()
   }
 
   suspend fun groupByIds(ids: Set<String>): List<FeedGroup> {
-    return withContext(dispatchersProvider.databaseRead) {
-      feedGroupQueries
-        .groupsByIds(ids = ids, mapper = ::mapToFeedGroupFromGroupsByIds)
-        .executeAsList()
-    }
+    return feedGroupRepository.groupByIds(ids)
   }
 
   fun groupById(groupId: String): Flow<FeedGroup> {
-    return feedGroupQueries
-      .groupsByIds(ids = setOf(groupId), mapper = ::mapToFeedGroupFromGroupsByIds)
-      .asFlow()
-      .mapToOne(dispatchersProvider.databaseRead)
+    return feedGroupRepository.groupById(groupId)
   }
 
   fun feedsInGroup(
     feedIds: List<String>,
     orderBy: FeedsOrderBy = FeedsOrderBy.Latest,
   ): PagingSource<Int, Feed> {
-    return QueryPagingSource(
-      countQuery = feedQueries.feedsInGroupPaginatedCount(feedIds),
-      transacter = feedQueries,
-      context = dispatchersProvider.databaseRead,
-      queryProvider = { limit, offset ->
-        feedQueries.feedsInGroupPaginated(
-          feedIds = feedIds,
-          orderBy = orderBy.value,
-          limit = limit,
-          offset = offset,
-          mapper = ::mapToFeedWithUnreadCount,
-        )
-      },
-    )
+    return feedRepository.feedsInGroup(feedIds, orderBy)
   }
 
   suspend fun updatedSourcePinnedPosition(sources: List<Source>) {
@@ -1460,34 +1115,39 @@ class RssRepository(
       .mapToOne(dispatchersProvider.databaseRead)
   }
 
-  suspend fun getReadingStatistics(startDate: Instant): Flow<ReadingStatistics> {
-    return withContext(dispatchersProvider.databaseRead) {
-      val totalReadCount = postQueries.totalReadPostsCount().executeAsOne()
-
-      val topFeeds =
-        postQueries.readPostsByFeed().executeAsList().map {
-          FeedReadCount(
-            feedId = it.feedId,
-            feedName = it.feedName,
-            feedIcon = it.feedIcon,
-            homepageLink = it.feedHomepageLink,
-            readCount = it.readCount,
+  fun unreadSinceLastSyncPerFeed(
+    sources: List<String>,
+    postsAfter: Instant,
+    postsUpperBound: Instant,
+  ): Flow<List<UnreadSinceLastSyncPerFeed>> {
+    return postQueries
+      .unreadSinceLastSyncPerFeed(
+        isSourceIdsEmpty = sources.isEmpty(),
+        sourceIds = sources,
+        postsAfter = postsAfter,
+        postsUpperBound = postsUpperBound,
+        mapper = { feedId, feedName, count, feedHomepageLink, feedIcon, showFeedFavIconStr ->
+          UnreadSinceLastSyncPerFeed(
+            feedId = feedId,
+            feedName = feedName,
+            newArticleCount = count,
+            feedHomepageLink = feedHomepageLink,
+            feedIcon = feedIcon,
+            showFeedFavIcon =
+              when (showFeedFavIconStr) {
+                "true" -> true
+                "false" -> false
+                else -> true
+              },
           )
-        }
-
-      val readingTrends =
-        postQueries.readPostsOverTime(startDate).executeAsList().map {
-          ReadingTrend(date = it.date, count = it.count)
-        }
-
-      flowOf(
-        ReadingStatistics(
-          totalReadCount = totalReadCount,
-          topFeeds = topFeeds.toImmutableList(),
-          readingTrends = readingTrends.toImmutableList(),
-        )
+        },
       )
-    }
+      .asFlow()
+      .mapToList(dispatchersProvider.databaseRead)
+  }
+
+  suspend fun getReadingStatistics(startDate: Instant): Flow<ReadingStatistics> {
+    return readingHistoryRepository.getReadingStatistics(startDate)
   }
 
   private fun mapToFeed(
@@ -1508,6 +1168,7 @@ class RssRepository(
     isDeleted: Boolean,
     hideFromAllFeeds: Boolean,
     remoteId: String?,
+    enableNotifications: Boolean,
   ): Feed {
     return Feed(
       id = id,
@@ -1525,6 +1186,7 @@ class RssRepository(
       pinnedPosition = pinnedPosition,
       showFeedFavIcon = showFeedFavIcon,
       hideFromAllFeeds = hideFromAllFeeds,
+      enableNotifications = enableNotifications,
       isDeleted = isDeleted,
       remoteId = remoteId,
     )
@@ -1546,6 +1208,7 @@ class RssRepository(
     showFeedFavIcon: Boolean,
     hideFromAllFeeds: Boolean,
     isDeleted: Boolean,
+    enableNotifications: Boolean,
     remoteId: String?,
   ): Feed {
     return Feed(
@@ -1563,6 +1226,7 @@ class RssRepository(
       numberOfUnreadPosts = numberOfUnreadPosts,
       showFeedFavIcon = showFeedFavIcon,
       hideFromAllFeeds = hideFromAllFeeds,
+      enableNotifications = enableNotifications,
       isDeleted = isDeleted,
       remoteId = remoteId,
     )
@@ -1583,6 +1247,7 @@ class RssRepository(
     lastUpdatedAt: Instant?,
     refreshInterval: String,
     isDeleted: Boolean,
+    enableNotifications: Boolean,
     remoteId: String?,
     numberOfUnreadPosts: Long,
     showFeedFavIcon: Boolean,
@@ -1607,145 +1272,7 @@ class RssRepository(
       numberOfUnreadPosts = numberOfUnreadPosts,
       showFeedFavIcon = showFeedFavIcon,
       hideFromAllFeeds = hideFromAllFeeds,
-    )
-  }
-
-  private fun mapToSource(
-    type: String,
-    id: String,
-    name: String,
-    icon: String?,
-    description: String?,
-    link: String?,
-    homepageLink: String?,
-    createdAt: Instant,
-    pinnedAt: Instant?,
-    lastCleanUpAt: Instant?,
-    numberOfUnreadPosts: Long,
-    feedIds: String?,
-    feedHomepageLinks: String?,
-    feedIcons: String?,
-    feedShowFavIconSettings: String?,
-    updatedAt: Instant?,
-    pinnedPosition: Double,
-    showFeedFavIcon: Boolean?,
-    remoteId: String?,
-  ): Source {
-    return if (type == "group") {
-      FeedGroup(
-        id = id,
-        name = name,
-        feedIds = feedIds.orEmpty().splitAndTrim(Constants.GROUP_CONCAT_SEPARATOR),
-        feedHomepageLinks =
-          feedHomepageLinks.orEmpty().splitAndTrim(Constants.GROUP_CONCAT_SEPARATOR),
-        feedIconLinks = feedIcons.orEmpty().splitAndTrim(Constants.GROUP_CONCAT_SEPARATOR),
-        feedShowFavIconSettings = mapToFeedShowFavIconSettings(feedShowFavIconSettings),
-        createdAt = createdAt,
-        updatedAt = updatedAt!!,
-        pinnedAt = pinnedAt,
-        numberOfUnreadPosts = numberOfUnreadPosts,
-        pinnedPosition = pinnedPosition,
-      )
-    } else {
-      Feed(
-        id = id,
-        name = name,
-        icon = icon!!,
-        description = description!!,
-        link = link!!,
-        homepageLink = homepageLink!!,
-        createdAt = createdAt,
-        pinnedAt = pinnedAt,
-        lastCleanUpAt = lastCleanUpAt,
-        numberOfUnreadPosts = numberOfUnreadPosts,
-        pinnedPosition = pinnedPosition,
-        showFeedFavIcon = showFeedFavIcon ?: true,
-        remoteId = remoteId,
-      )
-    }
-  }
-
-  private fun mapToFeedGroup(
-    id: String,
-    name: String,
-    feedIds: String?,
-    feedHomepageLinks: String,
-    feedIconLinks: String,
-    feedShowFavIconSettings: String,
-    createdAt: Instant,
-    updatedAt: Instant,
-    pinnedAt: Instant?,
-    pinnedPosition: Double,
-    isDeleted: Boolean,
-    remoteId: String?,
-  ): FeedGroup {
-    return FeedGroup(
-      id = id,
-      name = name,
-      feedIds = feedIds.orEmpty().splitAndTrim(Constants.GROUP_CONCAT_SEPARATOR),
-      feedHomepageLinks = feedHomepageLinks.splitAndTrim(Constants.GROUP_CONCAT_SEPARATOR),
-      feedIconLinks = feedIconLinks.splitAndTrim(Constants.GROUP_CONCAT_SEPARATOR),
-      feedShowFavIconSettings = mapToFeedShowFavIconSettings(feedShowFavIconSettings),
-      createdAt = createdAt,
-      updatedAt = updatedAt,
-      pinnedAt = pinnedAt,
-      pinnedPosition = pinnedPosition,
-      isDeleted = isDeleted,
-      remoteId = remoteId,
-    )
-  }
-
-  private fun mapToFeedGroupFromGroups(
-    id: String,
-    name: String,
-    feedIds: String?,
-    feedHomepageLinks: String,
-    feedIcons: String,
-    feedShowFavIconSettings: String,
-    createdAt: Instant,
-    updatedAt: Instant,
-    pinnedAt: Instant?,
-    pinnedPosition: Double,
-    remoteId: String?,
-  ): FeedGroup {
-    return FeedGroup(
-      id = id,
-      name = name,
-      feedIds = feedIds.orEmpty().splitAndTrim(Constants.GROUP_CONCAT_SEPARATOR),
-      feedHomepageLinks = feedHomepageLinks.splitAndTrim(Constants.GROUP_CONCAT_SEPARATOR),
-      feedIconLinks = feedIcons.splitAndTrim(Constants.GROUP_CONCAT_SEPARATOR),
-      feedShowFavIconSettings = mapToFeedShowFavIconSettings(feedShowFavIconSettings),
-      createdAt = createdAt,
-      updatedAt = updatedAt,
-      pinnedAt = pinnedAt,
-      pinnedPosition = pinnedPosition,
-      remoteId = remoteId,
-    )
-  }
-
-  private fun mapToFeedGroupFromGroupsByIds(
-    id: String,
-    name: String,
-    feedIds: String?,
-    feedHomepageLinks: String,
-    feedIcons: String,
-    feedShowFavIconSettings: String,
-    createdAt: Instant,
-    updatedAt: Instant,
-    pinnedAt: Instant?,
-    remoteId: String?,
-  ): FeedGroup {
-    return FeedGroup(
-      id = id,
-      name = name,
-      feedIds = feedIds.orEmpty().splitAndTrim(Constants.GROUP_CONCAT_SEPARATOR),
-      feedHomepageLinks = feedHomepageLinks.splitAndTrim(Constants.GROUP_CONCAT_SEPARATOR),
-      feedIconLinks = feedIcons.splitAndTrim(Constants.GROUP_CONCAT_SEPARATOR),
-      feedShowFavIconSettings = mapToFeedShowFavIconSettings(feedShowFavIconSettings),
-      createdAt = createdAt,
-      updatedAt = updatedAt,
-      pinnedAt = pinnedAt,
-      remoteId = remoteId,
+      enableNotifications = enableNotifications,
     )
   }
 
@@ -1770,6 +1297,8 @@ class RssRepository(
     feedContentReadingTime: Long?,
     articleContentReadingTime: Long?,
     seedColor: Long?,
+    audioProgress: Long,
+    audioDuration: Long,
   ): ResolvedPost {
     return ResolvedPost(
       id = id,
@@ -1792,6 +1321,8 @@ class RssRepository(
       articleContentReadingTime = articleContentReadingTime?.toInt(),
       seedColor = seedColor?.toInt(),
       remoteId = remoteId,
+      audioProgress = audioProgress,
+      audioDuration = audioDuration,
     )
   }
 

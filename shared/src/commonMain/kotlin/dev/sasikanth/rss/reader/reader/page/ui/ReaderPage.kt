@@ -25,11 +25,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.selection.TextSelectionColors
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mikepenz.markdown.compose.LocalImageTransformer
@@ -56,6 +57,7 @@ import com.mikepenz.markdown.compose.LocalMarkdownTypography
 import com.mikepenz.markdown.compose.LocalReferenceLinkHandler
 import com.mikepenz.markdown.compose.MarkdownElement
 import com.mikepenz.markdown.compose.components.MarkdownComponents
+import com.mikepenz.markdown.compose.components.markdownComponents
 import com.mikepenz.markdown.m3.markdownColor
 import com.mikepenz.markdown.m3.markdownTypography
 import com.mikepenz.markdown.model.ReferenceLinkHandlerImpl
@@ -68,12 +70,16 @@ import dev.sasikanth.rss.reader.core.model.local.ResolvedPost
 import dev.sasikanth.rss.reader.core.model.local.ThemeVariant
 import dev.sasikanth.rss.reader.markdown.CoilMarkdownTransformer
 import dev.sasikanth.rss.reader.media.PlaybackState
+import dev.sasikanth.rss.reader.media.SleepTimerOption
 import dev.sasikanth.rss.reader.platform.LocalLinkHandler
+import dev.sasikanth.rss.reader.reader.ReaderScreenArgs
 import dev.sasikanth.rss.reader.reader.page.ReaderPageViewModel
 import dev.sasikanth.rss.reader.reader.page.ReaderProcessingProgress
+import dev.sasikanth.rss.reader.reader.ui.LocalOnImageClick
 import dev.sasikanth.rss.reader.share.LocalShareHandler
 import dev.sasikanth.rss.reader.ui.AppTheme
 import dev.sasikanth.rss.reader.utils.LocalBlockImage
+import kotlin.time.Instant
 import kotlinx.coroutines.launch
 import org.intellij.markdown.MarkdownElementTypes
 
@@ -87,8 +93,10 @@ internal fun ReaderPage(
   markdownComponents: MarkdownComponents,
   isDarkTheme: Boolean,
   themeVariant: ThemeVariant,
+  fromScreen: ReaderScreenArgs.FromScreen,
   onBookmarkClick: () -> Unit,
   onMarkAsUnread: () -> Unit,
+  onImageClick: (String) -> Unit,
   modifier: Modifier = Modifier,
   contentPaddingValues: PaddingValues = PaddingValues(),
 ) {
@@ -97,6 +105,61 @@ internal fun ReaderPage(
   val contentParsingProgress by pageViewModel.parsingProgress.collectAsStateWithLifecycle()
   val playbackState by pageViewModel.audioPlayer.playbackState.collectAsStateWithLifecycle()
 
+  ReaderPageContent(
+    markdownContentState = markdownContentState,
+    excerptState = excerptState,
+    contentParsingProgress = contentParsingProgress,
+    playbackState = playbackState,
+    readerPost = readerPost,
+    showFullArticle = showFullArticle,
+    page = page,
+    pagerState = pagerState,
+    markdownComponents = markdownComponents,
+    isDarkTheme = isDarkTheme,
+    themeVariant = themeVariant,
+    fromScreen = fromScreen,
+    onBookmarkClick = onBookmarkClick,
+    onMarkAsUnread = onMarkAsUnread,
+    onImageClick = onImageClick,
+    onPlayClick = pageViewModel::playAudio,
+    onPauseClick = pageViewModel::pauseAudio,
+    onSeek = pageViewModel::seekAudio,
+    onSeekForward = pageViewModel::seekForward,
+    onSeekBackward = pageViewModel::seekBackward,
+    onPlaybackSpeedChange = { speed -> pageViewModel.setPlaybackSpeed(speed) },
+    onSleepTimerOptionSelected = { pageViewModel.setSleepTimer(it) },
+    modifier = modifier,
+    contentPaddingValues = contentPaddingValues,
+  )
+}
+
+@Composable
+private fun ReaderPageContent(
+  markdownContentState: State,
+  excerptState: String?,
+  contentParsingProgress: ReaderProcessingProgress,
+  playbackState: PlaybackState,
+  readerPost: ResolvedPost,
+  showFullArticle: Boolean,
+  page: Int,
+  pagerState: PagerState,
+  markdownComponents: MarkdownComponents,
+  isDarkTheme: Boolean,
+  themeVariant: ThemeVariant,
+  fromScreen: ReaderScreenArgs.FromScreen,
+  onBookmarkClick: () -> Unit,
+  onMarkAsUnread: () -> Unit,
+  onImageClick: (String) -> Unit,
+  onPlayClick: () -> Unit,
+  onPauseClick: () -> Unit,
+  onSeek: (Long) -> Unit,
+  onSeekForward: () -> Unit,
+  onSeekBackward: () -> Unit,
+  onPlaybackSpeedChange: (Float) -> Unit,
+  onSleepTimerOptionSelected: (SleepTimerOption) -> Unit,
+  modifier: Modifier = Modifier,
+  contentPaddingValues: PaddingValues = PaddingValues(),
+) {
   val linkHandler = LocalLinkHandler.current
   val sharedHandler = LocalShareHandler.current
   val shouldBlockImage = LocalBlockImage.current
@@ -114,6 +177,7 @@ internal fun ReaderPage(
     SelectionContainer {
       Box(modifier = modifier) {
         CompositionLocalProvider(
+          LocalOnImageClick provides onImageClick,
           LocalReferenceLinkHandler provides ReferenceLinkHandlerImpl(),
           LocalMarkdownPadding provides markdownPadding(block = 12.dp),
           LocalMarkdownDimens provides markdownDimens(),
@@ -164,19 +228,25 @@ internal fun ReaderPage(
           ) {
             item(key = "reader-header") {
               PostHeader(
+                modifier = Modifier.padding(bottom = 40.dp),
                 readerPost = readerPost,
                 showFullArticle = showFullArticle,
                 page = page,
                 pagerState = pagerState,
-                excerpt = excerptState,
+                excerpt = excerptState ?: "",
                 darkTheme = isDarkTheme,
                 themeVariant = themeVariant,
+                fromScreen = fromScreen,
                 onCommentsClick = {
-                  coroutineScope.launch { linkHandler.openLink(readerPost.commentsLink) }
+                  val commentsLink = readerPost.commentsLink
+                  if (commentsLink != null) {
+                    coroutineScope.launch { linkHandler.openLink(commentsLink) }
+                  }
                 },
                 onShareClick = { sharedHandler.share(readerPost.link) },
                 onBookmarkClick = onBookmarkClick,
                 onMarkAsUnread = onMarkAsUnread,
+                onImageClick = onImageClick,
               )
             }
 
@@ -193,11 +263,11 @@ internal fun ReaderPage(
                 DisableSelection {
                   MediaControls(
                     playbackState = postPlaybackState,
-                    onPlayClick = pageViewModel::playAudio,
-                    onPauseClick = pageViewModel::pauseAudio,
-                    onSeek = pageViewModel::seekAudio,
-                    onSeekForward = pageViewModel::seekForward,
-                    onSeekBackward = pageViewModel::seekBackward,
+                    onPlayClick = onPlayClick,
+                    onPauseClick = onPauseClick,
+                    onSeek = onSeek,
+                    onSeekForward = onSeekForward,
+                    onSeekBackward = onSeekBackward,
                     onPlaybackSpeedChange = {
                       val newSpeed =
                         when (postPlaybackState.playbackSpeed) {
@@ -207,34 +277,27 @@ internal fun ReaderPage(
                           2.0f -> 0.5f
                           else -> 1.0f
                         }
-                      pageViewModel.setPlaybackSpeed(newSpeed)
+                      onPlaybackSpeedChange(newSpeed)
                     },
                     onSleepTimerClick = { showSleepTimerSheet = true },
-                    modifier = Modifier.padding(horizontal = 24.dp).padding(top = 24.dp),
+                    modifier = Modifier.padding(horizontal = 24.dp).padding(bottom = 40.dp),
                   )
                 }
               }
-            }
-
-            item(key = "divider") {
-              HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 32.dp, vertical = 24.dp),
-                color = AppTheme.colorScheme.outlineVariant,
-              )
             }
 
             if (contentParsingProgress == ReaderProcessingProgress.Loading) {
               item(key = "progress-indicator") { ProgressIndicator() }
             }
 
-            when (val state = markdownContentState) {
+            when (markdownContentState) {
               is State.Success -> {
-                items(items = state.node.children) { node ->
-                  Box(modifier = Modifier.padding(horizontal = 32.dp)) {
+                items(items = markdownContentState.node.children) { node ->
+                  Box(modifier = Modifier.padding(horizontal = 24.dp)) {
                     MarkdownElement(
                       node = node,
                       components = markdownComponents,
-                      content = state.content,
+                      content = markdownContentState.content,
                       includeSpacer = true,
                     )
                   }
@@ -251,7 +314,7 @@ internal fun ReaderPage(
           SleepTimerBottomSheet(
             playbackState = playbackState,
             onOptionSelected = {
-              pageViewModel.setSleepTimer(it)
+              onSleepTimerOptionSelected(it)
               showSleepTimerSheet = false
             },
             onDismiss = { showSleepTimerSheet = false },
@@ -271,6 +334,56 @@ private fun ProgressIndicator() {
     LinearProgressIndicator(
       trackColor = AppTheme.colorScheme.surfaceContainerLow,
       color = AppTheme.colorScheme.primary,
+    )
+  }
+}
+
+@Preview(locale = "en")
+@Composable
+private fun ReaderPagePreview() {
+  AppTheme {
+    ReaderPageContent(
+      markdownContentState = State.Loading(),
+      excerptState = null,
+      contentParsingProgress = ReaderProcessingProgress.Idle,
+      playbackState = PlaybackState.Idle,
+      readerPost =
+        ResolvedPost(
+          id = "",
+          sourceId = "",
+          title = "Post Title",
+          description = "Post Description",
+          link = "",
+          imageUrl = null,
+          audioUrl = null,
+          date = Instant.fromEpochMilliseconds(0),
+          createdAt = Instant.fromEpochMilliseconds(0),
+          commentsLink = null,
+          flags = emptySet(),
+          feedName = "Feed Name",
+          feedIcon = "",
+          feedHomepageLink = "",
+          alwaysFetchFullArticle = false,
+          showFeedFavIcon = true,
+          feedContentReadingTime = 0,
+        ),
+      showFullArticle = false,
+      page = 0,
+      pagerState = rememberPagerState { 1 },
+      markdownComponents = markdownComponents(),
+      isDarkTheme = false,
+      themeVariant = ThemeVariant.Dynamic,
+      fromScreen = ReaderScreenArgs.FromScreen.Home,
+      onBookmarkClick = {},
+      onMarkAsUnread = {},
+      onImageClick = {},
+      onPlayClick = {},
+      onPauseClick = {},
+      onSeek = {},
+      onSeekForward = {},
+      onSeekBackward = {},
+      onPlaybackSpeedChange = {},
+      onSleepTimerOptionSelected = {},
     )
   }
 }

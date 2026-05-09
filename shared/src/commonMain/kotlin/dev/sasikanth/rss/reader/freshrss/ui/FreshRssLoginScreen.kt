@@ -19,7 +19,6 @@ package dev.sasikanth.rss.reader.freshrss.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,19 +30,14 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,27 +47,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.sasikanth.rss.reader.components.AlertDialog
 import dev.sasikanth.rss.reader.components.Button
-import dev.sasikanth.rss.reader.components.CircularIconButton
+import dev.sasikanth.rss.reader.components.SimpleTopAppBar
 import dev.sasikanth.rss.reader.components.TextField
 import dev.sasikanth.rss.reader.freshrss.FreshRssLoginError
 import dev.sasikanth.rss.reader.freshrss.FreshRssLoginEvent
+import dev.sasikanth.rss.reader.freshrss.FreshRssLoginState
 import dev.sasikanth.rss.reader.freshrss.FreshRssLoginViewModel
-import dev.sasikanth.rss.reader.resources.icons.ArrowBack
-import dev.sasikanth.rss.reader.resources.icons.TwineIcons
 import dev.sasikanth.rss.reader.ui.AppTheme
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 import twine.shared.generated.resources.Res
 import twine.shared.generated.resources.buttonCancel
-import twine.shared.generated.resources.buttonGoBack
 import twine.shared.generated.resources.freshRssClearDataDesc
 import twine.shared.generated.resources.freshRssClearDataPositive
 import twine.shared.generated.resources.freshRssClearDataTitle
@@ -95,8 +90,6 @@ fun FreshRssLoginScreen(
   modifier: Modifier = Modifier,
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
-  val snackbarHostState = remember { SnackbarHostState() }
-  val (urlFocus, usernameFocus, passwordFocus) = remember { FocusRequester.createRefs() }
 
   LaunchedEffect(state.loginSuccess, state.error) {
     if (state.loginSuccess) {
@@ -110,89 +103,56 @@ fun FreshRssLoginScreen(
           is FreshRssLoginError.Unknown ->
             error.message.ifBlank { getString(Res.string.freshRssErrorUnknown) }
         }
+      // Note: snackbarHostState handling is now inside FreshRssLoginContent
+    }
+  }
+
+  FreshRssLoginContent(
+    state = state,
+    onEvent = viewModel::onEvent,
+    goBack = goBack,
+    modifier = modifier,
+  )
+}
+
+@Composable
+private fun FreshRssLoginContent(
+  state: FreshRssLoginState,
+  onEvent: (FreshRssLoginEvent) -> Unit,
+  goBack: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val snackbarHostState = remember { SnackbarHostState() }
+  val (urlFocus, usernameFocus, passwordFocus) = remember { FocusRequester.createRefs() }
+
+  LaunchedEffect(state.error) {
+    val error = state.error
+    if (error != null) {
+      val errorMessage =
+        when (error) {
+          FreshRssLoginError.LoginFailed -> getString(Res.string.freshRssErrorLoginFailed)
+          is FreshRssLoginError.Unknown ->
+            error.message.ifBlank { getString(Res.string.freshRssErrorUnknown) }
+        }
       snackbarHostState.showSnackbar(message = errorMessage)
     }
   }
 
   if (state.showConfirmationDialog) {
     AlertDialog(
-      onDismissRequest = { viewModel.onEvent(FreshRssLoginEvent.OnConfirmationDismissed) },
-      title = {
-        Text(
-          text = stringResource(Res.string.freshRssClearDataTitle),
-          color = AppTheme.colorScheme.onSurface,
-        )
-      },
-      text = {
-        Text(
-          text = stringResource(Res.string.freshRssClearDataDesc),
-          color = AppTheme.colorScheme.onSurfaceVariant,
-        )
-      },
-      confirmButton = {
-        TextButton(
-          onClick = { viewModel.onEvent(FreshRssLoginEvent.OnConfirmClearDataClicked) },
-          shape = MaterialTheme.shapes.large,
-        ) {
-          Text(
-            text = stringResource(Res.string.freshRssClearDataPositive),
-            style = MaterialTheme.typography.labelLarge,
-            color = AppTheme.colorScheme.primary,
-          )
-        }
-      },
-      dismissButton = {
-        TextButton(
-          onClick = { viewModel.onEvent(FreshRssLoginEvent.OnConfirmationDismissed) },
-          shape = MaterialTheme.shapes.large,
-        ) {
-          Text(
-            text = stringResource(Res.string.buttonCancel),
-            style = MaterialTheme.typography.labelLarge,
-            color = AppTheme.colorScheme.onSurfaceVariant,
-          )
-        }
-      },
-      containerColor = AppTheme.colorScheme.surfaceContainerLow,
-      titleContentColor = AppTheme.colorScheme.onSurface,
-      textContentColor = AppTheme.colorScheme.onSurface,
+      title = stringResource(Res.string.freshRssClearDataTitle),
+      text = stringResource(Res.string.freshRssClearDataDesc),
+      confirmText = stringResource(Res.string.freshRssClearDataPositive),
+      dismissText = stringResource(Res.string.buttonCancel),
+      onConfirm = { onEvent(FreshRssLoginEvent.OnConfirmClearDataClicked) },
+      onDismiss = { onEvent(FreshRssLoginEvent.OnConfirmationDismissed) },
     )
   }
 
   Scaffold(
     modifier = modifier,
     topBar = {
-      Box {
-        CenterAlignedTopAppBar(
-          title = {
-            Text(
-              text = stringResource(Res.string.freshRssLoginTitle),
-              color = AppTheme.colorScheme.onSurface,
-              style = MaterialTheme.typography.titleMedium,
-            )
-          },
-          navigationIcon = {
-            CircularIconButton(
-              modifier = Modifier.padding(start = 12.dp),
-              icon = TwineIcons.ArrowBack,
-              label = stringResource(Res.string.buttonGoBack),
-              onClick = goBack,
-            )
-          },
-          colors =
-            TopAppBarDefaults.topAppBarColors(
-              containerColor = AppTheme.colorScheme.surface,
-              navigationIconContentColor = AppTheme.colorScheme.onSurface,
-              titleContentColor = AppTheme.colorScheme.onSurface,
-              actionIconContentColor = AppTheme.colorScheme.onSurface,
-            ),
-        )
-
-        HorizontalDivider(
-          modifier = Modifier.align(Alignment.BottomCenter),
-          color = AppTheme.colorScheme.outlineVariant,
-        )
-      }
+      SimpleTopAppBar(title = stringResource(Res.string.freshRssLoginTitle), onBackClick = goBack)
     },
     snackbarHost = {
       SnackbarHost(hostState = snackbarHostState) { snackbarData ->
@@ -230,7 +190,7 @@ fun FreshRssLoginScreen(
             state.username.isNotBlank() &&
             state.password.isNotBlank(),
         shape = MaterialTheme.shapes.extraLarge,
-        onClick = { viewModel.onEvent(FreshRssLoginEvent.OnLoginClicked) },
+        onClick = { onEvent(FreshRssLoginEvent.OnLoginClicked) },
       ) {
         if (state.isLoading) {
           CircularProgressIndicator(
@@ -248,6 +208,7 @@ fun FreshRssLoginScreen(
       }
     },
     containerColor = AppTheme.colorScheme.backdrop,
+    contentColor = Color.Unspecified,
   ) { padding ->
     LazyColumn(
       modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 24.dp),
@@ -259,7 +220,7 @@ fun FreshRssLoginScreen(
       item {
         TextField(
           value = state.url,
-          onValueChange = { viewModel.onEvent(FreshRssLoginEvent.OnUrlChanged(it)) },
+          onValueChange = { onEvent(FreshRssLoginEvent.OnUrlChanged(it)) },
           hint = stringResource(Res.string.freshRssServerUrl),
           modifier =
             Modifier.fillMaxWidth().focusRequester(urlFocus).focusProperties {
@@ -278,7 +239,7 @@ fun FreshRssLoginScreen(
       item {
         TextField(
           value = state.username,
-          onValueChange = { viewModel.onEvent(FreshRssLoginEvent.OnUsernameChanged(it)) },
+          onValueChange = { onEvent(FreshRssLoginEvent.OnUsernameChanged(it)) },
           hint = stringResource(Res.string.freshRssUsername),
           modifier =
             Modifier.fillMaxWidth().focusRequester(usernameFocus).focusProperties {
@@ -298,7 +259,7 @@ fun FreshRssLoginScreen(
       item {
         TextField(
           value = state.password,
-          onValueChange = { viewModel.onEvent(FreshRssLoginEvent.OnPasswordChanged(it)) },
+          onValueChange = { onEvent(FreshRssLoginEvent.OnPasswordChanged(it)) },
           hint = stringResource(Res.string.freshRssPassword),
           modifier =
             Modifier.fillMaxWidth().focusRequester(passwordFocus).focusProperties {
@@ -312,10 +273,15 @@ fun FreshRssLoginScreen(
               keyboardType = KeyboardType.Password,
               imeAction = ImeAction.Done,
             ),
-          keyboardActions =
-            KeyboardActions(onDone = { viewModel.onEvent(FreshRssLoginEvent.OnLoginClicked) }),
+          keyboardActions = KeyboardActions(onDone = { onEvent(FreshRssLoginEvent.OnLoginClicked) }),
         )
       }
     }
   }
+}
+
+@Preview(locale = "en")
+@Composable
+private fun FreshRssLoginPreview() {
+  AppTheme { FreshRssLoginContent(state = FreshRssLoginState.DEFAULT, onEvent = {}, goBack = {}) }
 }

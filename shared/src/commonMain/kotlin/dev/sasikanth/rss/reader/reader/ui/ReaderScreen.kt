@@ -22,8 +22,6 @@ import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.animateBounds
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -61,10 +59,13 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -84,8 +85,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
+import androidx.paging.LoadState.NotLoading
+import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.window.core.layout.WindowSizeClass
-import app.cash.paging.compose.collectAsLazyPagingItems
 import com.mikepenz.markdown.compose.components.markdownComponents
 import com.mikepenz.markdown.compose.elements.MarkdownHighlightedCodeBlock
 import com.mikepenz.markdown.compose.elements.MarkdownHighlightedCodeFence
@@ -113,9 +115,11 @@ import dev.sasikanth.rss.reader.ui.LocalDynamicColorState
 import dev.sasikanth.rss.reader.ui.LocalSeedColorExtractor
 import dev.sasikanth.rss.reader.ui.LoraFontFamily
 import dev.sasikanth.rss.reader.ui.MerriWeatherFontFamily
+import dev.sasikanth.rss.reader.ui.OutfitFontFamily
 import dev.sasikanth.rss.reader.ui.RobotoSerifFontFamily
 import dev.sasikanth.rss.reader.ui.getOverriddenColorScheme
 import dev.sasikanth.rss.reader.ui.rememberDynamicColorState
+import dev.sasikanth.rss.reader.ui.systemDynamicColorScheme
 import dev.sasikanth.rss.reader.ui.typography
 import dev.sasikanth.rss.reader.utils.CollectItemTransition
 import dev.sasikanth.rss.reader.utils.LocalBlockImage
@@ -136,6 +140,7 @@ internal fun ReaderScreen(
   pageViewModelFactory: @Composable (ResolvedPost) -> ReaderPageViewModel,
   onBack: () -> Unit,
   openPaywall: () -> Unit,
+  onImageClick: (String) -> Unit,
   toggleLightStatusBar: (Boolean) -> Unit,
   toggleLightNavBar: (Boolean) -> Unit,
   modifier: Modifier = Modifier,
@@ -197,6 +202,12 @@ internal fun ReaderScreen(
     }
   }
 
+  LaunchedEffect(posts.itemCount, posts.loadState.refresh) {
+    if (posts.itemCount == 0 && posts.loadState.refresh is NotLoading) {
+      onBack()
+    }
+  }
+
   NavigationBackHandler(
     state = rememberNavigationEventState(NavigationEventInfo.None),
     isBackEnabled = state.showReaderCustomisations,
@@ -225,6 +236,7 @@ internal fun ReaderScreen(
       ReaderFont.Lora -> LoraFontFamily
       ReaderFont.Merriweather -> MerriWeatherFontFamily
       ReaderFont.RobotoSerif -> RobotoSerifFontFamily
+      ReaderFont.Outfit -> OutfitFontFamily
     }
   val typography =
     typography(
@@ -238,15 +250,27 @@ internal fun ReaderScreen(
     LocalUriHandler provides readerLinkHandler,
   ) {
     val sourceColorScheme = AppTheme.colorScheme
+    val systemDynamicColors =
+      if (state.selectedThemeVariant == ThemeVariant.SystemDynamic) {
+        systemDynamicColorScheme(isDarkTheme)
+      } else {
+        null
+      }
     val overriddenColorScheme =
-      remember(state.selectedThemeVariant, isDarkTheme, sourceColorScheme) {
-        state.selectedThemeVariant.getOverriddenColorScheme(isDarkTheme)
+      remember(state.selectedThemeVariant, isDarkTheme, sourceColorScheme, systemDynamicColors) {
+        systemDynamicColors ?: state.selectedThemeVariant.getOverriddenColorScheme(isDarkTheme)
       }
 
     val darkAppColorScheme = appDynamicColorState.darkAppColorScheme
+    val systemDynamicDarkColors =
+      if (state.selectedThemeVariant == ThemeVariant.SystemDynamic) {
+        systemDynamicColorScheme(true)
+      } else {
+        null
+      }
     val overriddenDarkColorScheme =
-      remember(state.selectedThemeVariant, darkAppColorScheme) {
-        state.selectedThemeVariant.getOverriddenColorScheme(true)
+      remember(state.selectedThemeVariant, darkAppColorScheme, systemDynamicDarkColors) {
+        systemDynamicDarkColors ?: state.selectedThemeVariant.getOverriddenColorScheme(true)
       }
 
     AppTheme(
@@ -463,6 +487,7 @@ internal fun ReaderScreen(
                 markdownComponents = markdownComponents,
                 isDarkTheme = isDarkTheme,
                 themeVariant = state.selectedThemeVariant,
+                fromScreen = state.fromScreen,
                 onBookmarkClick = {
                   viewModel.dispatch(
                     ReaderEvent.TogglePostBookmark(
@@ -474,6 +499,7 @@ internal fun ReaderScreen(
                 onMarkAsUnread = {
                   viewModel.dispatch(ReaderEvent.OnMarkAsUnread(postId = readerPost.id))
                 },
+                onImageClick = onImageClick,
               )
             }
           }
@@ -571,12 +597,16 @@ private fun ReaderActionsPanel(
               color = shadowColor2
             }
             .clip(backgroundShape)
-            .background(color = AppTheme.colorScheme.bottomSheet, shape = backgroundShape)
-            .border(
-              width = 1.dp,
-              color = AppTheme.colorScheme.bottomSheetBorder,
-              shape = backgroundShape,
-            )
+            .drawBehind { drawRect(colorScheme.bottomSheet) }
+            .drawWithContent {
+              drawContent()
+              val outline = backgroundShape.createOutline(size, layoutDirection, this)
+              drawOutline(
+                outline = outline,
+                color = colorScheme.bottomSheetBorder,
+                style = Stroke(width = 1.dp.toPx()),
+              )
+            }
             .graphicsLayer { clip = true }
       ) {
         AppTheme(useDarkTheme = true, overriddenColorScheme = overriddenColorScheme) {

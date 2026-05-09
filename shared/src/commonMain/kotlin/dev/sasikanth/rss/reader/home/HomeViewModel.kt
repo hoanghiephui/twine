@@ -18,6 +18,7 @@
 package dev.sasikanth.rss.reader.home
 
 import androidx.compose.material3.SheetValue
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.cachedIn
@@ -63,6 +64,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import me.tatarka.inject.annotations.Inject
 
+@Stable
 @Inject
 class HomeViewModel(
   private val rssRepository: RssRepository,
@@ -178,6 +180,7 @@ class HomeViewModel(
           postId = post.id,
           sourceId = post.sourceId,
           activeSourceIds = activeSourceIds,
+          postsSortOrder = _state.value.postsSortOrder,
           unreadOnly = unreadOnly,
           after = postsAfter,
           postsUpperBound = postsUpperBound,
@@ -208,6 +211,7 @@ class HomeViewModel(
       return rssRepository.postPosition(
         postId = postId,
         activeSourceIds = activeSourceIds,
+        postsSortOrder = _state.value.postsSortOrder,
         unreadOnly = unreadOnly,
         after = postsAfter,
         postsUpperBound = lastRefreshedAt,
@@ -224,6 +228,7 @@ class HomeViewModel(
       rssRepository.nonFeaturedPostPosition(
         postId = postId,
         activeSourceIds = activeSourceIds,
+        postsSortOrder = _state.value.postsSortOrder,
         unreadOnly = unreadOnly,
         after = postsAfter,
         featuredPostsAfter = featuredPostsAfter,
@@ -245,21 +250,20 @@ class HomeViewModel(
     viewModelScope.launch {
       settingsRepository.updatePostsType(event.postsType)
       settingsRepository.updatePostsSortOrder(event.postsSortOrder)
-      _state.update { it.copy(showPostsSortFilter = false) }
     }
   }
 
   private fun init() {
     val activeSourceFlow = observableActiveSource.activeSource
     val postsTypeFlow = settingsRepository.postsType
-    val allPostsPagingData = allPostsPager.allPostsPagingData.cachedIn(viewModelScope)
-    val feedPostsPagingData = allPostsPager.nonFeaturedPostsPagingData.cachedIn(viewModelScope)
+    val allPostsPagingData = allPostsPager.allPostsPagingData().cachedIn(viewModelScope)
+    val feedPostsPagingData = allPostsPager.nonFeaturedPostsPagingData().cachedIn(viewModelScope)
 
     val featuredPosts =
-      combine(allPostsPager.featuredPosts, settingsRepository.homeViewMode) {
+      combine(allPostsPager.featuredPosts(), settingsRepository.showFeaturedSection) {
         featuredPosts,
-        homeViewMode ->
-        if (homeViewMode == HomeViewMode.Default) {
+        showFeaturedSection ->
+        if (showFeaturedSection) {
           featuredPosts
         } else {
           persistentListOf()
@@ -299,13 +303,27 @@ class HomeViewModel(
 
     combine(
         combine(
-          activeSourceFlow,
-          postsTypeFlow,
-          settingsRepository.postsSortOrder,
-          settingsRepository.homeViewMode,
-          settingsRepository.themeVariant,
-          ::HomeSelectionFilters,
-        ),
+          combine(activeSourceFlow, postsTypeFlow, settingsRepository.postsSortOrder, ::Triple),
+          combine(
+            settingsRepository.homeViewMode,
+            settingsRepository.showFeaturedSection,
+            settingsRepository.themeVariant,
+            settingsRepository.showPinnedSources,
+            settingsRepository.markAsReadOn,
+            ::HomeSelectionFiltersCombined,
+          ),
+        ) { group1, combined ->
+          HomeSelectionFilters(
+            activeSource = group1.first,
+            postsType = group1.second,
+            postsSortOrder = group1.third,
+            homeViewMode = combined.homeViewMode,
+            showFeaturedSection = combined.showFeaturedSection,
+            themeVariant = combined.themeVariant,
+            showPinnedSources = combined.showPinnedSources,
+            markAsReadOn = combined.markAsReadOn,
+          )
+        },
         combine(
           allPostsPager.hasUnreadPosts,
           allPostsPager.unreadSinceLastSync,
@@ -319,7 +337,10 @@ class HomeViewModel(
             postsType = selectionFilters.postsType,
             postsSortOrder = selectionFilters.postsSortOrder,
             homeViewMode = selectionFilters.homeViewMode,
+            showFeaturedSection = selectionFilters.showFeaturedSection,
             themeVariant = selectionFilters.themeVariant,
+            showPinnedSources = selectionFilters.showPinnedSources,
+            markAsReadOn = selectionFilters.markAsReadOn,
             hasUnreadPosts = unreadStatus.hasUnreadPosts,
             unreadSinceLastSync = unreadStatus.unreadSinceLastSync,
             lastRefreshedAt = unreadStatus.lastRefreshedAt,
@@ -433,22 +454,34 @@ class HomeViewModel(
   }
 
   private fun refreshContent() {
-    viewModelScope.launch {
-      when (val selectedSource = _state.value.activeSource) {
-        is FeedGroup -> syncCoordinator.pull(selectedSource.feedIds)
-        is Feed -> syncCoordinator.pull(selectedSource.id)
-        else -> syncCoordinator.pull()
-      }
+    if (_state.value.unreadSinceLastSync?.hasNewArticles == true) {
+      loadNewArticles()
+    }
+    when (val selectedSource = _state.value.activeSource) {
+      is FeedGroup -> syncCoordinator.triggerPull(selectedSource.feedIds)
+      is Feed -> syncCoordinator.triggerPull(selectedSource.id)
+      else -> syncCoordinator.triggerPull()
     }
   }
 }
+
+private data class HomeSelectionFiltersCombined(
+  val homeViewMode: HomeViewMode,
+  val showFeaturedSection: Boolean,
+  val themeVariant: ThemeVariant,
+  val showPinnedSources: Boolean,
+  val markAsReadOn: MarkAsReadOn,
+)
 
 private data class HomeSelectionFilters(
   val activeSource: Source?,
   val postsType: PostsType,
   val postsSortOrder: PostsSortOrder,
   val homeViewMode: HomeViewMode,
+  val showFeaturedSection: Boolean,
   val themeVariant: ThemeVariant,
+  val showPinnedSources: Boolean,
+  val markAsReadOn: MarkAsReadOn,
 )
 
 private data class HomeUnreadStatus(

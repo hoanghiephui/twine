@@ -16,6 +16,7 @@
  */
 package dev.sasikanth.rss.reader.feeds
 
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -23,14 +24,15 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import androidx.paging.insertSeparators
-import app.cash.paging.createPager
-import app.cash.paging.createPagingConfig
-import app.cash.paging.map
+import androidx.paging.map
 import dev.sasikanth.rss.reader.billing.BillingHandler
 import dev.sasikanth.rss.reader.core.model.local.Feed
+import dev.sasikanth.rss.reader.core.model.local.FeedGroup
 import dev.sasikanth.rss.reader.core.model.local.Source
 import dev.sasikanth.rss.reader.core.model.local.SourceType
 import dev.sasikanth.rss.reader.data.refreshpolicy.RefreshPolicy
@@ -44,6 +46,7 @@ import dev.sasikanth.rss.reader.utils.Constants
 import dev.sasikanth.rss.reader.utils.Constants.MINIMUM_REQUIRED_SEARCH_CHARACTERS
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Instant
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,6 +54,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
@@ -65,6 +69,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import me.tatarka.inject.annotations.Inject
 
+@Stable
 @Inject
 class FeedsViewModel(
   private val dispatchersProvider: DispatchersProvider,
@@ -90,8 +95,11 @@ class FeedsViewModel(
     when (event) {
       is FeedsEvent.OnDeleteFeed -> onDeleteFeed(event.feed)
       is FeedsEvent.OnToggleFeedSelection -> onToggleSourceSelection(event.source)
+      is FeedsEvent.OnSourceAddToGroupClicked -> onSourceAddToGroupClicked(event.source)
+      is FeedsEvent.OnDeleteSourceClicked -> onDeleteSourceClicked(event.source)
+      is FeedsEvent.OnMarkSourceAsReadClicked -> onMarkSourceAsReadClicked(event.source)
       is FeedsEvent.OnFeedNameUpdated -> onFeedNameUpdated(event.newFeedName, event.feedId)
-      is FeedsEvent.OnFeedPinClicked -> onFeedPinClicked(event.feed)
+      is FeedsEvent.OnSourcePinClicked -> onSourcePinClicked(event.source)
       FeedsEvent.ClearSearchQuery -> clearSearchQuery()
       is FeedsEvent.SearchQueryChanged -> onSearchQueryChanged(event.searchQuery)
       is FeedsEvent.OnSourceClick -> onSourceClicked(event.source)
@@ -135,16 +143,29 @@ class FeedsViewModel(
 
   private fun onAddToGroupClicked() {
     viewModelScope.launch {
+      val sourceToAddToGroup = _state.value.sourceToAddToGroup
       val selectedSources = _state.value.selectedSources
+
       val groupIds =
-        if (selectedSources.size == 1) {
-          rssRepository.groupIdsForFeed(selectedSources.first().id).toSet()
-        } else {
-          emptySet()
+        when {
+          sourceToAddToGroup != null -> {
+            rssRepository.groupIdsForFeed(sourceToAddToGroup.id).toSet()
+          }
+          selectedSources.size == 1 -> {
+            rssRepository.groupIdsForFeed(selectedSources.first().id).toSet()
+          }
+          else -> {
+            emptySet()
+          }
         }
 
       _state.update { it.copy(openGroupSelection = groupIds) }
     }
+  }
+
+  private fun onSourceAddToGroupClicked(source: Source) {
+    _state.update { it.copy(sourceToAddToGroup = source) }
+    onAddToGroupClicked()
   }
 
   private fun init() {
@@ -156,32 +177,44 @@ class FeedsViewModel(
 
   private fun onPinnedSourcePositionChanged(newSourcesList: List<Source>) {
     viewModelScope.launch {
-      _state.update { it.copy(pinnedSources = newSourcesList) }
+      _state.update { it.copy(pinnedSources = newSourcesList.toImmutableList()) }
       rssRepository.updatedSourcePinnedPosition(_state.value.pinnedSources)
     }
   }
 
   private fun dismissDeleteConfirmation() {
-    _state.update { it.copy(showDeleteConfirmation = false) }
+    _state.update { it.copy(showDeleteConfirmation = false, sourceToDelete = null) }
   }
 
   private fun deleteSelectedSources() {
     viewModelScope
-      .launch { rssRepository.markSourcesAsDeleted(_state.value.selectedSources) }
-      .invokeOnCompletion {
-        if (_state.value.selectedSources.any { it.id == _state.value.activeSource?.id }) {
+      .launch {
+        val sourcesToDelete =
+          if (_state.value.sourceToDelete != null) {
+            setOf(_state.value.sourceToDelete!!)
+          } else {
+            _state.value.selectedSources
+          }
+
+        rssRepository.markSourcesAsDeleted(sourcesToDelete)
+
+        if (sourcesToDelete.any { it.id == _state.value.activeSource?.id }) {
           observableActiveSource.clearSelection()
         }
-        dispatch(FeedsEvent.CancelSourcesSelection)
       }
+      .invokeOnCompletion { dispatch(FeedsEvent.CancelSourcesSelection) }
   }
 
   private fun onGroupsSelected(groupIds: Set<String>) {
     viewModelScope.launch {
-      rssRepository.addFeedIdsToGroups(
-        groupIds = groupIds,
-        feedIds = _state.value.selectedSources.map { it.id },
-      )
+      val sourcesToAdd =
+        if (_state.value.sourceToAddToGroup != null) {
+          setOf(_state.value.sourceToAddToGroup!!)
+        } else {
+          _state.value.selectedSources
+        }
+
+      rssRepository.addFeedIdsToGroups(groupIds = groupIds, feedIds = sourcesToAdd.map { it.id })
       dispatch(FeedsEvent.CancelSourcesSelection)
     }
   }
@@ -214,8 +247,31 @@ class FeedsViewModel(
     _state.update { it.copy(showDeleteConfirmation = true) }
   }
 
+  private fun onDeleteSourceClicked(source: Source) {
+    _state.update { it.copy(sourceToDelete = source, showDeleteConfirmation = true) }
+  }
+
+  private fun onMarkSourceAsReadClicked(source: Source) {
+    viewModelScope.launch {
+      val postsAfter =
+        PostsFilterUtils.postsThresholdTime(
+          postsType = settingsRepository.postsType.first(),
+          dateTime = refreshPolicy.lastRefreshedAtFlow.first(),
+        )
+
+      when (source) {
+        is Feed -> {
+          rssRepository.markPostsInFeedAsRead(feedIds = listOf(source.id), postsAfter = postsAfter)
+        }
+        is FeedGroup -> {
+          rssRepository.markPostsInFeedAsRead(feedIds = source.feedIds, postsAfter = postsAfter)
+        }
+      }
+    }
+  }
+
   private fun onCancelSourcesSelection() {
-    _state.update { it.copy(selectedSources = emptySet()) }
+    _state.update { it.copy(selectedSources = emptySet(), sourceToAddToGroup = null) }
   }
 
   private fun onHomeSelected() {
@@ -240,8 +296,8 @@ class FeedsViewModel(
     searchQuery = TextFieldValue()
   }
 
-  private fun onFeedPinClicked(feed: Feed) {
-    viewModelScope.launch { rssRepository.toggleFeedPinStatus(feed) }
+  private fun onSourcePinClicked(source: Source) {
+    viewModelScope.launch { rssRepository.toggleSourcePinStatus(source) }
   }
 
   private fun onFeedNameUpdated(newFeedName: String, feedId: String) {
@@ -302,6 +358,7 @@ class FeedsViewModel(
       .launchIn(viewModelScope)
   }
 
+  @OptIn(FlowPreview::class)
   private fun observeSources() {
     val activeSourceFlow = observableActiveSource.activeSource
     val postsTypeFlow = settingsRepository.postsType
@@ -358,6 +415,7 @@ class FeedsViewModel(
             postsUpperBound = dateTime.toInstant(TimeZone.currentSystemDefault()),
           )
         }
+        .map { it.toImmutableList() }
 
     val allSourcesFlow =
       combine(
@@ -389,7 +447,7 @@ class FeedsViewModel(
   }
 
   private fun feedsSearchResultsPager(transformedSearchQuery: String, postsAfter: Instant) =
-    createPager(config = createPagingConfig(pageSize = 20)) {
+    Pager(config = PagingConfig(pageSize = 20)) {
         rssRepository.searchFeed(searchQuery = transformedSearchQuery, postsAfter = postsAfter)
       }
       .flow
@@ -399,7 +457,7 @@ class FeedsViewModel(
     postsUpperBound: LocalDateTime,
     feedsSortOrder: FeedsOrderBy,
   ) =
-    createPager(config = createPagingConfig(pageSize = 20)) {
+    Pager(config = PagingConfig(pageSize = 20)) {
         rssRepository.sources(
           postsAfter = postsAfter,
           postsUpperBound = postsUpperBound.toInstant(TimeZone.currentSystemDefault()),

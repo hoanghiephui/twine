@@ -22,7 +22,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,6 +45,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
@@ -72,27 +72,28 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.cash.paging.compose.LazyPagingItems
-import app.cash.paging.compose.collectAsLazyPagingItems
+import androidx.paging.PagingData
+import androidx.paging.compose.LazyPagingItems
+import androidx.paging.compose.collectAsLazyPagingItems
 import dev.sasikanth.rss.reader.components.CircularIconButton
 import dev.sasikanth.rss.reader.components.DropdownMenu
 import dev.sasikanth.rss.reader.components.DropdownMenuItem
+import dev.sasikanth.rss.reader.components.IconButton
 import dev.sasikanth.rss.reader.components.NewArticlesScrollToTopButton
 import dev.sasikanth.rss.reader.components.SubHeader
 import dev.sasikanth.rss.reader.components.image.FeedIcon
@@ -117,11 +118,13 @@ import dev.sasikanth.rss.reader.resources.icons.RadioUnselected
 import dev.sasikanth.rss.reader.resources.icons.Sort
 import dev.sasikanth.rss.reader.resources.icons.TwineIcons
 import dev.sasikanth.rss.reader.search.SearchEvent
+import dev.sasikanth.rss.reader.search.SearchState
 import dev.sasikanth.rss.reader.search.SearchViewModel
 import dev.sasikanth.rss.reader.ui.AppTheme
 import dev.sasikanth.rss.reader.utils.Constants
 import dev.sasikanth.rss.reader.utils.KeyboardState
 import dev.sasikanth.rss.reader.utils.keyboardVisibilityAsState
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
@@ -148,20 +151,55 @@ internal fun SearchScreen(
   modifier: Modifier = Modifier,
 ) {
   val state by searchViewModel.state.collectAsStateWithLifecycle()
+  val searchResults = state.searchResults.collectAsLazyPagingItems()
+  val sources = searchViewModel.sources.collectAsLazyPagingItems()
+
+  SearchContent(
+    state = state,
+    searchResults = searchResults,
+    sources = sources,
+    searchQuery = searchViewModel.searchQuery,
+    searchSortOrder = searchViewModel.searchSortOrder,
+    dispatch = searchViewModel::dispatch,
+    goBack = goBack,
+    openPost = openPost,
+    modifier = modifier,
+  )
+}
+
+@Composable
+private fun SearchContent(
+  state: SearchState,
+  searchResults: LazyPagingItems<ResolvedPost>,
+  sources: LazyPagingItems<Source>,
+  searchQuery: TextFieldValue,
+  searchSortOrder: SearchSortOrder,
+  dispatch: (SearchEvent) -> Unit,
+  goBack: () -> Unit,
+  openPost:
+    (searchQuery: String, sortOrder: SearchSortOrder, postIndex: Int, post: ResolvedPost) -> Unit,
+  modifier: Modifier = Modifier,
+) {
   val listState = rememberLazyListState()
   val coroutineScope = rememberCoroutineScope()
-  val showScrollToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
-  val searchResults = state.searchResults.collectAsLazyPagingItems()
+  val showScrollToTop by
+    remember(searchResults) {
+      derivedStateOf {
+        val hasContent = searchResults.itemCount > 0
+        hasContent && listState.firstVisibleItemIndex > 0
+      }
+    }
   val layoutDirection = LocalLayoutDirection.current
   val linkHandler = LocalLinkHandler.current
 
   var showSourcePicker by remember { mutableStateOf(false) }
+  val colorScheme = AppTheme.colorScheme
 
   Scaffold(
     modifier = modifier,
     topBar = {
       Column(
-        Modifier.background(AppTheme.colorScheme.surface)
+        Modifier.drawBehind { drawRect(colorScheme.surface) }
           .windowInsetsPadding(
             WindowInsets.systemBars.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
           )
@@ -169,17 +207,16 @@ internal fun SearchScreen(
         Spacer(Modifier.requiredHeight(12.dp))
 
         SearchBar(
-          query = searchViewModel.searchQuery,
-          sortOrder = searchViewModel.searchSortOrder,
-          onQueryChange = { searchViewModel.dispatch(SearchEvent.SearchQueryChanged(it)) },
+          query = searchQuery,
+          sortOrder = searchSortOrder,
+          onQueryChange = { dispatch(SearchEvent.SearchQueryChanged(it)) },
           onBackClick = goBack,
-          onClearClick = { searchViewModel.dispatch(SearchEvent.ClearSearchQuery) },
-          onSortOrderChanged = { searchViewModel.dispatch(SearchEvent.SearchSortOrderChanged(it)) },
+          onClearClick = { dispatch(SearchEvent.ClearSearchQuery) },
+          onSortOrderChanged = { dispatch(SearchEvent.SearchSortOrderChanged(it)) },
         )
 
         AnimatedVisibility(
-          visible =
-            searchViewModel.searchQuery.text.length >= Constants.MINIMUM_REQUIRED_SEARCH_CHARACTERS,
+          visible = searchQuery.text.length >= Constants.MINIMUM_REQUIRED_SEARCH_CHARACTERS,
           enter = fadeIn() + expandVertically(),
           exit = shrinkVertically() + fadeOut(),
         ) {
@@ -188,27 +225,20 @@ internal fun SearchScreen(
             onlyBookmarked = state.onlyBookmarked,
             onlyUnread = state.onlyUnread,
             onSourceClick = { showSourcePicker = true },
-            onClearSourceClick = { searchViewModel.dispatch(SearchEvent.OnSourceChanged(null)) },
-            onOnlyBookmarkedChanged = {
-              searchViewModel.dispatch(SearchEvent.OnOnlyBookmarkedChanged(it))
-            },
-            onOnlyUnreadChanged = { searchViewModel.dispatch(SearchEvent.OnOnlyUnreadChanged(it)) },
+            onClearSourceClick = { dispatch(SearchEvent.OnSourceChanged(null)) },
+            onOnlyBookmarkedChanged = { dispatch(SearchEvent.OnOnlyBookmarkedChanged(it)) },
+            onOnlyUnreadChanged = { dispatch(SearchEvent.OnOnlyUnreadChanged(it)) },
           )
         }
 
         Spacer(Modifier.requiredHeight(12.dp))
 
-        HorizontalDivider(
-          modifier = Modifier.fillMaxWidth(),
-          color = AppTheme.colorScheme.outlineVariant,
-        )
+        HorizontalDivider(modifier = Modifier.fillMaxWidth(), color = colorScheme.outlineVariant)
       }
     },
     content = { padding ->
       Box(modifier = Modifier.fillMaxSize()) {
-        LaunchedEffect(searchViewModel.searchSortOrder, state.selectedSource) {
-          listState.animateScrollToItem(0)
-        }
+        LaunchedEffect(searchSortOrder, state.selectedSource) { listState.animateScrollToItem(0) }
 
         LazyColumn(
           contentPadding =
@@ -248,17 +278,8 @@ internal fun SearchScreen(
               PostListItem(
                 modifier = Modifier.animateItem(),
                 item = post,
-                onClick = {
-                  openPost(
-                    searchViewModel.searchQuery.text,
-                    searchViewModel.searchSortOrder,
-                    index,
-                    post,
-                  )
-                },
-                onPostBookmarkClick = {
-                  searchViewModel.dispatch(SearchEvent.OnPostBookmarkClick(post))
-                },
+                onClick = { openPost(searchQuery.text, searchSortOrder, index, post) },
+                onPostBookmarkClick = { dispatch(SearchEvent.OnPostBookmarkClick(post)) },
                 onPostCommentsClick = {
                   post.commentsLink?.let { coroutineScope.launch { linkHandler.openLink(it) } }
                 },
@@ -266,9 +287,7 @@ internal fun SearchScreen(
                   // no-op
                 },
                 updatePostReadStatus = { updatedReadStatus ->
-                  searchViewModel.dispatch(
-                    SearchEvent.UpdatePostReadStatus(post.id, updatedReadStatus)
-                  )
+                  dispatch(SearchEvent.UpdatePostReadStatus(post.id, updatedReadStatus))
                 },
                 reduceReadItemAlpha = true,
                 postMetadataConfig = PostMetadataConfig.DEFAULT.copy(enablePostSource = false),
@@ -277,7 +296,7 @@ internal fun SearchScreen(
               if (index != searchResults.itemCount - 1) {
                 HorizontalDivider(
                   modifier = Modifier.fillParentMaxWidth().padding(horizontal = 24.dp),
-                  color = AppTheme.colorScheme.outlineVariant,
+                  color = colorScheme.outlineVariant,
                 )
               }
             }
@@ -298,15 +317,15 @@ internal fun SearchScreen(
         }
       }
     },
-    containerColor = AppTheme.colorScheme.backdrop,
+    containerColor = colorScheme.backdrop,
     contentColor = Color.Unspecified,
   )
 
   if (showSourcePicker) {
     SourcePicker(
-      sources = searchViewModel.sources.collectAsLazyPagingItems(),
+      sources = sources,
       onSourceSelected = { source ->
-        searchViewModel.dispatch(SearchEvent.OnSourceChanged(source))
+        dispatch(SearchEvent.OnSourceChanged(source))
         showSourcePicker = false
       },
       onDismiss = { showSourcePicker = false },
@@ -325,8 +344,9 @@ private fun SourceFilterChips(
   onOnlyUnreadChanged: (Boolean) -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  val colorScheme = AppTheme.colorScheme
   LazyRow(
-    modifier = modifier.fillMaxWidth().background(AppTheme.colorScheme.surface),
+    modifier = modifier.fillMaxWidth().drawBehind { drawRect(colorScheme.surface) },
     horizontalArrangement = Arrangement.spacedBy(8.dp),
     verticalAlignment = Alignment.CenterVertically,
     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -416,16 +436,19 @@ private fun SourceChip(
   icon: @Composable (() -> Unit)? = null,
   onTrailingIconClick: (() -> Unit)? = null,
 ) {
-  val backgroundColor =
-    if (selected) AppTheme.colorScheme.primary else AppTheme.colorScheme.surfaceContainer
-  val contentColor =
-    if (selected) AppTheme.colorScheme.onPrimary else AppTheme.colorScheme.onSurface
+  val colorScheme = AppTheme.colorScheme
+  val backgroundColor = if (selected) colorScheme.primary else colorScheme.surfaceContainer
+  val contentColor = if (selected) colorScheme.onPrimary else colorScheme.onSurface
+  val shape = RoundedCornerShape(12.dp)
 
   Row(
     modifier =
       modifier
-        .clip(RoundedCornerShape(12.dp))
-        .background(backgroundColor)
+        .clip(shape)
+        .drawBehind {
+          val outline = shape.createOutline(size, layoutDirection, this)
+          drawOutline(outline, backgroundColor)
+        }
         .clickable(onClick = onClick)
         .padding(horizontal = 12.dp, vertical = 6.dp),
     verticalAlignment = Alignment.CenterVertically,
@@ -458,14 +481,13 @@ private fun SourceIcon(source: Source, modifier: Modifier = Modifier) {
         contentDescription = null,
         modifier = modifier,
         contentScale = ContentScale.Crop,
-        shape = RoundedCornerShape(8.dp),
       )
     }
     is FeedGroup -> {
       FeedGroupIconGrid(
+        feedHomepageLinks = source.feedHomepageLinks,
         feedIconLinks = source.feedIconLinks,
         feedShowFavIconSettings = source.feedShowFavIconSettings,
-        feedHomepageLinks = source.feedHomepageLinks,
         modifier = modifier,
       )
     }
@@ -479,12 +501,13 @@ private fun SourcePicker(
   onDismiss: () -> Unit,
 ) {
   val sheetState = rememberModalBottomSheetState()
+  val colorScheme = AppTheme.colorScheme
 
   ModalBottomSheet(
     onDismissRequest = onDismiss,
     sheetState = sheetState,
-    containerColor = AppTheme.colorScheme.surfaceContainer,
-    contentColor = AppTheme.colorScheme.onSurface,
+    containerColor = colorScheme.surfaceContainer,
+    contentColor = colorScheme.onSurface,
   ) {
     Column(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
       SubHeader(text = stringResource(Res.string.feeds))
@@ -503,6 +526,7 @@ private fun SourcePicker(
 
 @Composable
 private fun SourcePickerItem(source: Source, onClick: () -> Unit, modifier: Modifier = Modifier) {
+  val colorScheme = AppTheme.colorScheme
   Row(
     modifier =
       modifier
@@ -521,7 +545,7 @@ private fun SourcePickerItem(source: Source, onClick: () -> Unit, modifier: Modi
           else -> ""
         },
       style = MaterialTheme.typography.bodyLarge,
-      color = AppTheme.colorScheme.onSurface,
+      color = colorScheme.onSurface,
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
     )
@@ -541,6 +565,7 @@ private fun SearchBar(
   val keyboardState by keyboardVisibilityAsState()
   val focusManager = LocalFocusManager.current
   var isSearchBarFocused by remember { mutableStateOf(false) }
+  val colorScheme = AppTheme.colorScheme
 
   LaunchedEffect(keyboardState) {
     if (keyboardState == KeyboardState.Closed) {
@@ -550,9 +575,7 @@ private fun SearchBar(
 
   LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
-  MaterialTheme(
-    colorScheme = MaterialTheme.colorScheme.copy(primary = AppTheme.colorScheme.primary)
-  ) {
+  MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(primary = colorScheme.primary)) {
     Row(
       modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
       verticalAlignment = Alignment.CenterVertically,
@@ -575,7 +598,7 @@ private fun SearchBar(
         placeholder = {
           Text(
             text = stringResource(Res.string.postsSearchHint),
-            color = AppTheme.colorScheme.onSurface,
+            color = colorScheme.onSurface,
             style = MaterialTheme.typography.bodyLarge,
           )
         },
@@ -600,7 +623,7 @@ private fun SearchBar(
           TextFieldDefaults.colors(
             focusedContainerColor = Color.Transparent,
             unfocusedContainerColor = Color.Transparent,
-            focusedTextColor = AppTheme.colorScheme.onSurface,
+            focusedTextColor = colorScheme.onSurface,
             unfocusedIndicatorColor = Color.Transparent,
             focusedIndicatorColor = Color.Transparent,
             disabledIndicatorColor = Color.Transparent,
@@ -616,17 +639,12 @@ private fun SearchSortButton(
   sortOrder: SearchSortOrder,
   onSortOrderChanged: (SearchSortOrder) -> Unit,
 ) {
+  val colorScheme = AppTheme.colorScheme
   Box {
-    val density = LocalDensity.current
-    var buttonHeight by remember { mutableStateOf(Dp.Unspecified) }
     var isDropdownExpanded by remember { mutableStateOf(false) }
 
     TextButton(
-      modifier =
-        Modifier.onGloballyPositioned { coordinates ->
-            buttonHeight = with(density) { coordinates.size.height.toDp() }
-          }
-          .requiredHeight(48.dp),
+      modifier = Modifier.requiredHeight(48.dp),
       onClick = { isDropdownExpanded = true },
       shape = RoundedCornerShape(12.dp),
     ) {
@@ -638,21 +656,16 @@ private fun SearchSortButton(
             Oldest -> stringResource(Res.string.searchSortOldest)
           },
         style = MaterialTheme.typography.labelLarge,
-        color = AppTheme.colorScheme.onSurface,
+        color = colorScheme.onSurface,
       )
       Spacer(Modifier.requiredWidth(8.dp))
-      Icon(
-        imageVector = TwineIcons.Sort,
-        contentDescription = null,
-        tint = AppTheme.colorScheme.onSurface,
-      )
+      Icon(imageVector = TwineIcons.Sort, contentDescription = null, tint = colorScheme.onSurface)
       Spacer(Modifier.requiredWidth(4.dp))
     }
 
     if (isDropdownExpanded) {
       SortDropdownMenu(
         isDropdownExpanded = isDropdownExpanded,
-        offset = DpOffset(0.dp, buttonHeight.unaryMinus()),
         onDismiss = { isDropdownExpanded = false },
         onSortOrderChanged = {
           onSortOrderChanged(it)
@@ -668,27 +681,38 @@ private fun SortDropdownMenu(
   isDropdownExpanded: Boolean,
   onDismiss: () -> Unit,
   onSortOrderChanged: (SearchSortOrder) -> Unit,
-  offset: DpOffset = DpOffset.Zero,
 ) {
-  DropdownMenu(expanded = isDropdownExpanded, offset = offset, onDismissRequest = onDismiss) {
-    DropdownMenuItem(onClick = { onSortOrderChanged(Newest) }) {
-      Text(
-        text = stringResource(Res.string.searchSortNewestFirst),
-        style = MaterialTheme.typography.bodyLarge,
-      )
-    }
-    DropdownMenuItem(onClick = { onSortOrderChanged(Oldest) }) {
-      Text(
-        text = stringResource(Res.string.searchSortOldestFirst),
-        style = MaterialTheme.typography.bodyLarge,
-      )
-    }
+  DropdownMenu(expanded = isDropdownExpanded, onDismissRequest = onDismiss) {
+    DropdownMenuItem(
+      text = stringResource(Res.string.searchSortNewestFirst),
+      onClick = { onSortOrderChanged(Newest) },
+    )
+
+    DropdownMenuItem(
+      text = stringResource(Res.string.searchSortOldestFirst),
+      onClick = { onSortOrderChanged(Oldest) },
+    )
   }
 }
 
 @Composable
 private fun ClearSearchQueryButton(onClearClick: () -> Unit) {
-  IconButton(onClick = onClearClick) {
-    Icon(TwineIcons.Close, contentDescription = null, tint = AppTheme.colorScheme.onSurface)
+  IconButton(icon = TwineIcons.Close, contentDescription = null, onClick = onClearClick)
+}
+
+@Preview(locale = "en")
+@Composable
+private fun SearchPreview() {
+  AppTheme {
+    SearchContent(
+      state = SearchState.DEFAULT,
+      searchResults = SearchState.DEFAULT.searchResults.collectAsLazyPagingItems(),
+      sources = emptyFlow<PagingData<Source>>().collectAsLazyPagingItems(),
+      searchQuery = TextFieldValue(text = "Google"),
+      searchSortOrder = Newest,
+      dispatch = {},
+      goBack = {},
+      openPost = { _, _, _, _ -> },
+    )
   }
 }

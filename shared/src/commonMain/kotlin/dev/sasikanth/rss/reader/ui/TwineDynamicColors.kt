@@ -26,6 +26,7 @@ import com.materialkolor.ktx.getColor
 import com.materialkolor.scheme.DynamicScheme
 import com.materialkolor.scheme.SchemeContent
 import com.materialkolor.scheme.SchemeExpressive
+import com.materialkolor.scheme.SchemeMonochrome
 import com.materialkolor.scheme.SchemeTonalSpot
 import com.materialkolor.scheme.SchemeVibrant
 
@@ -33,7 +34,7 @@ internal object TwineDynamicColors {
 
   private val dynamicColors = MaterialDynamicColors()
 
-  private val bottomSheet: DynamicColor =
+  internal val bottomSheet: DynamicColor =
     DynamicColor.fromPalette(
       name = "bottomSheet",
       palette = { s: DynamicScheme -> s.primaryPalette },
@@ -41,7 +42,7 @@ internal object TwineDynamicColors {
       isBackground = true,
     )
 
-  private val bottomSheetInverse: DynamicColor =
+  internal val bottomSheetInverse: DynamicColor =
     DynamicColor.fromPalette(
       name = "bottomSheetInverse",
       palette = { s: DynamicScheme -> s.primaryPalette },
@@ -49,7 +50,7 @@ internal object TwineDynamicColors {
       isBackground = true,
     )
 
-  private val backdrop: DynamicColor =
+  internal val backdrop: DynamicColor =
     DynamicColor.fromPalette(
       name = "backdrop",
       palette = { s: DynamicScheme -> s.neutralPalette },
@@ -57,7 +58,7 @@ internal object TwineDynamicColors {
       isBackground = true,
     )
 
-  private val bottomSheetBorder: DynamicColor =
+  internal val bottomSheetBorder: DynamicColor =
     DynamicColor.fromPalette(
       name = "bottomSheetBorder",
       palette = { s: DynamicScheme -> s.neutralPalette },
@@ -88,6 +89,12 @@ internal object TwineDynamicColors {
           )
         Scheme.Vibrant ->
           SchemeVibrant(sourceColorHct = sourceColorHct, isDark = useDarkTheme, contrastLevel = 0.0)
+        Scheme.Monochrome ->
+          SchemeMonochrome(
+            sourceColorHct = sourceColorHct,
+            isDark = useDarkTheme,
+            contrastLevel = 0.0,
+          )
       }
 
     return AppColorValues(
@@ -122,5 +129,6 @@ internal object TwineDynamicColors {
     TonalSpot,
     Expressive,
     Vibrant,
+    Monochrome,
   }
 }

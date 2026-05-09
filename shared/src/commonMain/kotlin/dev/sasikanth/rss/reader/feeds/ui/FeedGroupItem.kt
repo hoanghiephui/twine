@@ -17,30 +17,29 @@
 
 package dev.sasikanth.rss.reader.feeds.ui
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.requiredWidth
-import androidx.compose.foundation.layout.sizeIn
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.Badge
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,7 +48,14 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.sasikanth.rss.reader.components.DropdownMenu
+import dev.sasikanth.rss.reader.components.IconButton
+import dev.sasikanth.rss.reader.components.UnreadBadge
 import dev.sasikanth.rss.reader.core.model.local.FeedGroup
+import dev.sasikanth.rss.reader.resources.icons.MoreVert
+import dev.sasikanth.rss.reader.resources.icons.Pin
+import dev.sasikanth.rss.reader.resources.icons.PinFilled
+import dev.sasikanth.rss.reader.resources.icons.TwineIcons
 import dev.sasikanth.rss.reader.ui.AppTheme
 import dev.sasikanth.rss.reader.ui.LocalTranslucentStyles
 import org.jetbrains.compose.resources.pluralStringResource
@@ -67,19 +73,21 @@ internal fun FeedGroupItem(
   selected: Boolean,
   onFeedGroupSelected: (FeedGroup) -> Unit,
   onFeedGroupClick: (FeedGroup) -> Unit,
-  onOptionsClick: () -> Unit,
+  onPinClick: ((FeedGroup) -> Unit)? = null,
   modifier: Modifier = Modifier,
-  dragHandle: (@Composable () -> Unit)? = null,
   interactionSource: MutableInteractionSource? = null,
+  dropdownMenuContent: (@Composable ColumnScope.(onDismiss: () -> Unit) -> Unit)? = null,
 ) {
   val haptic = LocalHapticFeedback.current
-  val backgroundColor =
-    if (selected) {
-      AppTheme.colorScheme.primaryContainer
-    } else {
-      Color.Transparent
-    }
   val translucentStyle = LocalTranslucentStyles.current
+  val backgroundColor by
+    animateColorAsState(
+      if (selected) {
+        translucentStyle.default.background
+      } else {
+        Color.Transparent
+      }
+    )
 
   Box(
     modifier =
@@ -110,16 +118,14 @@ internal fun FeedGroupItem(
       val iconSpacing = 2.dp
 
       FeedGroupIconGrid(
-        modifier = Modifier.requiredSize(36.dp),
         feedHomepageLinks = feedGroup.feedHomepageLinks,
         feedIconLinks = feedGroup.feedIconLinks,
         feedShowFavIconSettings = feedGroup.feedShowFavIconSettings,
         iconSize = iconSize,
-        verticalArrangement = Arrangement.spacedBy(iconSpacing),
-        horizontalArrangement = Arrangement.spacedBy(iconSpacing),
+        modifier = Modifier.requiredSize(36.dp),
       )
 
-      Spacer(Modifier.requiredWidth(12.dp))
+      Spacer(Modifier.requiredWidth(16.dp))
 
       Column(Modifier.weight(1f)) {
         Text(
@@ -143,7 +149,7 @@ internal fun FeedGroupItem(
 
         Text(
           text = text,
-          style = MaterialTheme.typography.bodyMedium,
+          style = MaterialTheme.typography.bodySmall,
           color = AppTheme.colorScheme.onSurfaceVariant,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
@@ -154,17 +160,8 @@ internal fun FeedGroupItem(
 
       val numberOfUnreadPosts = feedGroup.numberOfUnreadPosts
       if (canShowUnreadPostsCount && numberOfUnreadPosts > 0 && !isInMultiSelectMode) {
-        Badge(
-          containerColor = translucentStyle.prominent.background,
-          contentColor = AppTheme.colorScheme.secondary,
-          modifier = Modifier.sizeIn(minWidth = 36.dp, minHeight = 24.dp),
-        ) {
-          Text(
-            text = feedGroup.numberOfUnreadPosts.toString(),
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.align(Alignment.CenterVertically),
-          )
-        }
+        UnreadBadge(feedGroup.numberOfUnreadPosts)
+        Spacer(Modifier.width(16.dp))
       }
 
       if (isInMultiSelectMode) {
@@ -172,17 +169,28 @@ internal fun FeedGroupItem(
       }
 
       if (!isInMultiSelectMode) {
-        dragHandle?.invoke()
+        if (onPinClick != null) {
+          val pinIcon = if (feedGroup.pinnedAt != null) TwineIcons.PinFilled else TwineIcons.Pin
+          IconButton(icon = pinIcon, contentDescription = null) { onPinClick(feedGroup) }
+        }
       }
 
-      if (!isInMultiSelectMode && dragHandle == null) {
-        IconButton(modifier = Modifier.requiredSize(40.dp), onClick = onOptionsClick) {
-          Icon(
-            modifier = Modifier.requiredSize(20.dp),
-            imageVector = Icons.Filled.MoreVert,
+      if (!isInMultiSelectMode && dropdownMenuContent != null) {
+        Box {
+          var showDropdownMenu by remember { mutableStateOf(false) }
+
+          IconButton(
+            icon = TwineIcons.MoreVert,
             contentDescription = null,
-            tint = AppTheme.colorScheme.secondary,
+            onClick = { showDropdownMenu = true },
           )
+
+          DropdownMenu(
+            expanded = showDropdownMenu,
+            onDismissRequest = { showDropdownMenu = false },
+          ) {
+            dropdownMenuContent { showDropdownMenu = false }
+          }
         }
       }
     }

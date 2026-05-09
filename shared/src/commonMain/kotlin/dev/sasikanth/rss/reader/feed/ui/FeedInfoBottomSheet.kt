@@ -43,8 +43,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -84,6 +82,7 @@ import dev.sasikanth.rss.reader.core.model.local.Feed
 import dev.sasikanth.rss.reader.feed.FeedEvent
 import dev.sasikanth.rss.reader.feed.FeedViewModel
 import dev.sasikanth.rss.reader.platform.LocalLinkHandler
+import dev.sasikanth.rss.reader.resources.icons.Check
 import dev.sasikanth.rss.reader.resources.icons.CopyLink
 import dev.sasikanth.rss.reader.resources.icons.DeleteOutline
 import dev.sasikanth.rss.reader.resources.icons.TwineIcons
@@ -101,6 +100,7 @@ import org.jetbrains.compose.resources.stringResource
 import twine.shared.generated.resources.Res
 import twine.shared.generated.resources.actionDelete
 import twine.shared.generated.resources.alwaysFetchSourceArticle
+import twine.shared.generated.resources.enableNotifications
 import twine.shared.generated.resources.feedOptionCopyLink
 import twine.shared.generated.resources.feedOptionWebsite
 import twine.shared.generated.resources.feedTitleHint
@@ -190,6 +190,16 @@ fun FeedInfoBottomSheet(
             },
           )
 
+          Divider(horizontalInsets = HORIZONTAL_PADDING)
+
+          EnableNotificationsSwitch(
+            feed = feed,
+            globalNotificationsEnabled = state.globalNotificationsEnabled,
+            onValueChanged = { newValue, feedId ->
+              feedViewModel.dispatch(FeedEvent.OnEnableNotificationsChanged(newValue, feedId))
+            },
+          )
+
           Divider()
 
           FeedOptions(
@@ -255,7 +265,7 @@ private fun FeedUnreadCount(
     ) {
       Icon(
         modifier = Modifier.requiredSize(18.dp),
-        imageVector = Icons.Rounded.Check,
+        imageVector = TwineIcons.Check,
         contentDescription = null,
       )
 
@@ -287,7 +297,6 @@ private fun FeedLabelInput(
       homepageLink = feed.homepageLink,
       showFeedFavIcon = feed.showFeedFavIcon,
       contentDescription = feed.name,
-      shape = MaterialTheme.shapes.large,
       modifier = Modifier.requiredSize(56.dp),
     )
 
@@ -434,6 +443,21 @@ private fun HidePostsFromAllFeedsSwitch(
   FeedOptionSwitch(
     title = stringResource(Res.string.hidePostsFromHome),
     checked = feed.hideFromAllFeeds,
+    modifier = modifier,
+    onValueChanged = { newValue -> onValueChanged(newValue, feed.id) },
+  )
+}
+
+@Composable
+private fun EnableNotificationsSwitch(
+  feed: Feed,
+  globalNotificationsEnabled: Boolean,
+  modifier: Modifier = Modifier,
+  onValueChanged: (newValue: Boolean, feedId: String) -> Unit,
+) {
+  FeedOptionSwitch(
+    title = stringResource(Res.string.enableNotifications),
+    checked = globalNotificationsEnabled && feed.enableNotifications,
     modifier = modifier,
     onValueChanged = { newValue -> onValueChanged(newValue, feed.id) },
   )

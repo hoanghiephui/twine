@@ -35,7 +35,7 @@ import dev.sasikanth.rss.reader.utils.LocalAmoledSetting
 @Composable
 internal fun AppTheme(
   useDarkTheme: Boolean = false,
-  typography: Typography = typography(GolosFontFamily),
+  typography: Typography = typography(OutfitFontFamily),
   overriddenColorScheme: AppColorScheme? = null,
   content: @Composable () -> Unit,
 ) {
@@ -66,23 +66,24 @@ internal fun AppTheme(
 
       SideEffect { colorScheme.updateFrom(sourceColorValues, amoled = useDarkTheme && useAmoled) }
 
-      val secondary = colorScheme.secondary
       val onSurface = colorScheme.onSurface
       val localTranslucentStyles =
-        TranslucentStyles(
-          default =
-            TranslucentStyle(
-              background = secondary.copy(alpha = 0.08f),
-              outline = secondary.copy(alpha = 0.16f),
-              foreground = onSurface,
-            ),
-          prominent =
-            TranslucentStyle(
-              background = secondary.copy(alpha = 0.16f),
-              outline = secondary.copy(alpha = 0.16f),
-              foreground = onSurface,
-            ),
-        )
+        remember(onSurface) {
+          TranslucentStyles(
+            default =
+              TranslucentStyle(
+                background = onSurface.copy(alpha = 0.08f),
+                outline = onSurface.copy(alpha = 0.16f),
+                foreground = onSurface,
+              ),
+            prominent =
+              TranslucentStyle(
+                background = onSurface.copy(alpha = 0.16f),
+                outline = onSurface.copy(alpha = 0.16f),
+                foreground = onSurface,
+              ),
+          )
+        }
 
       CompositionLocalProvider(
         LocalAppColorScheme provides colorScheme,

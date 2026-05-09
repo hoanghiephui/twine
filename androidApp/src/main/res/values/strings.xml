@@ -18,22 +18,41 @@
 <resources>
     <string name="app_name" translatable="false">Twine</string>
 
-    <plurals name="widget_unread_posts">
-        <item quantity="zero">Unread</item>
-        <item quantity="one">Unread (%1$d post)</item>
-        <item quantity="other">Unread (%1$d posts)</item>
-    </plurals>
-    <string name="widget_no_title">No title</string>
-    <string name="widget_no_description">No description</string>
-    <string name="widget_see_more">See more</string>
-    <string name="widget_unread_refresh">Refresh</string>
-    <string name="widget_unread_add">Add feed</string>
+    <string name="widget_unread_recent_name">Recent unread (Small)</string>
+    <string name="widget_unread_recent_desc">Shows 5 recent unread in a carousel</string>
+    <string name="widget_unread_recent_medium_name">Recent unread (Medium)</string>
+    <string name="widget_unread_recent_medium_desc">Shows recent unread articles with more details</string>
+    <string name="widget_unread_recent_large_name">Recent unread (Large)</string>
+    <string name="widget_unread_recent_large_desc">Shows a list of recent unread articles</string>
+    <string name="widget_latest">Latest</string>
     <string name="widget_required_premium">Widgets are only available for premium users. Please subscribe in the app.</string>
     <string name="widget_no_posts">No posts</string>
+
+    <string name="unit_seconds">&lt;1m</string>
+    <string name="unit_minutes">%1$dm</string>
+    <string name="unit_hours">%1$dh</string>
+    <string name="unit_days">%1$dd</string>
+
+    <string name="month_jan">Jan</string>
+    <string name="month_feb">Feb</string>
+    <string name="month_mar">Mar</string>
+    <string name="month_apr">Apr</string>
+    <string name="month_may">May</string>
+    <string name="month_jun">Jun</string>
+    <string name="month_jul">Jul</string>
+    <string name="month_aug">Aug</string>
+    <string name="month_sep">Sep</string>
+    <string name="month_oct">Oct</string>
+    <string name="month_nov">Nov</string>
+    <string name="month_dec">Dec</string>
 
     <plurals name="notification_new_articles_title">
       <item quantity="one">You have a unread article today</item>
       <item quantity="other">You have %1$d unread articles today</item>
+    </plurals>
+    <plurals name="notification_new_articles_per_feed_title">
+      <item quantity="one">%1$s: 1 new article</item>
+      <item quantity="other">%1$s: %2$d new articles</item>
     </plurals>
     <string name="notification_new_articles_content">See what\'s new in your feeds.</string>
 </resources>

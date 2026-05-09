@@ -16,6 +16,7 @@
  */
 package dev.sasikanth.rss.reader.settings
 
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil3.ImageLoader
@@ -23,12 +24,16 @@ import dev.sasikanth.rss.reader.app.AppIcon
 import dev.sasikanth.rss.reader.app.AppIconManager
 import dev.sasikanth.rss.reader.app.AppInfo
 import dev.sasikanth.rss.reader.billing.BillingHandler
+import dev.sasikanth.rss.reader.core.model.local.ServiceType
 import dev.sasikanth.rss.reader.core.model.local.ThemeVariant
+import dev.sasikanth.rss.reader.core.model.local.User
 import dev.sasikanth.rss.reader.data.opml.OpmlFeed
 import dev.sasikanth.rss.reader.data.opml.OpmlFeedGroup
 import dev.sasikanth.rss.reader.data.opml.OpmlManager
 import dev.sasikanth.rss.reader.data.refreshpolicy.RefreshPolicy
 import dev.sasikanth.rss.reader.data.repository.AppThemeMode
+import dev.sasikanth.rss.reader.data.repository.AudioMarkAsReadThreshold
+import dev.sasikanth.rss.reader.data.repository.BlockedWordsRepository
 import dev.sasikanth.rss.reader.data.repository.BrowserType
 import dev.sasikanth.rss.reader.data.repository.HomeViewMode
 import dev.sasikanth.rss.reader.data.repository.MarkAsReadOn
@@ -38,6 +43,7 @@ import dev.sasikanth.rss.reader.data.repository.SettingsRepository
 import dev.sasikanth.rss.reader.data.repository.UserRepository
 import dev.sasikanth.rss.reader.data.sync.CloudServiceProvider
 import dev.sasikanth.rss.reader.data.sync.SyncCoordinator
+import dev.sasikanth.rss.reader.data.sync.SyncState
 import dev.sasikanth.rss.reader.data.sync.auth.OAuthManager
 import dev.sasikanth.rss.reader.notifications.Notifier
 import dev.sasikanth.rss.reader.utils.Constants
@@ -52,6 +58,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.tatarka.inject.annotations.Inject
 
+@Stable
 @Inject
 class SettingsViewModel(
   private val rssRepository: RssRepository,
@@ -66,6 +73,7 @@ class SettingsViewModel(
   private val appIconManager: AppIconManager,
   private val refreshPolicy: RefreshPolicy,
   private val imageLoader: ImageLoader,
+  private val blockedWordsRepository: BlockedWordsRepository,
   val availableProviders: Set<CloudServiceProvider>,
 ) : ViewModel() {
 
@@ -88,16 +96,20 @@ class SettingsViewModel(
           combine(
             settingsRepository.themeVariant,
             settingsRepository.showFeedFavIcon,
+            settingsRepository.showFeaturedSection,
             settingsRepository.appIcon,
-            ::Triple,
+            settingsRepository.showPinnedSources,
+            ::SettingsGroup2,
           ),
-        ) { (appThemeMode, useAmoled), (themeVariant, showFeedFavIcon, appIcon) ->
-          SettingsGroup2(
+        ) { (appThemeMode, useAmoled), group2 ->
+          SettingsGroupCombined(
             appThemeMode = appThemeMode,
             useAmoled = useAmoled,
-            themeVariant = themeVariant,
-            showFeedFavIcon = showFeedFavIcon,
-            appIcon = appIcon,
+            themeVariant = group2.themeVariant,
+            showFeedFavIcon = group2.showFeedFavIcon,
+            showFeaturedSection = group2.showFeaturedSection,
+            appIcon = group2.appIcon,
+            showPinnedSources = group2.showPinnedSources,
           )
         },
         combine(
@@ -105,40 +117,40 @@ class SettingsViewModel(
           settingsRepository.blockImages,
           settingsRepository.downloadFullContent,
           settingsRepository.enableAutoSync,
+          settingsRepository.audioMarkAsReadThreshold,
           ::SettingsGroup3,
         ),
         combine(
           settingsRepository.enableNotifications,
+          settingsRepository.groupByFeedNotifications,
           refreshPolicy.lastSyncedAtFlow,
           userRepository.user(),
           ::SettingsGroup4,
         ),
-      ) { group1, group2, group3, group4 ->
+      ) { group1, combinedGroup, group3, group4 ->
         Settings(
           browserType = group1.browserType,
           showUnreadPostsCount = group1.showUnreadPostsCount,
           postsDeletionPeriod = group1.postsDeletionPeriod,
           showReaderView = group1.showReaderView,
-          appThemeMode = group2.appThemeMode,
-          themeVariant = group2.themeVariant,
-          useAmoled = group2.useAmoled,
+          appThemeMode = combinedGroup.appThemeMode,
+          themeVariant = combinedGroup.themeVariant,
+          useAmoled = combinedGroup.useAmoled,
           enableAutoSync = group3.enableAutoSync,
-          showFeedFavIcon = group2.showFeedFavIcon,
+          showFeedFavIcon = combinedGroup.showFeedFavIcon,
+          showFeaturedSection = combinedGroup.showFeaturedSection,
+          showPinnedSources = combinedGroup.showPinnedSources,
           markAsReadOn = group1.markAsReadOn,
+          audioMarkAsReadThreshold = group3.audioMarkAsReadThreshold,
           homeViewMode = group3.homeViewMode,
           blockImages = group3.blockImages,
           enableNotifications = group4.enableNotifications,
+          groupByFeedNotifications = group4.groupByFeedNotifications,
           downloadFullContent = group3.downloadFullContent,
           lastSyncedAt = group4.lastSyncedAt,
-          lastSyncStatus =
-            when (group4.user?.lastSyncStatus) {
-              "SUCCESS" -> SettingsState.SyncProgress.Success
-              "FAILURE" -> SettingsState.SyncProgress.Failure
-              "SYNCING" -> SettingsState.SyncProgress.Syncing
-              else -> SettingsState.SyncProgress.Idle
-            },
           hasCloudServiceSignedIn = group4.user != null,
-          appIcon = group2.appIcon,
+          signedInService = group4.user?.serviceType,
+          appIcon = combinedGroup.appIcon,
         )
       }
       .onEach { settings ->
@@ -153,20 +165,35 @@ class SettingsViewModel(
             useAmoled = settings.useAmoled,
             enableAutoSync = settings.enableAutoSync,
             showFeedFavIcon = settings.showFeedFavIcon,
+            showFeaturedSection = settings.showFeaturedSection,
+            showPinnedSources = settings.showPinnedSources,
             markAsReadOn = settings.markAsReadOn,
+            audioMarkAsReadThreshold = settings.audioMarkAsReadThreshold,
             homeViewMode = settings.homeViewMode,
             blockImages = settings.blockImages,
             enableNotifications = settings.enableNotifications,
+            groupByFeedNotifications = settings.groupByFeedNotifications,
             downloadFullContent = settings.downloadFullContent,
             lastSyncedAt = settings.lastSyncedAt,
             hasCloudServiceSignedIn = settings.hasCloudServiceSignedIn,
+            signedInService = settings.signedInService,
             appIcon = settings.appIcon,
+          )
+        }
+      }
+      .launchIn(viewModelScope)
+
+    syncCoordinator.syncState
+      .onEach { syncState ->
+        _state.update {
+          it.copy(
             syncProgress =
-              if (it.syncProgress == SettingsState.SyncProgress.Syncing) {
-                SettingsState.SyncProgress.Syncing
-              } else {
-                settings.lastSyncStatus
-              },
+              when (syncState) {
+                SyncState.Idle -> SettingsState.SyncProgress.Idle
+                is SyncState.InProgress -> SettingsState.SyncProgress.Syncing
+                SyncState.Complete -> SettingsState.SyncProgress.Success
+                is SyncState.Error -> SettingsState.SyncProgress.Failure(syncState.exception)
+              }
           )
         }
       }
@@ -175,6 +202,11 @@ class SettingsViewModel(
     rssRepository
       .hasFeeds()
       .onEach { hasFeeds -> _state.update { it.copy(hasFeeds = hasFeeds) } }
+      .launchIn(viewModelScope)
+
+    blockedWordsRepository
+      .words()
+      .onEach { words -> _state.update { it.copy(blockedWordsCount = words.size) } }
       .launchIn(viewModelScope)
 
     opmlManager.result
@@ -189,6 +221,8 @@ class SettingsViewModel(
       is SettingsEvent.ToggleShowReaderView -> toggleShowReaderView(event.value)
       is SettingsEvent.ToggleAutoSync -> toggleAutoSync(event.value)
       is SettingsEvent.ToggleShowFeedFavIcon -> toggleShowFeedFavIcon(event.value)
+      is SettingsEvent.ToggleShowFeaturedSection -> toggleShowFeaturedSection(event.value)
+      is SettingsEvent.ToggleShowPinnedSources -> toggleShowPinnedSources(event.value)
       SettingsEvent.ImportOpmlClicked -> importOpmlClicked()
       SettingsEvent.ExportOpmlClicked -> exportOpmlClicked()
       SettingsEvent.CancelOpmlImportOrExport -> cancelOpmlImportOrExport()
@@ -197,6 +231,8 @@ class SettingsViewModel(
       is SettingsEvent.OnThemeVariantChanged -> onThemeVariantChanged(event.themeVariant)
       is SettingsEvent.ToggleAmoled -> toggleAmoled(event.value)
       is SettingsEvent.MarkAsReadOnChanged -> markAsReadOnChanged(event.newMarkAsReadOn)
+      is SettingsEvent.AudioMarkAsReadThresholdChanged ->
+        audioMarkAsReadThresholdChanged(event.threshold)
       is SettingsEvent.LoadSubscriptionStatus -> loadSubscriptionStatus()
       is SettingsEvent.MarkOpenPaywallAsDone -> {
         _state.update { it.copy(openPaywall = false) }
@@ -204,6 +240,7 @@ class SettingsViewModel(
       is SettingsEvent.ChangeHomeViewMode -> changeHomeViewMode(event.homeViewMode)
       is SettingsEvent.ToggleBlockImages -> toggleBlockImages(event.value)
       is SettingsEvent.ToggleNotifications -> toggleNotifications(event.value)
+      is SettingsEvent.ToggleGroupByFeedNotifications -> toggleGroupByFeedNotifications(event.value)
       is SettingsEvent.ToggleDownloadFullContent -> toggleDownloadFullContent(event.value)
       is SettingsEvent.SyncClicked -> syncClicked(event.provider)
       SettingsEvent.TriggerSync -> triggerSync()
@@ -248,7 +285,7 @@ class SettingsViewModel(
     viewModelScope.launch {
       val isSignedIn = provider.isSignedIn().first()
       if (isSignedIn) {
-        triggerSync()
+        syncCoordinator.triggerPull()
       } else {
         oAuthManager.setPendingProvider(provider.cloudService)
         val authUrl = oAuthManager.getAuthUrl(provider.cloudService)
@@ -258,16 +295,7 @@ class SettingsViewModel(
   }
 
   private fun triggerSync() {
-    viewModelScope.launch {
-      _state.update { it.copy(syncProgress = SettingsState.SyncProgress.Syncing) }
-      val result = syncCoordinator.pull()
-      _state.update {
-        it.copy(
-          syncProgress =
-            if (result) SettingsState.SyncProgress.Success else SettingsState.SyncProgress.Failure
-        )
-      }
-    }
+    syncCoordinator.triggerPull()
   }
 
   private fun signOutClicked() {
@@ -277,7 +305,6 @@ class SettingsViewModel(
           it.signOut()
         }
       }
-      _state.update { it.copy(syncProgress = SettingsState.SyncProgress.Idle) }
     }
   }
 
@@ -294,6 +321,10 @@ class SettingsViewModel(
         settingsRepository.toggleNotifications(false)
       }
     }
+  }
+
+  private fun toggleGroupByFeedNotifications(value: Boolean) {
+    viewModelScope.launch { settingsRepository.toggleGroupByFeedNotifications(value) }
   }
 
   private fun toggleBlockImages(value: Boolean) {
@@ -318,8 +349,20 @@ class SettingsViewModel(
     viewModelScope.launch { settingsRepository.updateMarkAsReadOn(markAsReadOn) }
   }
 
+  private fun audioMarkAsReadThresholdChanged(threshold: AudioMarkAsReadThreshold) {
+    viewModelScope.launch { settingsRepository.updateAudioMarkAsReadThreshold(threshold) }
+  }
+
   private fun toggleShowFeedFavIcon(value: Boolean) {
     viewModelScope.launch { settingsRepository.toggleShowFeedFavIcon(value) }
+  }
+
+  private fun toggleShowFeaturedSection(value: Boolean) {
+    viewModelScope.launch { settingsRepository.toggleShowFeaturedSection(value) }
+  }
+
+  private fun toggleShowPinnedSources(value: Boolean) {
+    viewModelScope.launch { settingsRepository.toggleShowPinnedSources(value) }
   }
 
   private fun toggleAutoSync(value: Boolean) {
@@ -421,14 +464,18 @@ private data class Settings(
   val useAmoled: Boolean,
   val enableAutoSync: Boolean,
   val showFeedFavIcon: Boolean,
+  val showFeaturedSection: Boolean,
+  val showPinnedSources: Boolean,
   val markAsReadOn: MarkAsReadOn,
+  val audioMarkAsReadThreshold: AudioMarkAsReadThreshold,
   val homeViewMode: HomeViewMode,
   val blockImages: Boolean,
   val enableNotifications: Boolean,
+  val groupByFeedNotifications: Boolean,
   val downloadFullContent: Boolean,
   val lastSyncedAt: Instant?,
-  val lastSyncStatus: SettingsState.SyncProgress,
   val hasCloudServiceSignedIn: Boolean,
+  val signedInService: ServiceType?,
   val appIcon: AppIcon,
 )
 
@@ -441,11 +488,21 @@ private data class SettingsGroup1(
 )
 
 private data class SettingsGroup2(
+  val themeVariant: ThemeVariant,
+  val showFeedFavIcon: Boolean,
+  val showFeaturedSection: Boolean,
+  val appIcon: AppIcon,
+  val showPinnedSources: Boolean,
+)
+
+private data class SettingsGroupCombined(
   val appThemeMode: AppThemeMode,
   val useAmoled: Boolean,
   val themeVariant: ThemeVariant,
   val showFeedFavIcon: Boolean,
+  val showFeaturedSection: Boolean,
   val appIcon: AppIcon,
+  val showPinnedSources: Boolean,
 )
 
 private data class SettingsGroup3(
@@ -453,10 +510,12 @@ private data class SettingsGroup3(
   val blockImages: Boolean,
   val downloadFullContent: Boolean,
   val enableAutoSync: Boolean,
+  val audioMarkAsReadThreshold: AudioMarkAsReadThreshold,
 )
 
 private data class SettingsGroup4(
   val enableNotifications: Boolean,
+  val groupByFeedNotifications: Boolean,
   val lastSyncedAt: Instant?,
-  val user: dev.sasikanth.rss.reader.core.model.local.User?,
+  val user: User?,
 )

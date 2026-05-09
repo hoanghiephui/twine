@@ -20,6 +20,7 @@ import dev.sasikanth.rss.reader.app.AppIcon
 import dev.sasikanth.rss.reader.core.model.local.ThemeVariant
 import dev.sasikanth.rss.reader.data.opml.OpmlFeed
 import dev.sasikanth.rss.reader.data.repository.AppThemeMode
+import dev.sasikanth.rss.reader.data.repository.AudioMarkAsReadThreshold
 import dev.sasikanth.rss.reader.data.repository.BrowserType
 import dev.sasikanth.rss.reader.data.repository.HomeViewMode
 import dev.sasikanth.rss.reader.data.repository.MarkAsReadOn
@@ -38,6 +39,10 @@ sealed interface SettingsEvent {
 
   data class ToggleShowFeedFavIcon(val value: Boolean) : SettingsEvent
 
+  data class ToggleShowFeaturedSection(val value: Boolean) : SettingsEvent
+
+  data class ToggleShowPinnedSources(val value: Boolean) : SettingsEvent
+
   data object ImportOpmlClicked : SettingsEvent
 
   data object ExportOpmlClicked : SettingsEvent
@@ -54,6 +59,9 @@ sealed interface SettingsEvent {
 
   data class MarkAsReadOnChanged(val newMarkAsReadOn: MarkAsReadOn) : SettingsEvent
 
+  data class AudioMarkAsReadThresholdChanged(val threshold: AudioMarkAsReadThreshold) :
+    SettingsEvent
+
   data object LoadSubscriptionStatus : SettingsEvent
 
   data object MarkOpenPaywallAsDone : SettingsEvent
@@ -63,6 +71,8 @@ sealed interface SettingsEvent {
   data class ToggleBlockImages(val value: Boolean) : SettingsEvent
 
   data class ToggleNotifications(val value: Boolean) : SettingsEvent
+
+  data class ToggleGroupByFeedNotifications(val value: Boolean) : SettingsEvent
 
   data class ToggleDownloadFullContent(val value: Boolean) : SettingsEvent
 

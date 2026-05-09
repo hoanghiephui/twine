@@ -29,8 +29,8 @@ import dev.sasikanth.rss.reader.ui.AppTheme
 internal fun SubHeader(text: String, modifier: Modifier = Modifier) {
   Text(
     text = text,
-    style = MaterialTheme.typography.titleMedium,
+    style = MaterialTheme.typography.titleSmall,
     color = AppTheme.colorScheme.onSurfaceVariant,
-    modifier = modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+    modifier = modifier.padding(horizontal = 24.dp).padding(top = 24.dp, bottom = 12.dp),
   )
 }

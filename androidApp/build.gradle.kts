@@ -73,7 +73,7 @@ android {
     create("full") { dimension = "version" }
     create("foss") {
       dimension = "version"
-      applicationIdSuffix = ".foss"
+      versionNameSuffix = "-FOSS"
     }
   }
 
@@ -99,7 +99,12 @@ android {
     debug { applicationIdSuffix = ".debug" }
   }
 
-  packaging { resources { excludes.add("/META-INF/{AL2.0,LGPL2.1}") } }
+  packaging {
+    resources { excludes.add("/META-INF/{AL2.0,LGPL2.1}") }
+    if (project.findProperty("twine.isFoss")?.toString()?.toBoolean() == true) {
+      jniLibs { keepDebugSymbols.add("**/*.so") }
+    }
+  }
 
   buildFeatures { buildConfig = true }
 
@@ -119,8 +124,9 @@ dependencies {
   implementation(libs.androidx.work)
   coreLibraryDesugaring(libs.desugarJdk)
   implementation(libs.kotlinx.datetime)
-  implementation(libs.bugsnag)
+  "fullImplementation"(libs.bugsnag)
   "fullImplementation"(libs.purchases.core)
   implementation(libs.glance)
   implementation(libs.glance.material3)
+  implementation(libs.kotlinx.immutable.collections)
 }

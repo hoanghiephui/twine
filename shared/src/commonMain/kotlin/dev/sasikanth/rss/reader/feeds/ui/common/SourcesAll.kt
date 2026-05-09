@@ -17,8 +17,8 @@
 
 package dev.sasikanth.rss.reader.feeds.ui.common
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
@@ -37,19 +37,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
-import app.cash.paging.compose.LazyPagingItems
-import app.cash.paging.compose.itemKey
+import androidx.paging.compose.LazyPagingItems
+import androidx.paging.compose.itemKey
 import dev.sasikanth.rss.reader.components.CircularIconButton
 import dev.sasikanth.rss.reader.components.DropdownMenu
+import dev.sasikanth.rss.reader.components.DropdownMenuDivider
 import dev.sasikanth.rss.reader.components.DropdownMenuItem
-import dev.sasikanth.rss.reader.components.FilledIconButton
 import dev.sasikanth.rss.reader.core.model.local.Feed
 import dev.sasikanth.rss.reader.core.model.local.FeedGroup
 import dev.sasikanth.rss.reader.core.model.local.Source
@@ -58,43 +54,47 @@ import dev.sasikanth.rss.reader.data.repository.FeedsOrderBy
 import dev.sasikanth.rss.reader.feeds.SourceListItem
 import dev.sasikanth.rss.reader.feeds.ui.FeedGroupItem
 import dev.sasikanth.rss.reader.feeds.ui.FeedListItem
-import dev.sasikanth.rss.reader.feeds.ui.sheet.expanded.bottomPaddingOfSourceItem
 import dev.sasikanth.rss.reader.resources.icons.Add
+import dev.sasikanth.rss.reader.resources.icons.Check
+import dev.sasikanth.rss.reader.resources.icons.Edit
+import dev.sasikanth.rss.reader.resources.icons.MarkAllAsRead
+import dev.sasikanth.rss.reader.resources.icons.NewGroup
+import dev.sasikanth.rss.reader.resources.icons.RemoveFeed
 import dev.sasikanth.rss.reader.resources.icons.Sort
 import dev.sasikanth.rss.reader.resources.icons.TwineIcons
 import dev.sasikanth.rss.reader.ui.AppTheme
-import dev.sasikanth.rss.reader.ui.LocalTranslucentStyles
+import dev.sasikanth.rss.reader.utils.bottomPaddingOfSourceItem
 import org.jetbrains.compose.resources.stringResource
 import twine.shared.generated.resources.Res
+import twine.shared.generated.resources.actionAddTo
+import twine.shared.generated.resources.actionSelect
 import twine.shared.generated.resources.allFeeds
+import twine.shared.generated.resources.buttonAddFeed
+import twine.shared.generated.resources.edit
+import twine.shared.generated.resources.feedOptionRemove
 import twine.shared.generated.resources.feedsSortAlphabetical
 import twine.shared.generated.resources.feedsSortLatest
 import twine.shared.generated.resources.feedsSortOldest
+import twine.shared.generated.resources.markAllAsRead
+import twine.shared.generated.resources.sort
+import twine.shared.generated.resources.sourcesCount
 
 internal fun LazyListScope.allSources(
-  numberOfFeeds: Int,
   numberOfFeedGroups: Int,
   sources: LazyPagingItems<SourceListItem>,
   selectedSources: Set<Source>,
-  feedsSortOrder: FeedsOrderBy,
+  activeSource: Source?,
   canShowUnreadPostsCount: Boolean,
   isInMultiSelectMode: Boolean,
-  onFeedsSortChanged: (FeedsOrderBy) -> Unit,
   onSourceClick: (Source) -> Unit,
   onToggleSourceSelection: (Source) -> Unit,
-  onAddNewFeedClick: () -> Unit,
+  onPinClick: (Source) -> Unit,
+  onSourceEditClick: (Source) -> Unit,
+  onAddToGroupClick: (Source) -> Unit,
+  onRemoveSourceClick: (Source) -> Unit,
+  onMarkAsReadClick: (Source) -> Unit,
 ) {
   if (sources.itemCount > 0) {
-    stickyHeader(key = "AllFeedsHeader") {
-      AllFeedsHeader(
-        modifier = Modifier.animateItem(),
-        feedsCount = numberOfFeeds,
-        feedsSortOrder = feedsSortOrder,
-        onFeedsSortChanged = onFeedsSortChanged,
-        onAddNewFeedClick = onAddNewFeedClick,
-      )
-    }
-
     items(
       count = sources.itemCount,
       key =
@@ -125,8 +125,8 @@ internal fun LazyListScope.allSources(
         is SourceListItem.SourceItem -> {
           when (val source = sourceItem.source) {
             is FeedGroup -> {
-              val startPadding = 24.dp
-              val endPadding = 16.dp
+              val startPadding = 8.dp
+              val endPadding = 8.dp
               val topPadding = 4.dp
               val bottomPadding = bottomPaddingOfSourceItem(index, sources.itemCount)
 
@@ -134,10 +134,15 @@ internal fun LazyListScope.allSources(
                 feedGroup = source,
                 canShowUnreadPostsCount = canShowUnreadPostsCount,
                 isInMultiSelectMode = isInMultiSelectMode,
-                selected = selectedSources.any { it.id == source.id },
+                selected =
+                  if (isInMultiSelectMode) {
+                    selectedSources.any { it.id == source.id }
+                  } else {
+                    activeSource?.id == source.id
+                  },
                 onFeedGroupSelected = onToggleSourceSelection,
                 onFeedGroupClick = onSourceClick,
-                onOptionsClick = { onToggleSourceSelection(source) },
+                onPinClick = onPinClick,
                 modifier =
                   Modifier.padding(
                       start = startPadding,
@@ -146,6 +151,46 @@ internal fun LazyListScope.allSources(
                       bottom = bottomPadding,
                     )
                     .animateItem(),
+                dropdownMenuContent = { onDismiss ->
+                  DropdownMenuItem(
+                    text = stringResource(Res.string.markAllAsRead),
+                    leadingIcon = TwineIcons.MarkAllAsRead,
+                    enabled = source.numberOfUnreadPosts > 0,
+                    onClick = {
+                      onMarkAsReadClick(source)
+                      onDismiss()
+                    },
+                  )
+
+                  DropdownMenuItem(
+                    text = stringResource(Res.string.edit),
+                    leadingIcon = TwineIcons.Edit,
+                    onClick = {
+                      onSourceEditClick(source)
+                      onDismiss()
+                    },
+                  )
+
+                  DropdownMenuItem(
+                    text = stringResource(Res.string.actionSelect),
+                    leadingIcon = TwineIcons.Check,
+                    onClick = {
+                      onToggleSourceSelection(source)
+                      onDismiss()
+                    },
+                  )
+
+                  DropdownMenuDivider()
+
+                  DropdownMenuItem(
+                    text = stringResource(Res.string.feedOptionRemove),
+                    leadingIcon = TwineIcons.RemoveFeed,
+                    onClick = {
+                      onRemoveSourceClick(source)
+                      onDismiss()
+                    },
+                  )
+                },
               )
             }
             is Feed -> {
@@ -158,8 +203,8 @@ internal fun LazyListScope.allSources(
                 } else {
                   index
                 }
-              val startPadding = 24.dp
-              val endPadding = 16.dp
+              val startPadding = 8.dp
+              val endPadding = 8.dp
               val topPadding = 4.dp
               val bottomPadding = bottomPaddingOfSourceItem(transformedIndex, sources.itemCount)
 
@@ -167,10 +212,15 @@ internal fun LazyListScope.allSources(
                 feed = source,
                 canShowUnreadPostsCount = canShowUnreadPostsCount,
                 isInMultiSelectMode = isInMultiSelectMode,
-                isFeedSelected = selectedSources.any { it.id == source.id },
+                isFeedSelected =
+                  if (isInMultiSelectMode) {
+                    selectedSources.any { it.id == source.id }
+                  } else {
+                    activeSource?.id == source.id
+                  },
                 onFeedClick = onSourceClick,
                 onFeedSelected = onToggleSourceSelection,
-                onOptionsClick = { onToggleSourceSelection(source) },
+                onPinClick = onPinClick,
                 modifier =
                   Modifier.padding(
                       start = startPadding,
@@ -179,6 +229,55 @@ internal fun LazyListScope.allSources(
                       bottom = bottomPadding,
                     )
                     .animateItem(),
+                dropdownMenuContent = { onDismiss ->
+                  DropdownMenuItem(
+                    text = stringResource(Res.string.markAllAsRead),
+                    leadingIcon = TwineIcons.MarkAllAsRead,
+                    enabled = source.numberOfUnreadPosts > 0,
+                    onClick = {
+                      onMarkAsReadClick(source)
+                      onDismiss()
+                    },
+                  )
+
+                  DropdownMenuItem(
+                    text = stringResource(Res.string.actionAddTo),
+                    leadingIcon = TwineIcons.NewGroup,
+                    onClick = {
+                      onAddToGroupClick(source)
+                      onDismiss()
+                    },
+                  )
+
+                  DropdownMenuItem(
+                    text = stringResource(Res.string.edit),
+                    leadingIcon = TwineIcons.Edit,
+                    onClick = {
+                      onSourceEditClick(source)
+                      onDismiss()
+                    },
+                  )
+
+                  DropdownMenuItem(
+                    text = stringResource(Res.string.actionSelect),
+                    leadingIcon = TwineIcons.Check,
+                    onClick = {
+                      onToggleSourceSelection(source)
+                      onDismiss()
+                    },
+                  )
+
+                  DropdownMenuDivider()
+
+                  DropdownMenuItem(
+                    text = stringResource(Res.string.feedOptionRemove),
+                    leadingIcon = TwineIcons.RemoveFeed,
+                    onClick = {
+                      onRemoveSourceClick(source)
+                      onDismiss()
+                    },
+                  )
+                },
               )
             }
           }
@@ -201,22 +300,18 @@ internal fun AllFeedsHeader(
   onAddNewFeedClick: (() -> Unit)? = null,
 ) {
   Row(
-    modifier =
-      Modifier.then(modifier)
-        .background(AppTheme.colorScheme.bottomSheet)
-        .padding(start = 32.dp, end = 24.dp)
-        .padding(vertical = 12.dp),
+    modifier = Modifier.then(modifier).padding(horizontal = 24.dp, vertical = 16.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     var showSortDropdown by remember { mutableStateOf(false) }
     val allFeedsLabel = stringResource(Res.string.allFeeds)
 
-    Row(
+    Column(
       modifier =
         Modifier.weight(1f).clearAndSetSemantics {
           contentDescription = "${allFeedsLabel}: ${feedsCount}"
         },
-      verticalAlignment = Alignment.CenterVertically,
+      horizontalAlignment = Alignment.Start,
     ) {
       Text(
         text = allFeedsLabel,
@@ -224,39 +319,27 @@ internal fun AllFeedsHeader(
         color = AppTheme.colorScheme.onSurface,
       )
 
-      Spacer(Modifier.requiredWidth(8.dp))
-
       Text(
-        text = feedsCount.toString(),
-        style = MaterialTheme.typography.titleMedium,
-        color = AppTheme.colorScheme.primary,
+        text = stringResource(Res.string.sourcesCount, feedsCount),
+        style = MaterialTheme.typography.bodySmall,
+        color = AppTheme.colorScheme.onSurfaceVariant,
       )
     }
 
     Spacer(Modifier.requiredWidth(12.dp))
 
     Box {
-      val density = LocalDensity.current
-      var buttonHeight by remember { mutableStateOf(Dp.Unspecified) }
-
       CircularIconButton(
-        modifier =
-          Modifier.onGloballyPositioned { coordinates ->
-            buttonHeight = with(density) { coordinates.size.height.toDp() }
-          },
         icon = TwineIcons.Sort,
-        label = "",
+        label = stringResource(Res.string.sort),
         onClick = { showSortDropdown = true },
       )
 
       DropdownMenu(
         modifier = Modifier.widthIn(min = 132.dp),
         expanded = showSortDropdown,
-        offset = DpOffset(0.dp, buttonHeight.unaryMinus()),
         onDismissRequest = { showSortDropdown = false },
       ) {
-        val translucentStyle = LocalTranslucentStyles.current
-
         FeedsOrderBy.entries
           .filter { it != FeedsOrderBy.Pinned }
           .forEach { sortOrder ->
@@ -272,26 +355,13 @@ internal fun AllFeedsHeader(
                 }
               }
 
-            val color =
-              if (feedsSortOrder == sortOrder) {
-                translucentStyle.default.background
-              } else {
-                Color.Unspecified
-              }
-            val labelColor =
-              if (feedsSortOrder == sortOrder) {
-                AppTheme.colorScheme.secondary
-              } else {
-                AppTheme.colorScheme.onSurface
-              }
-
             DropdownMenuItem(
-              modifier = Modifier.background(color),
+              selected = feedsSortOrder == sortOrder,
+              text = label,
               onClick = {
                 onFeedsSortChanged(sortOrder)
                 showSortDropdown = false
               },
-              text = { Text(label, color = labelColor) },
             )
           }
       }
@@ -300,11 +370,12 @@ internal fun AllFeedsHeader(
     if (showAddButton) {
       Spacer(Modifier.width(12.dp))
 
-      FilledIconButton(
+      CircularIconButton(
         icon = TwineIcons.Add,
-        contentDescription = null,
-        containerColor = AppTheme.colorScheme.inverseSurface,
-        iconTint = AppTheme.colorScheme.inverseOnSurface,
+        label = stringResource(Res.string.buttonAddFeed),
+        backgroundColor = AppTheme.colorScheme.inverseSurface,
+        contentColor = AppTheme.colorScheme.inverseOnSurface,
+        borderColor = Color.Transparent,
         onClick = { onAddNewFeedClick?.invoke() },
       )
     }

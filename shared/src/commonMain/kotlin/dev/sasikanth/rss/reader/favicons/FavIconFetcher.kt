@@ -33,6 +33,7 @@ import coil3.fetch.SourceFetchResult
 import coil3.getExtra
 import coil3.network.CacheStrategy
 import coil3.network.ConnectivityChecker
+import coil3.network.DeDupeConcurrentRequestStrategy
 import coil3.network.HttpException
 import coil3.network.NetworkClient
 import coil3.network.NetworkFetcher
@@ -46,16 +47,16 @@ import coil3.util.MimeTypeMap
 import com.fleeksoft.ksoup.Ksoup
 import com.fleeksoft.ksoup.nodes.Document
 import com.fleeksoft.ksoup.parseSource
-import kotlinx.io.Buffer
-import kotlinx.io.RawSource
 import kotlinx.io.okio.asKotlinxIoRawSource
 import okio.FileSystem
 import okio.IOException as OkioIOException
+import okio.buffer
 
 private const val CACHE_CONTROL = "Cache-Control"
 private const val CONTENT_TYPE = "Content-Type"
 private const val HTTP_METHOD_GET = "GET"
 private const val MIME_TYPE_TEXT_PLAIN = "text/plain"
+private const val MAX_HTML_READ_SIZE = 64 * 1024L // 64 KB
 
 @OptIn(InternalCoilApi::class)
 class FavIconFetcher(
@@ -89,22 +90,66 @@ class FavIconFetcher(
 
       // Slow path: fetch the fav icon by parsing response HTML
       val networkRequest = output?.request ?: newRequest()
-      return executeNetworkRequest(networkRequest) { response ->
-        // Write the response to the disk cache then open a new snapshot.
-        val responseBody = checkNotNull(response.body) { "body == null" }
-        val responseBodyBuffer = responseBody.readBuffer()
+      val okioBuffer =
+        try {
+          executeNetworkRequest(networkRequest) { response ->
+            val responseBody = checkNotNull(response.body) { "body == null" }
+            val buffer = okio.Buffer()
+            val sink =
+              object : okio.Sink {
+                  var bytesWritten = 0L
 
-        val document =
-          Ksoup.parseSource(source = responseBodyBuffer, baseUri = url, charsetName = null)
-        val favIconUrl = parseFaviconUrl(document) ?: fallbackFaviconUrl(url)
+                  override fun write(source: okio.Buffer, byteCount: Long) {
+                    val toWrite = minOf(byteCount, MAX_HTML_READ_SIZE - bytesWritten)
+                    if (toWrite > 0) {
+                      buffer.write(source, toWrite)
+                      bytesWritten += toWrite
+                    }
 
-        return@executeNetworkRequest networkFetcher(favIconUrl).fetch()
-      }
+                    if (bytesWritten >= MAX_HTML_READ_SIZE) {
+                      throw LimitExceededException()
+                    }
+                  }
+
+                  override fun flush() {}
+
+                  override fun timeout() = okio.Timeout.NONE
+
+                  override fun close() {}
+                }
+                .buffer()
+
+            try {
+              responseBody.use { it.writeTo(sink) }
+            } catch (_: LimitExceededException) {
+              // Success, we reached the limit
+            } finally {
+              sink.close()
+            }
+
+            buffer
+          }
+        } catch (_: Exception) {
+          null
+        }
+
+      val favIconUrl =
+        if (okioBuffer != null && okioBuffer.size > 0) {
+          val document =
+            Ksoup.parseSource(source = okioBuffer.asKotlinxIoRawSource(), baseUri = url)
+          parseFaviconUrl(document) ?: fallbackFaviconUrl(url)
+        } else {
+          fallbackFaviconUrl(url)
+        }
+
+      return networkFetcher(favIconUrl).fetch()
     } catch (e: Exception) {
       snapshot?.closeQuietly()
       throw e
     }
   }
+
+  private class LimitExceededException : OkioIOException()
 
   private fun parseFaviconUrl(document: Document): String? {
     val faviconUrl =
@@ -117,9 +162,11 @@ class FavIconFetcher(
   }
 
   private fun fallbackFaviconUrl(url: String): String {
+    val domain =
+      url.removePrefix("https://").removePrefix("http://").removePrefix("www.").substringBefore("/")
     // Setting size as 180px, since that's the most commonly used apple touch icon size in the HTML,
     // if a icon is not found, it will fallback to default fav icon
-    return "https://www.google.com/s2/favicons?domain=${url}&sz=180"
+    return "https://www.google.com/s2/favicons?domain=${domain}&sz=180"
   }
 
   /** From Unfurl https://github.com/saket/unfurl */
@@ -132,8 +179,8 @@ class FavIconFetcher(
       // Some websites have multiple icons for different sizes. Find the largest one.
       val sizes = element.attr("sizes")
       if (sizes.contains("x")) {
-        val size = sizes.split("x")[0].toInt()
-        if (size > largestSize) {
+        val size = sizes.split("x")[0].toIntOrNull()
+        if (size != null && size > largestSize) {
           largestSize = size
           largestSizeUrl = element.attr("abs:href")
         }
@@ -152,6 +199,9 @@ class FavIconFetcher(
 
   private fun newRequest(url: String? = null): NetworkRequest {
     val headers = options.httpHeaders.newBuilder()
+    headers["User-Agent"] =
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+
     val diskRead = options.diskCachePolicy.readEnabled
     val networkRead = options.networkCachePolicy.readEnabled
     when {
@@ -232,12 +282,6 @@ class FavIconFetcher(
     } catch (_: Exception) {}
   }
 
-  private suspend fun NetworkResponseBody.readBuffer(): RawSource = use { body ->
-    val buffer = okio.Buffer()
-    body.writeTo(buffer)
-    return buffer.asKotlinxIoRawSource()
-  }
-
   private val httpMethodKey = Extras.Key(default = HTTP_METHOD_GET)
   private val httpBodyKey = Extras.Key<NetworkRequestBody?>(default = null)
 
@@ -276,7 +320,8 @@ class FavIconFetcher(
             networkClient = networkClientLazy,
             diskCache = diskCacheLazy,
             cacheStrategy = cacheStrategyLazy,
-            connectivityChecker = ConnectivityChecker.ONLINE,
+            connectivityChecker = lazy { ConnectivityChecker.ONLINE },
+            concurrentRequestStrategy = lazy { DeDupeConcurrentRequestStrategy() },
           )
         },
       )

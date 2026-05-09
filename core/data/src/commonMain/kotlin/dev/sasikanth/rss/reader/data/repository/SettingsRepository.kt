@@ -25,6 +25,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.sasikanth.rss.reader.app.AppIcon
+import dev.sasikanth.rss.reader.app.AppInfo
 import dev.sasikanth.rss.reader.core.model.local.PostsSortOrder
 import dev.sasikanth.rss.reader.core.model.local.PostsType
 import dev.sasikanth.rss.reader.core.model.local.ThemeVariant
@@ -37,7 +38,10 @@ import me.tatarka.inject.annotations.Inject
 
 @Inject
 @AppScope
-class SettingsRepository(private val dataStore: DataStore<Preferences>) {
+class SettingsRepository(
+  private val dataStore: DataStore<Preferences>,
+  private val appInfo: AppInfo,
+) {
 
   private val browserTypeKey = stringPreferencesKey("pref_browser_type")
   private val showUnreadPostsCountKey = booleanPreferencesKey("show_unread_posts_count")
@@ -51,6 +55,7 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
   private val enableAutoSyncKey = booleanPreferencesKey("enable_auto_sync")
   private val showFeedFavIconKey = booleanPreferencesKey("show_feed_fav_icon")
   private val markPostsAsReadOnKey = stringPreferencesKey("mark_posts_as_read_on")
+  private val audioMarkAsReadThresholdKey = stringPreferencesKey("audio_mark_as_read_threshold")
   private val homeViewModeKey = stringPreferencesKey("home_view_mode")
   private val readerFontScaleFactorKey = floatPreferencesKey("reader_font_scale")
   private val readerLineHeightScaleFactorKey = floatPreferencesKey("reader_line_height_scale")
@@ -58,6 +63,7 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
   private val themeVariantKey = stringPreferencesKey("pref_theme_variant")
   private val blockImagesKey = booleanPreferencesKey("block_images")
   private val enableNotificationsKey = booleanPreferencesKey("enable_notifications")
+  private val groupByFeedNotificationsKey = booleanPreferencesKey("group_by_feed_notifications")
   private val downloadFullContentKey = booleanPreferencesKey("download_full_content")
   private val lastReviewPromptDateKey = longPreferencesKey("last_review_prompt_date")
   private val installDateKey = longPreferencesKey("install_date")
@@ -66,6 +72,10 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
   private val isOnboardingDoneKey = booleanPreferencesKey("is_onboarding_done")
   private val discoveryFeedsLastFetchTimeKey = longPreferencesKey("discovery_feeds_last_fetch_time")
   private val discoveryFeedsCacheKey = stringPreferencesKey("discovery_feeds_cache")
+  private val showPinnedSourcesKey = booleanPreferencesKey("show_pinned_sources")
+  private val showFeaturedSectionKey = booleanPreferencesKey("show_featured_section")
+  private val lastSeenChangelogVersionKey = stringPreferencesKey("last_seen_changelog_version")
+  private val lastWidgetPreviewUpdateTimeKey = longPreferencesKey("last_widget_preview_update_time")
 
   val browserType: Flow<BrowserType> =
     dataStore.data.map { preferences ->
@@ -113,8 +123,19 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
   val showFeedFavIcon: Flow<Boolean> =
     dataStore.data.map { preferences -> preferences[showFeedFavIconKey] ?: true }
 
+  val showPinnedSources: Flow<Boolean> =
+    dataStore.data.map { preferences -> preferences[showPinnedSourcesKey] ?: true }
+
+  val showFeaturedSection: Flow<Boolean> =
+    dataStore.data.map { preferences -> preferences[showFeaturedSectionKey] ?: true }
+
   val markAsReadOn: Flow<MarkAsReadOn> =
     dataStore.data.map { preferences -> mapToMarkAsReadOnType(preferences[markPostsAsReadOnKey]) }
+
+  val audioMarkAsReadThreshold: Flow<AudioMarkAsReadThreshold> =
+    dataStore.data.map { preferences ->
+      mapToAudioMarkAsReadThreshold(preferences[audioMarkAsReadThresholdKey])
+    }
 
   val homeViewMode: Flow<HomeViewMode> =
     dataStore.data.map { preferences -> mapToHomeViewMode(preferences[homeViewModeKey]) }
@@ -136,6 +157,9 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
 
   val enableNotifications: Flow<Boolean> =
     dataStore.data.map { preferences -> preferences[enableNotificationsKey] ?: false }
+
+  val groupByFeedNotifications: Flow<Boolean> =
+    dataStore.data.map { preferences -> preferences[groupByFeedNotificationsKey] ?: false }
 
   val downloadFullContent: Flow<Boolean> =
     dataStore.data.map { preferences -> preferences[downloadFullContentKey] ?: false }
@@ -162,6 +186,14 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
         preferences[discoveryFeedsLastFetchTimeKey]?.let(Instant::fromEpochMilliseconds)
       val cache = preferences[discoveryFeedsCacheKey]
       lastFetchTime to cache
+    }
+
+  val lastSeenChangelogVersion: Flow<String?> =
+    dataStore.data.map { preferences -> preferences[lastSeenChangelogVersionKey] }
+
+  val lastWidgetPreviewUpdateTime: Flow<Instant?> =
+    dataStore.data.map { preferences ->
+      preferences[lastWidgetPreviewUpdateTimeKey]?.let(Instant::fromEpochMilliseconds)
     }
 
   suspend fun enableAutoSyncImmediate(): Boolean {
@@ -213,7 +245,10 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
   }
 
   suspend fun completeOnboarding() {
-    dataStore.edit { preferences -> preferences[isOnboardingDoneKey] = true }
+    dataStore.edit { preferences ->
+      preferences[isOnboardingDoneKey] = true
+      preferences[lastSeenChangelogVersionKey] = appInfo.versionName
+    }
   }
 
   suspend fun toggleAutoSync(value: Boolean) {
@@ -224,8 +259,20 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
     dataStore.edit { preferences -> preferences[showFeedFavIconKey] = value }
   }
 
+  suspend fun toggleShowPinnedSources(value: Boolean) {
+    dataStore.edit { preferences -> preferences[showPinnedSourcesKey] = value }
+  }
+
+  suspend fun toggleShowFeaturedSection(value: Boolean) {
+    dataStore.edit { preferences -> preferences[showFeaturedSectionKey] = value }
+  }
+
   suspend fun updateMarkAsReadOn(value: MarkAsReadOn) {
     dataStore.edit { preferences -> preferences[markPostsAsReadOnKey] = value.name }
+  }
+
+  suspend fun updateAudioMarkAsReadThreshold(value: AudioMarkAsReadThreshold) {
+    dataStore.edit { preferences -> preferences[audioMarkAsReadThresholdKey] = value.name }
   }
 
   suspend fun updateHomeViewMode(value: HomeViewMode) {
@@ -256,6 +303,10 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
     dataStore.edit { preferences -> preferences[enableNotificationsKey] = value }
   }
 
+  suspend fun toggleGroupByFeedNotifications(value: Boolean) {
+    dataStore.edit { preferences -> preferences[groupByFeedNotificationsKey] = value }
+  }
+
   suspend fun toggleDownloadFullContent(value: Boolean) {
     dataStore.edit { preferences -> preferences[downloadFullContentKey] = value }
   }
@@ -281,6 +332,16 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
     dataStore.edit { preferences ->
       preferences[discoveryFeedsCacheKey] = cache
       preferences[discoveryFeedsLastFetchTimeKey] = lastFetchTime.toEpochMilliseconds()
+    }
+  }
+
+  suspend fun updateLastSeenChangelogVersion(versionName: String) {
+    dataStore.edit { preferences -> preferences[lastSeenChangelogVersionKey] = versionName }
+  }
+
+  suspend fun updateLastWidgetPreviewUpdateTime(value: Instant) {
+    dataStore.edit { preferences ->
+      preferences[lastWidgetPreviewUpdateTimeKey] = value.toEpochMilliseconds()
     }
   }
 
@@ -331,17 +392,26 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
     return MarkAsReadOn.valueOf(pref)
   }
 
+  private fun mapToAudioMarkAsReadThreshold(pref: String?): AudioMarkAsReadThreshold {
+    if (pref.isNullOrBlank()) return AudioMarkAsReadThreshold.Fifty
+    return try {
+      AudioMarkAsReadThreshold.valueOf(pref)
+    } catch (e: Exception) {
+      AudioMarkAsReadThreshold.Fifty
+    }
+  }
+
   private fun mapToHomeViewMode(pref: String?): HomeViewMode {
     if (pref.isNullOrBlank()) return HomeViewMode.Default
     return HomeViewMode.valueOf(pref)
   }
 
   private fun mapToReaderFont(pref: String?): ReaderFont {
-    if (pref.isNullOrBlank()) return ReaderFont.Golos
+    if (pref.isNullOrBlank()) return ReaderFont.Outfit
     return try {
       ReaderFont.valueOf(pref)
     } catch (e: Exception) {
-      ReaderFont.Golos
+      ReaderFont.Outfit
     }
   }
 
@@ -365,9 +435,9 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
 }
 
 enum class AppThemeMode {
+  Auto,
   Light,
   Dark,
-  Auto,
 }
 
 enum class BrowserType {
@@ -389,6 +459,14 @@ enum class MarkAsReadOn {
   Scroll,
 }
 
+enum class AudioMarkAsReadThreshold(val value: Float) {
+  TwentyFive(0.25f),
+  Fifty(0.50f),
+  SeventyFive(0.75f),
+  Ninety(0.90f),
+  Hundred(1f),
+}
+
 enum class HomeViewMode {
   Default,
   Simple,
@@ -402,6 +480,7 @@ enum class ReaderFont(val value: String) {
   GoogleSans("Google Sans"),
   Lora("Lora"),
   Merriweather("Merriweather"),
+  Outfit("Outfit"),
 }
 
 val ReaderFont.isPremium: Boolean

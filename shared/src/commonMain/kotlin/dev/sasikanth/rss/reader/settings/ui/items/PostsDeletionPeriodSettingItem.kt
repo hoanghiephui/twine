@@ -17,18 +17,11 @@
 
 package dev.sasikanth.rss.reader.settings.ui.items
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredWidth
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,16 +29,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import dev.sasikanth.rss.reader.components.DropdownMenu
 import dev.sasikanth.rss.reader.components.DropdownMenuItem
+import dev.sasikanth.rss.reader.components.TranslucentButton
 import dev.sasikanth.rss.reader.data.repository.Period
 import dev.sasikanth.rss.reader.data.repository.Period.NEVER
+import dev.sasikanth.rss.reader.resources.icons.ArrowDown
+import dev.sasikanth.rss.reader.resources.icons.TwineIcons
 import dev.sasikanth.rss.reader.ui.AppTheme
 import org.jetbrains.compose.resources.stringResource
 import twine.shared.generated.resources.Res
@@ -65,59 +56,35 @@ internal fun PostsDeletionPeriodSettingItem(
   var showDropdown by remember { mutableStateOf(false) }
 
   Row(
-    modifier = Modifier.padding(horizontal = 24.dp),
+    modifier = Modifier.padding(start = 16.dp, end = 24.dp).padding(vertical = 16.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     Text(
-      modifier = Modifier.weight(1f),
+      modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
       text = stringResource(Res.string.settingsPostsDeletionPeriodTitle),
       style = MaterialTheme.typography.titleMedium,
       color = AppTheme.colorScheme.onSurface,
     )
 
     Box {
-      val density = LocalDensity.current
-      var buttonHeight by remember { mutableStateOf(Dp.Unspecified) }
+      val period =
+        when (postsDeletionPeriod) {
+          Period.ONE_WEEK -> stringResource(Res.string.settingsPostsDeletionPeriodOneWeek)
+          Period.ONE_MONTH -> stringResource(Res.string.settingsPostsDeletionPeriodOneMonth)
+          Period.THREE_MONTHS -> stringResource(Res.string.settingsPostsDeletionPeriodThreeMonths)
+          Period.SIX_MONTHS -> stringResource(Res.string.settingsPostsDeletionPeriodSixMonths)
+          Period.ONE_YEAR -> stringResource(Res.string.settingsPostsDeletionPeriodOneYear)
+          NEVER -> stringResource(Res.string.settingsPostsDeletionPeriodNever)
+          null -> ""
+        }
 
-      TextButton(
-        modifier =
-          Modifier.onGloballyPositioned { coordinates ->
-            buttonHeight = with(density) { coordinates.size.height.toDp() }
-          },
+      TranslucentButton(
+        text = period,
+        trailingIcon = TwineIcons.ArrowDown,
         onClick = { showDropdown = true },
-        shape = MaterialTheme.shapes.medium,
-      ) {
-        val period =
-          when (postsDeletionPeriod) {
-            Period.ONE_WEEK -> stringResource(Res.string.settingsPostsDeletionPeriodOneWeek)
-            Period.ONE_MONTH -> stringResource(Res.string.settingsPostsDeletionPeriodOneMonth)
-            Period.THREE_MONTHS -> stringResource(Res.string.settingsPostsDeletionPeriodThreeMonths)
-            Period.SIX_MONTHS -> stringResource(Res.string.settingsPostsDeletionPeriodSixMonths)
-            Period.ONE_YEAR -> stringResource(Res.string.settingsPostsDeletionPeriodOneYear)
-            NEVER -> stringResource(Res.string.settingsPostsDeletionPeriodNever)
-            null -> ""
-          }
+      )
 
-        Text(
-          text = period,
-          style = MaterialTheme.typography.labelLarge,
-          color = AppTheme.colorScheme.primary,
-        )
-
-        Spacer(Modifier.requiredWidth(8.dp))
-
-        Icon(
-          imageVector = Icons.Filled.ExpandMore,
-          contentDescription = null,
-          tint = AppTheme.colorScheme.primary,
-        )
-      }
-
-      DropdownMenu(
-        offset = DpOffset(0.dp, buttonHeight.unaryMinus()),
-        expanded = showDropdown,
-        onDismissRequest = { showDropdown = false },
-      ) {
+      DropdownMenu(expanded = showDropdown, onDismissRequest = { showDropdown = false }) {
         Period.entries.forEach { period ->
           val periodString =
             when (period) {
@@ -130,29 +97,14 @@ internal fun PostsDeletionPeriodSettingItem(
               NEVER -> stringResource(Res.string.settingsPostsDeletionPeriodNever)
             }
 
-          val backgroundColor =
-            if (period == postsDeletionPeriod) {
-              AppTheme.colorScheme.outline
-            } else {
-              Color.Unspecified
-            }
-
           DropdownMenuItem(
+            text = periodString,
+            selected = period == postsDeletionPeriod,
             onClick = {
               onValueChanged(period)
               showDropdown = false
             },
-            modifier = Modifier.background(backgroundColor),
-          ) {
-            val textColor =
-              if (period == postsDeletionPeriod) {
-                AppTheme.colorScheme.inverseOnSurface
-              } else {
-                AppTheme.colorScheme.onSurface
-              }
-
-            Text(text = periodString, style = MaterialTheme.typography.bodyLarge, color = textColor)
-          }
+          )
         }
       }
     }

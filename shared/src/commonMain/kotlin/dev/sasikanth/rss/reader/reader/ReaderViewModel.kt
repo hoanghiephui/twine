@@ -17,22 +17,26 @@
 
 package dev.sasikanth.rss.reader.reader
 
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.navigation.toRoute
-import app.cash.paging.cachedIn
-import app.cash.paging.createPager
-import app.cash.paging.createPagingConfig
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.cachedIn
 import dev.sasikanth.rss.reader.app.Screen
 import dev.sasikanth.rss.reader.billing.BillingHandler
 import dev.sasikanth.rss.reader.core.model.local.ResolvedPost
 import dev.sasikanth.rss.reader.core.model.local.ThemeVariant
+import dev.sasikanth.rss.reader.data.repository.MarkAsReadOn
 import dev.sasikanth.rss.reader.data.repository.ObservableSelectedPost
+import dev.sasikanth.rss.reader.data.repository.PostRepository
 import dev.sasikanth.rss.reader.data.repository.ReaderFont
 import dev.sasikanth.rss.reader.data.repository.RssRepository
 import dev.sasikanth.rss.reader.data.repository.SettingsRepository
 import dev.sasikanth.rss.reader.data.repository.WidgetDataRepository
 import dev.sasikanth.rss.reader.data.repository.isPremium
+import dev.sasikanth.rss.reader.media.AudioPlayer as MediaAudioPlayer
 import dev.sasikanth.rss.reader.posts.AllPostsPager
 import dev.sasikanth.rss.reader.reader.ReaderScreenArgs.FromScreen.AudioPlayer
 import dev.sasikanth.rss.reader.reader.ReaderScreenArgs.FromScreen.Bookmarks
@@ -49,6 +53,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
@@ -56,10 +61,13 @@ import kotlinx.coroutines.launch
 import me.tatarka.inject.annotations.Assisted
 import me.tatarka.inject.annotations.Inject
 
+@Stable
 @Inject
 class ReaderViewModel(
   dispatchersProvider: DispatchersProvider,
   private val rssRepository: RssRepository,
+  private val postRepository: PostRepository,
+  private val audioPlayer: MediaAudioPlayer,
   private val widgetDataRepository: WidgetDataRepository,
   private val allPostsPager: AllPostsPager,
   private val settingsRepository: SettingsRepository,
@@ -69,7 +77,7 @@ class ReaderViewModel(
 ) : ViewModel() {
 
   private val coroutineScope = CoroutineScope(SupervisorJob() + dispatchersProvider.main)
-  private val openedPostItems = mutableSetOf<String>()
+  private val _openedPostItems = MutableStateFlow(emptySet<String>())
   private val readerScreenArgs =
     savedStateHandle
       .toRoute<Screen.Reader>(
@@ -80,6 +88,7 @@ class ReaderViewModel(
     ReaderState.default(
       initialPostIndex = readerScreenArgs.postIndex,
       initialPostId = readerScreenArgs.postId,
+      fromScreen = readerScreenArgs.fromScreen,
     )
   private val _state = MutableStateFlow(defaultReaderState)
   val state: StateFlow<ReaderState>
@@ -114,7 +123,7 @@ class ReaderViewModel(
 
   private fun onMarkAsUnreadAndExit(postId: String) {
     coroutineScope.launch {
-      openedPostItems.remove(postId)
+      _openedPostItems.update { it - postId }
       rssRepository.updatePostReadStatus(read = false, id = postId)
       _exitScreen.emit(true)
     }
@@ -155,35 +164,77 @@ class ReaderViewModel(
   }
 
   private fun postPageChange(postIndex: Int, post: ResolvedPost) {
-    openedPostItems += post.id
+    _openedPostItems.update { it + post.id }
     _state.update { it.copy(activePostIndex = postIndex, activePostId = post.id) }
     observableSelectedPost.updateSelectedPost(postIndex, post.id)
+
+    coroutineScope.launch {
+      val markAsReadOn = settingsRepository.markAsReadOn.first()
+      if (markAsReadOn == MarkAsReadOn.Open && post.audioUrl == null) {
+        rssRepository.updatePostReadStatus(read = true, id = post.id)
+      }
+    }
   }
 
   private fun markPostsAsRead(): Job {
-    return coroutineScope.launch { rssRepository.markPostsAsRead(openedPostItems) }
+    return coroutineScope.launch {
+      val markAsReadOn = settingsRepository.markAsReadOn.first()
+      val openedPostItems = _openedPostItems.value
+      if (markAsReadOn != MarkAsReadOn.Open || openedPostItems.isEmpty()) return@launch
+
+      val audioMarkAsReadThreshold = settingsRepository.audioMarkAsReadThreshold.first()
+      val posts = postRepository.postsByIds(openedPostItems)
+      val playbackState = audioPlayer.playbackState.value
+      val thresholdValue = audioMarkAsReadThreshold.value
+
+      val postsToMarkAsRead = buildSet {
+        for (post in posts) {
+          val postId = post.id
+          if (post.audioUrl != null) {
+            val isPlaying = playbackState.playingPostId == postId
+            val progress = if (isPlaying) playbackState.currentPosition else post.audioProgress
+            val duration = if (isPlaying) playbackState.duration else post.audioDuration
+
+            if (duration > 0 && (progress.toFloat() / duration.toFloat()) >= thresholdValue) {
+              add(postId)
+            }
+          } else {
+            add(postId)
+          }
+        }
+      }
+
+      if (postsToMarkAsRead.isNotEmpty()) {
+        rssRepository.markPostsAsRead(postsToMarkAsRead)
+      }
+    }
   }
 
   private fun init() {
     coroutineScope.launch {
       if (readerScreenArgs.fromScreen == Home || readerScreenArgs.fromScreen == AudioPlayer) {
-        val allPostsPagingData = allPostsPager.allPostsPagingData.cachedIn(coroutineScope)
+        val allPostsPagingData =
+          allPostsPager
+            .allPostsPagingData(sessionPostIds = { _openedPostItems.value.toList() })
+            .cachedIn(coroutineScope)
         _state.update { it.copy(posts = allPostsPagingData) }
       } else {
         val posts =
-          createPager(config = createPagingConfig(pageSize = 4, enablePlaceholders = true)) {
+          Pager(config = PagingConfig(pageSize = 4, enablePlaceholders = true)) {
+              val sessionPostIds = _openedPostItems.value.toList()
               when (readerScreenArgs.fromScreen) {
                 is Search -> {
                   rssRepository.search(
                     searchQuery = readerScreenArgs.fromScreen.searchQuery,
                     sortOrder = readerScreenArgs.fromScreen.sortOrder,
+                    sessionPostIds = sessionPostIds,
                   )
                 }
                 Bookmarks -> {
                   rssRepository.bookmarks()
                 }
                 UnreadWidget -> {
-                  widgetDataRepository.unreadPostsPager()
+                  widgetDataRepository.unreadPostsPager(sessionPostIds = sessionPostIds)
                 }
               }
             }

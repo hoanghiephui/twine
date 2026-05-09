@@ -17,20 +17,18 @@
 
 package dev.sasikanth.rss.reader.data.repository
 
-import app.cash.paging.PagingSource
+import androidx.paging.PagingSource
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
-import app.cash.sqldelight.coroutines.mapToOne
 import app.cash.sqldelight.paging3.QueryPagingSource
 import dev.sasikanth.rss.reader.core.model.local.PostFlag
 import dev.sasikanth.rss.reader.core.model.local.ResolvedPost
 import dev.sasikanth.rss.reader.core.model.local.WidgetPost
 import dev.sasikanth.rss.reader.data.database.PostQueries
+import dev.sasikanth.rss.reader.data.database.ReadingHistoryQueries
 import dev.sasikanth.rss.reader.di.scopes.AppScope
 import dev.sasikanth.rss.reader.util.DispatchersProvider
 import kotlin.collections.Set
-import kotlin.time.Clock
-import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -40,19 +38,9 @@ import me.tatarka.inject.annotations.Inject
 @AppScope
 class WidgetDataRepository(
   private val postQueries: PostQueries,
+  private val readingHistoryQueries: ReadingHistoryQueries,
   private val dispatchersProvider: DispatchersProvider,
 ) {
-
-  val unreadPostsCount: Flow<Long>
-    get() =
-      postQueries
-        .unreadPostsCountInSource(
-          isSourceIdsEmpty = true,
-          sourceIds = emptyList(),
-          after = Instant.DISTANT_PAST,
-        )
-        .asFlow()
-        .mapToOne(dispatchersProvider.databaseRead)
 
   suspend fun unreadPostsCountBlocking(): Long {
     return withContext(dispatchersProvider.databaseRead) {
@@ -67,12 +55,11 @@ class WidgetDataRepository(
   }
 
   fun unreadPosts(numberOfPosts: Int): Flow<List<WidgetPost>> {
-    val featuredPostsAfter = Clock.System.now().minus(24.hours)
-
     return postQueries
       .widgetUnreadPosts(
         numberOfPosts = numberOfPosts.toLong(),
         offset = 0,
+        sessionPostIds = emptyList(),
         mapper = {
           id: String,
           _: String,
@@ -91,9 +78,11 @@ class WidgetDataRepository(
           _: String,
           _: Boolean,
           _: Boolean,
+          feedContentReadingTime: Long?,
           _: Long?,
           _: Long?,
-          _: Long? ->
+          _: Long,
+          _: Long ->
           WidgetPost(
             id = id,
             title = title,
@@ -102,6 +91,7 @@ class WidgetDataRepository(
             postedOn = date,
             feedName = feedName,
             feedIcon = feedIcon,
+            readingTimeEstimate = feedContentReadingTime?.toInt() ?: 0,
           )
         },
       )
@@ -115,6 +105,7 @@ class WidgetDataRepository(
         .widgetUnreadPosts(
           numberOfPosts = numberOfPosts.toLong(),
           offset = 0,
+          sessionPostIds = emptyList(),
           mapper = {
             id: String,
             _: String,
@@ -133,9 +124,11 @@ class WidgetDataRepository(
             _: String,
             _: Boolean,
             _: Boolean,
+            feedContentReadingTime: Long?,
             _: Long?,
             _: Long?,
-            _: Long? ->
+            _: Long,
+            _: Long ->
             WidgetPost(
               id = id,
               title = title,
@@ -144,6 +137,7 @@ class WidgetDataRepository(
               postedOn = date,
               feedName = feedName,
               feedIcon = feedIcon,
+              readingTimeEstimate = feedContentReadingTime?.toInt() ?: 0,
             )
           },
         )
@@ -151,15 +145,18 @@ class WidgetDataRepository(
     }
   }
 
-  fun unreadPostsPager(): PagingSource<Int, ResolvedPost> {
+  fun unreadPostsPager(
+    sessionPostIds: List<String> = emptyList()
+  ): PagingSource<Int, ResolvedPost> {
     return QueryPagingSource(
-      countQuery = postQueries.widgetUnreadPostsCount(),
+      countQuery = postQueries.widgetUnreadPostsCount(sessionPostIds = sessionPostIds),
       transacter = postQueries,
       context = dispatchersProvider.databaseRead,
       queryProvider = { limit, offset ->
         postQueries.widgetUnreadPosts(
           numberOfPosts = limit,
           offset = offset,
+          sessionPostIds = sessionPostIds,
           mapper = {
             id,
             sourceId,
@@ -180,7 +177,9 @@ class WidgetDataRepository(
             showFeedFavIcon: Boolean,
             feedContentReadingTime: Long?,
             articleContentReadingTime: Long?,
-            seedColor: Long? ->
+            seedColor: Long?,
+            audioProgress: Long,
+            audioDuration: Long ->
             ResolvedPost(
               id = id,
               sourceId = sourceId,
@@ -202,6 +201,8 @@ class WidgetDataRepository(
               articleContentReadingTime = articleContentReadingTime?.toInt(),
               seedColor = seedColor?.toInt(),
               remoteId = remoteId,
+              audioProgress = audioProgress,
+              audioDuration = audioDuration,
             )
           },
         )

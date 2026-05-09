@@ -33,6 +33,7 @@ import dev.sasikanth.rss.reader.notifications.PermissionRequestBridge
 import dev.sasikanth.rss.reader.platform.PlatformComponent
 import dev.sasikanth.rss.reader.share.ShareComponent
 import dev.sasikanth.rss.reader.utils.ExternalUriHandler
+import dev.sasikanth.rss.reader.widget.GlanceWidgetUpdater
 import io.github.vinceglb.filekit.core.FileKit
 import me.tatarka.inject.annotations.Component
 import me.tatarka.inject.annotations.Provides
@@ -102,6 +103,11 @@ class MainActivity : ComponentActivity() {
   override fun onNewIntent(intent: android.content.Intent) {
     super.onNewIntent(intent)
     intent.data?.let { ExternalUriHandler.onNewUri(it.toString()) }
+  }
+
+  override fun onPause() {
+    super.onPause()
+    GlanceWidgetUpdater.update(this)
   }
 
   override fun onDestroy() {

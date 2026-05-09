@@ -16,10 +16,12 @@
  */
 package dev.sasikanth.rss.reader.app
 
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.sasikanth.rss.reader.core.model.local.Feed
 import dev.sasikanth.rss.reader.core.model.local.FeedGroup
+import dev.sasikanth.rss.reader.core.model.local.PostsSortOrder
 import dev.sasikanth.rss.reader.core.model.local.PostsType
 import dev.sasikanth.rss.reader.core.model.local.Source
 import dev.sasikanth.rss.reader.core.model.local.ThemeVariant
@@ -53,6 +55,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import me.tatarka.inject.annotations.Inject
 
+@Stable
 @Inject
 @ActivityScope
 class AppViewModel(
@@ -62,9 +65,10 @@ class AppViewModel(
   private val observableActiveSource: ObservableActiveSource,
   private val syncCoordinator: SyncCoordinator,
   private val oAuthManager: OAuthManager,
+  private val appInfo: AppInfo,
 ) : ViewModel() {
 
-  private val _state = MutableStateFlow(AppState.DEFAULT)
+  private val _state = MutableStateFlow(AppState.DEFAULT.copy(versionName = appInfo.versionName))
   val state: StateFlow<AppState>
     get() = _state
 
@@ -74,6 +78,14 @@ class AppViewModel(
   init {
     refreshFeedsIfExpired()
     setupSessionTracking()
+
+    viewModelScope.launch {
+      val isOnboardingDone = settingsRepository.isOnboardingDone.first()
+      val lastSeenChangelogVersion = settingsRepository.lastSeenChangelogVersion.first()
+      if (isOnboardingDone && lastSeenChangelogVersion != appInfo.versionName) {
+        _state.update { it.copy(showChangelog = true) }
+      }
+    }
 
     combine(
         combine(
@@ -98,6 +110,7 @@ class AppViewModel(
           settingsRepository.blockImages,
           observableActiveSource.activeSource,
           settingsRepository.postsType,
+          settingsRepository.postsSortOrder,
           ::AppContentSettings,
         ),
       ) { appearanceSettings, contentSettings ->
@@ -112,6 +125,7 @@ class AppViewModel(
             blockImages = contentSettings.blockImages,
             activeSource = contentSettings.activeSource,
             postsType = contentSettings.postsType,
+            postsSortOrder = contentSettings.postsSortOrder,
           )
         }
       }
@@ -124,6 +138,13 @@ class AppViewModel(
 
   fun markPostAsRead(id: String) {
     viewModelScope.launch { rssRepository.updatePostReadStatus(read = true, id = id) }
+  }
+
+  fun onChangelogDismissed() {
+    viewModelScope.launch {
+      settingsRepository.updateLastSeenChangelogVersion(appInfo.versionName)
+      _state.update { it.copy(showChangelog = false) }
+    }
   }
 
   fun onCurrentlyPlayingDeepLink(playingPostId: String) {
@@ -190,6 +211,7 @@ class AppViewModel(
           postId = playingPostId,
           sourceId = post.sourceId,
           activeSourceIds = finalActiveSourceIds,
+          postsSortOrder = finalState.postsSortOrder,
           unreadOnly = finalUnreadOnly,
           after = finalPostsAfter,
           postsUpperBound = postsUpperBound,
@@ -211,16 +233,20 @@ class AppViewModel(
     viewModelScope.launch {
       val signInSucceeded = oAuthManager.handleRedirect(uri)
       if (signInSucceeded) {
-        syncCoordinator.push()
+        syncCoordinator.triggerPush()
       }
       linkHandler.close()
     }
   }
 
+  fun openChangelog() {
+    viewModelScope.launch { _state.update { it.copy(showChangelog = true) } }
+  }
+
   private fun refreshFeedsIfExpired() {
     viewModelScope.launch {
       if (refreshPolicy.hasExpired()) {
-        syncCoordinator.pull()
+        syncCoordinator.triggerPull()
       }
     }
   }
@@ -252,4 +278,5 @@ private data class AppContentSettings(
   val blockImages: Boolean,
   val activeSource: Source?,
   val postsType: PostsType,
+  val postsSortOrder: PostsSortOrder,
 )

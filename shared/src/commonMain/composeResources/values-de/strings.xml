@@ -52,6 +52,15 @@
   <string name="bookmarks">Lesezeichen</string>
   <string name="bookmarksPlaceholder">Mit Lesezeichen versehene Beiträge werden hier angezeigt 🔖</string>
   <string name="settings">Einstellungen</string>
+  <string name="settingsAppearanceAndLayout">Appearance &amp; layout</string>
+  <string name="settingsAppearanceAndLayoutSubtitle">Customize how Twine looks</string>
+  <string name="settingsFeaturesAndBehaviors">Features &amp; behaviors</string>
+  <string name="settingsFeaturesAndBehaviorsSubtitle">Customize how Twine works</string>
+  <string name="settingsServicesAndSync">Services &amp; sync</string>
+  <string name="settingsServicesAndSyncSubtitle">Manage RSS services</string>
+  <string name="settingsYourInsights">Your insights</string>
+  <string name="settingsYourInsightsSubtitle">Manage your reading data</string>
+  <string name="settingsAppInfoAndFeedback">App info &amp; feedback</string>
   <string name="moreMenuOptions">Weitere Menüoptionen</string>
   <string name="settingsHeaderBehaviour">Verhalten</string>
   <string name="settingsHeaderFeedback">Feedback &amp; Fehlerberichte</string>
@@ -62,6 +71,8 @@
   <string name="settingsEnableBlurSubtitle">Wenn deaktiviert, werden Farbverläufe statt unscharfer Bilder angezeigt. Kann die Leistung verbessern.</string>
   <string name="settingsShowUnreadCountTitle">Anzahl ungelesener Beiträge anzeigen</string>
   <string name="settingsShowUnreadCountSubtitle">Zeigt eine Blase über der Feed-Auswahl an</string>
+  <string name="settingsShowPinnedSourcesTitle">Show floating pinned sources</string>
+  <string name="settingsShowPinnedSourcesSubtitle">Displays a floating bar with pinned sources at the bottom of the home screen</string>
   <string name="settingsReportIssue">Ein Problem melden</string>
   <string name="settingsVersion">%1$s (%2$s)</string>
   <string name="settingsAboutTitle">Über</string>
@@ -100,6 +111,7 @@
   <string name="aboutSocialWebsite">Website</string>
   <string name="feedsSearchHint">Filter</string>
   <string name="allFeeds">Feeds</string>
+  <string name="allFeedsCount">%1$s: %2$d</string>
   <string name="pinnedFeeds">Angepinnt</string>
   <string name="markAllAsRead">Als gelesen markieren</string>
   <string name="openWebsite">Website öffnen</string>
@@ -207,8 +219,8 @@
   <string name="settingsSyncDropboxDesc">Konsistente plattformübergreifende Synchronisierung</string>
   <string name="settingsSyncStatusIdle">Nicht synchronisiert</string>
   <string name="settingsSyncStatusSyncing">Synchronisierung...</string>
-  <string name="settingsSyncStatusSuccess">Letzte Synchronisierung: Erfolgreich</string>
-  <string name="settingsSyncStatusFailure">Letzte Synchronisierung: Fehlgeschlagen</string>
+  <string name="settingsSyncStatusSuccess">Synced • %1$s ago</string>
+  <string name="settingsSyncStatusFailure">Sync failed</string>
   <string name="settingsSyncSignIn">Anmelden</string>
   <string name="settingsSyncSignOut">Abmelden</string>
   <string name="settingsCustomisations">Anpassungen</string>
@@ -237,7 +249,7 @@
   <string name="onboardingGetStarted">Get started</string>
   <string name="onboardingSubtitle">Build your feed</string>
   <string name="onboardingSubtitle2">No algorithm. No ads.\nJust the content you love.</string>
-  <string name="readingTimeEstimate">%1$dM read</string>
+  <string name="readingTimeEstimate">%1$dm read</string>
   <string name="play">Play</string>
   <string name="pause">Pause</string>
   <string name="seek_forward">Seek forward 30 seconds</string>
@@ -257,6 +269,7 @@
   <string name="statisticsMore">More</string>
   <string name="settingsStatisticsTitle">Statistics</string>
   <string name="settingsStatisticsSubtitle">View your reading habits and insights</string>
+  <string name="sourcesCount">%1$d sources</string>
   <string name="discoveryTitle">Discovery</string>
   <string name="discoverySearchHint">Search for feeds</string>
   <string name="discoveryAddFeed">Add</string>
@@ -267,6 +280,22 @@
   <string name="accountSelectionLocal">Local</string>
   <string name="accountSelectionLocalAccount">On Device</string>
   <string name="accountSelectionCloudSync">Cloud Sync</string>
+  <string name="unit_seconds">%1$ds</string>
+  <string name="unit_minutes">%1$dm</string>
+  <string name="unit_hours">%1$dh</string>
+  <string name="unit_days">%1$dd</string>
+  <string name="month_jan">Jan</string>
+  <string name="month_feb">Feb</string>
+  <string name="month_mar">Mar</string>
+  <string name="month_apr">Apr</string>
+  <string name="month_may">May</string>
+  <string name="month_jun">Jun</string>
+  <string name="month_jul">Jul</string>
+  <string name="month_aug">Aug</string>
+  <string name="month_sep">Sep</string>
+  <string name="month_oct">Oct</string>
+  <string name="month_nov">Nov</string>
+  <string name="month_dec">Dec</string>
   <!-- Plurals -->
   <plurals name="searchResultsCount">
     <item quantity="one">%1$d Ergebnis</item>

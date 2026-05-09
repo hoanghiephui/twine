@@ -17,6 +17,7 @@
 package dev.sasikanth.rss.reader.di
 
 import dev.sasikanth.rss.reader.billing.BillingComponent
+import dev.sasikanth.rss.reader.core.base.widget.di.WidgetComponent
 import dev.sasikanth.rss.reader.core.network.di.NetworkComponent
 import dev.sasikanth.rss.reader.data.di.DataComponent
 import dev.sasikanth.rss.reader.data.refreshpolicy.RefreshPolicy
@@ -36,6 +37,7 @@ abstract class SharedApplicationComponent :
   ImageLoaderComponent,
   BillingComponent,
   NotificationsComponent,
+  WidgetComponent,
   PostsComponent {
 
   abstract val initializers: Set<Initializer>

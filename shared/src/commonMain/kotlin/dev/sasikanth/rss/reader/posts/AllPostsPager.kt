@@ -18,9 +18,9 @@
 package dev.sasikanth.rss.reader.posts
 
 import androidx.compose.ui.graphics.toArgb
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
 import androidx.paging.PagingData
-import app.cash.paging.createPager
-import app.cash.paging.createPagingConfig
 import dev.sasikanth.rss.reader.core.model.local.FeaturedPostItem
 import dev.sasikanth.rss.reader.core.model.local.Feed
 import dev.sasikanth.rss.reader.core.model.local.FeedGroup
@@ -45,6 +45,8 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -53,6 +55,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -71,9 +74,9 @@ class AllPostsPager(
   private val rssRepository: RssRepository,
   private val syncCoordinator: SyncCoordinator,
   private val seedColorExtractor: SeedColorExtractor,
-  dispatchersProvider: DispatchersProvider,
+  private val dispatchersProvider: DispatchersProvider,
 ) {
-  private val coroutineScope = CoroutineScope(SupervisorJob() + dispatchersProvider.main)
+  private val coroutineScope = CoroutineScope(SupervisorJob() + dispatchersProvider.default)
 
   private data class PostsParameters(
     val activeSourceIds: List<String>,
@@ -95,23 +98,28 @@ class AllPostsPager(
       }
       .distinctUntilChanged()
 
-  val allPostsPagingData: Flow<PagingData<ResolvedPost>> =
+  fun allPostsPagingData(
+    sessionPostIds: () -> List<String> = { emptyList() }
+  ): Flow<PagingData<ResolvedPost>> =
     baseParameters.flatMapLatest { params ->
-      createPager(config = createPagingConfig(pageSize = 20, enablePlaceholders = true)) {
+      Pager(config = PagingConfig(pageSize = 20, enablePlaceholders = true)) {
           rssRepository.allPosts(
             activeSourceIds = params.activeSourceIds,
             postsSortOrder = params.postsSortOrder,
             unreadOnly = params.unreadOnly,
             after = params.postsAfter,
             postsUpperBound = params.postsUpperBound,
+            sessionPostIds = sessionPostIds(),
           )
         }
         .flow
     }
 
-  val nonFeaturedPostsPagingData: Flow<PagingData<ResolvedPost>> =
+  fun nonFeaturedPostsPagingData(
+    sessionPostIds: () -> List<String> = { emptyList() }
+  ): Flow<PagingData<ResolvedPost>> =
     baseParameters.flatMapLatest { params ->
-      createPager(config = createPagingConfig(pageSize = 20, enablePlaceholders = true)) {
+      Pager(config = PagingConfig(pageSize = 20, enablePlaceholders = true)) {
           rssRepository.nonFeaturedPosts(
             activeSourceIds = params.activeSourceIds,
             postsSortOrder = params.postsSortOrder,
@@ -119,30 +127,47 @@ class AllPostsPager(
             after = params.postsAfter,
             featuredPostsAfter = params.featuredPostsAfter,
             postsUpperBound = params.postsUpperBound,
+            sessionPostIds = sessionPostIds(),
           )
         }
         .flow
     }
 
-  val featuredPosts: Flow<ImmutableList<FeaturedPostItem>> =
-    baseParameters.flatMapLatest { params ->
+  fun featuredPosts(
+    sessionPostIds: Flow<List<String>> = flowOf(emptyList())
+  ): Flow<ImmutableList<FeaturedPostItem>> =
+    combine(baseParameters, sessionPostIds, ::Pair).flatMapLatest { (params, sessionPostIds) ->
       rssRepository
         .featuredPosts(
           activeSourceIds = params.activeSourceIds,
+          postsSortOrder = params.postsSortOrder,
           unreadOnly = params.unreadOnly,
           after = params.postsAfter,
           featuredPostsAfter = params.featuredPostsAfter,
           postsUpperBound = params.postsUpperBound,
+          sessionPostIds = sessionPostIds,
         )
         .onEach { posts ->
-          posts.forEach { post ->
-            if (post.seedColor == null && !post.imageUrl.isNullOrBlank()) {
-              coroutineScope.launch {
-                val seedColor = seedColorExtractor.calculateSeedColor(post.imageUrl)
-                if (seedColor != null) {
-                  rssRepository.updateSeedColor(seedColor.toArgb(), post.id)
+          coroutineScope.launch(dispatchersProvider.io) {
+            val seedColorUpdates =
+              posts
+                .filter { it.seedColor == null && !it.imageUrl.isNullOrBlank() }
+                .map { post ->
+                  async {
+                    val seedColor = seedColorExtractor.calculateSeedColor(post.imageUrl)
+                    if (seedColor != null) {
+                      post.id to seedColor.toArgb()
+                    } else {
+                      null
+                    }
+                  }
                 }
-              }
+                .awaitAll()
+                .filterNotNull()
+                .toMap()
+
+            if (seedColorUpdates.isNotEmpty()) {
+              rssRepository.updateSeedColors(seedColorUpdates)
             }
           }
         }

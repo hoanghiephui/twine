@@ -17,27 +17,35 @@
 
 package dev.sasikanth.rss.reader.components
 
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeightIn
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.sasikanth.rss.reader.ui.AppTheme
+import kotlinx.coroutines.launch
 
 @Composable
 fun ToggleableButtonGroup(
@@ -45,59 +53,104 @@ fun ToggleableButtonGroup(
   onItemSelected: (ToggleableButtonItem) -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  val containerHeight = 48.dp
+  val indicatorHeight = 40.dp
+  val horizontalPadding = 4.dp
+  val itemSpacing = 1.dp
+
   Box(
     modifier =
       Modifier.then(modifier)
-        .requiredHeightIn(min = 56.dp)
-        .border(
-          width = 1.dp,
-          color = AppTheme.colorScheme.outlineVariant,
-          shape = MaterialTheme.shapes.large,
-        )
+        .requiredHeightIn(min = containerHeight)
+        .border(width = 1.dp, color = AppTheme.colorScheme.outline, shape = CircleShape)
   ) {
-    val backgroundColor = AppTheme.colorScheme.primary
-    val selectedItemIndex by
-      animateFloatAsState(items.indexOfFirst { it.isSelected }.toFloat(), label = "selected_index")
+    val backgroundColor = AppTheme.colorScheme.inverseSurface
+    val initialIndex = items.indexOfFirst { it.isSelected }.coerceAtLeast(0).toFloat()
+    val selectedItemIndex = remember { Animatable(initialIndex) }
+    val coroutineScope = rememberCoroutineScope()
 
     Row(
       modifier =
-        Modifier.padding(4.dp).drawBehind {
-          val spacingBetween = 4.dp.toPx()
-          val itemWidth = (size.width - spacingBetween * (items.size - 1)) / items.size
+        Modifier.padding(horizontal = horizontalPadding).drawBehind {
+          val itemSpacingPx = itemSpacing.toPx()
+          val itemCount = items.size
+          val itemWidth = (size.width - (itemSpacingPx * (itemCount - 1))) / itemCount
+
+          val indicatorHeightPx = indicatorHeight.toPx()
+          val yOffset = (size.height - indicatorHeightPx) / 2
 
           drawRoundRect(
             color = backgroundColor,
             topLeft =
-              Offset(
-                x = itemWidth * selectedItemIndex + spacingBetween * selectedItemIndex,
-                y = 0f,
-              ),
-            size = Size(width = itemWidth, height = size.height),
-            cornerRadius = CornerRadius(12.dp.toPx()),
+              Offset(x = (itemWidth + itemSpacingPx) * selectedItemIndex.value, y = yOffset),
+            size = Size(width = itemWidth, height = indicatorHeightPx),
+            cornerRadius = CornerRadius(size.height / 2),
           )
         },
       verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(4.dp),
+      horizontalArrangement = Arrangement.spacedBy(itemSpacing),
     ) {
-      items.forEach { toggleableButtonItem ->
-        TextButton(
-          modifier = Modifier.weight(1f).requiredHeightIn(min = 48.dp),
-          content = { Text(toggleableButtonItem.label) },
-          shape = MaterialTheme.shapes.medium,
-          colors =
-            ButtonDefaults.textButtonColors(
-              contentColor =
-                if (toggleableButtonItem.isSelected) {
-                  AppTheme.colorScheme.surfaceContainerLow
-                } else {
-                  AppTheme.colorScheme.primary
-                }
-            ),
-          onClick = { onItemSelected(toggleableButtonItem) },
+      items.forEachIndexed { index, item ->
+        val isSelected = item.isSelected
+        val isFirst = index == 0
+        val isPreviousSelected = if (index > 0) items[index - 1].isSelected else false
+
+        ToggleableButton(
+          modifier = Modifier.weight(1f),
+          item = item,
+          showDivider = !isFirst && !isSelected && !isPreviousSelected,
+          onClick = {
+            coroutineScope.launch {
+              selectedItemIndex.animateTo(index.toFloat())
+              onItemSelected(item)
+            }
+          },
         )
       }
     }
   }
 }
 
+@Composable
+private fun ToggleableButton(
+  item: ToggleableButtonItem,
+  showDivider: Boolean,
+  onClick: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+    if (showDivider) {
+      VerticalDivider(
+        modifier = Modifier.height(20.dp),
+        color = AppTheme.colorScheme.outlineVariant,
+      )
+    }
+
+    Surface(
+      modifier = Modifier.fillMaxWidth().requiredHeightIn(min = 40.dp),
+      shape = CircleShape,
+      color = Color.Transparent,
+      onClick = onClick,
+    ) {
+      val contentColor =
+        if (item.isSelected) {
+          AppTheme.colorScheme.inverseOnSurface
+        } else {
+          AppTheme.colorScheme.onSurfaceVariant
+        }
+
+      Box(contentAlignment = Alignment.Center) {
+        Text(
+          item.label,
+          style = MaterialTheme.typography.labelLarge,
+          color = contentColor,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+      }
+    }
+  }
+}
+
+@Immutable
 data class ToggleableButtonItem(val label: String, val isSelected: Boolean, val identifier: Any?)

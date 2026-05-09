@@ -47,6 +47,10 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
 
         UNUserNotificationCenter.current().delegate = self
 
+        IosWidgetUpdateBridge.shared.register {
+            WidgetCenter.shared.reloadAllTimelines()
+        }
+
         applicationComponent.initializers
             .compactMap { ($0 as! any Initializer) }
             .forEach { initializer in
@@ -114,11 +118,13 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
                         },
                         content: {
                             return NSLocalizedString("notification_new_articles_content", comment: "")
+                        },
+                        perFeedTitle: { feedName, count in
+                            return String.localizedStringWithFormat(NSLocalizedString("notification_new_articles_per_feed_title", comment: ""), feedName, count)
                         }
                     )
                 }
                 
-                WidgetCenter.shared.reloadTimelines(ofKind: AppDelegate.unreadWidgetKind)
                 task.setTaskCompleted(success: true)
             } catch {
                 Bugsnag.notifyError(error)

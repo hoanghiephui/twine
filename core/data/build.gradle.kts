@@ -23,6 +23,10 @@ plugins {
 }
 
 kotlin {
+  val isFoss =
+    project.findProperty("twine.isFoss")?.toString()?.toBoolean()
+      ?: gradle.startParameter.taskNames.any { it.contains("Foss", ignoreCase = true) }
+
   jvmToolchain(21)
 
   compilerOptions { freeCompilerArgs.add("-Xexpect-actual-classes") }
@@ -57,6 +61,7 @@ kotlin {
       api(libs.androidx.datastore.okio)
       api(libs.uuid)
       api(libs.ktor.core)
+      implementation(libs.ktor.resources)
       implementation(libs.ktor.content.negotiation)
       implementation(libs.ktor.json)
       api(libs.kotlinx.serialization.json)
@@ -69,13 +74,16 @@ kotlin {
       implementation(libs.kotlin.test)
       implementation(libs.kotlinx.coroutines.test)
       implementation(libs.ktor.client.mock)
+      implementation(libs.ktor.resources)
     }
 
     androidMain.dependencies {
       implementation(libs.androidx.annotation)
       implementation(libs.sqldelight.driver.android)
       api(libs.sqliteAndroid)
-      implementation(libs.crashkios.bugsnag)
+      if (!isFoss) {
+        implementation(libs.crashkios.bugsnag)
+      }
     }
 
     iosMain.dependencies {

@@ -1,6 +1,7 @@
 import SwiftUI
 import shared
 import BackgroundTasks
+import WidgetKit
 
 @main
 struct iOSApp: App {

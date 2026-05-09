@@ -21,13 +21,17 @@ enum class ThemeVariant(
   val isPremium: Boolean,
   val isDarkModeOnly: Boolean = false,
   val isLightModeOnly: Boolean = false,
+  val isAndroidOnly: Boolean = false,
 ) {
   Dynamic(isPremium = false),
+  SystemDynamic(isPremium = false, isAndroidOnly = true),
   Solarized(isPremium = false),
   Forest(isPremium = false),
   Amber(isPremium = true),
+  Coral(isPremium = true),
   Raspberry(isPremium = true),
-  Skyline(isPremium = true);
+  Skyline(isPremium = true),
+  Parchment(isPremium = true);
 
   fun isDark(isSystemDark: Boolean): Boolean {
     if (isDarkModeOnly) return true

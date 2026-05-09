@@ -12,6 +12,8 @@ import SwiftUI
 @main
 struct TwineWidgetBundle: WidgetBundle {
     var body: some Widget {
-        TwineUnreadWidget()
+        TwineUnreadSmallWidget()
+        TwineUnreadMediumWidget()
+        TwineUnreadLargeWidget()
     }
 }

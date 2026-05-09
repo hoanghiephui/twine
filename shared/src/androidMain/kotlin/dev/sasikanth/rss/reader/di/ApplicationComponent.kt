@@ -22,6 +22,7 @@ import android.os.Build
 import dev.sasikanth.rss.reader.app.AppInfo
 import dev.sasikanth.rss.reader.app.isFoss
 import dev.sasikanth.rss.reader.billing.BillingHandler
+import dev.sasikanth.rss.reader.core.base.widget.di.WidgetPlatformComponent
 import dev.sasikanth.rss.reader.data.repository.RssRepository
 import dev.sasikanth.rss.reader.data.repository.SettingsRepository
 import dev.sasikanth.rss.reader.data.repository.WidgetDataRepository
@@ -37,7 +38,7 @@ import me.tatarka.inject.annotations.Provides
 @AppScope
 @Component
 abstract class ApplicationComponent(@get:Provides val context: Context) :
-  SharedApplicationComponent() {
+  SharedApplicationComponent(), WidgetPlatformComponent {
 
   abstract val rssRepository: RssRepository
 

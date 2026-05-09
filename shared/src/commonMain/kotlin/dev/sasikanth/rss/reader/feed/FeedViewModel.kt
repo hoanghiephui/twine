@@ -17,6 +17,7 @@
 
 package dev.sasikanth.rss.reader.feed
 
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -31,6 +32,7 @@ import dev.sasikanth.rss.reader.util.DispatchersProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -42,6 +44,7 @@ import kotlinx.datetime.toInstant
 import me.tatarka.inject.annotations.Assisted
 import me.tatarka.inject.annotations.Inject
 
+@Stable
 @Inject
 class FeedViewModel(
   private val dispatchersProvider: DispatchersProvider,
@@ -71,7 +74,18 @@ class FeedViewModel(
         onShowFeedFavIconChanged(event.newValue, event.feedId)
       is FeedEvent.OnHideFromAllFeedsChanged ->
         onHideFromAllFeedsChanged(event.newValue, event.feedId)
+      is FeedEvent.OnEnableNotificationsChanged ->
+        onEnableNotificationsChanged(event.newValue, event.feedId)
       is FeedEvent.OnMarkPostsAsRead -> onMarkPostsAsRead(event.feedId)
+    }
+  }
+
+  private fun onEnableNotificationsChanged(newValue: Boolean, feedId: String) {
+    viewModelScope.launch {
+      rssRepository.updateFeedEnableNotifications(feedId, newValue)
+      if (newValue && !_state.value.globalNotificationsEnabled) {
+        settingsRepository.toggleNotifications(true)
+      }
     }
   }
 
@@ -133,7 +147,14 @@ class FeedViewModel(
           postsAfter = postsAfter,
           postsUpperBound = dateTime.toInstant(TimeZone.currentSystemDefault()),
         )
-        .onEach { feed -> _state.update { it.copy(feed = feed) } }
+        .combine(settingsRepository.enableNotifications) { feed, globalNotificationsEnabled ->
+          feed to globalNotificationsEnabled
+        }
+        .onEach { (feed, globalNotificationsEnabled) ->
+          _state.update {
+            it.copy(feed = feed, globalNotificationsEnabled = globalNotificationsEnabled)
+          }
+        }
         .catch {
           // no-op
           // When we delete a feed, this flow crashes because, that feed is no longer available

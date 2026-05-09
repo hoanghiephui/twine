@@ -17,6 +17,7 @@
 
 package dev.sasikanth.rss.reader.discovery
 
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.sasikanth.rss.reader.core.model.DiscoveryFeed
@@ -34,6 +35,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.tatarka.inject.annotations.Inject
 
+@Stable
 @Inject
 class DiscoveryViewModel(
   private val discoveryRepository: DiscoveryRepository,
@@ -65,6 +67,12 @@ class DiscoveryViewModel(
         _state.update { it.copy(searchQuery = event.query) }
       }
       is DiscoveryEvent.AddFeedClicked -> addFeed(event.feed)
+      is DiscoveryEvent.ShowFeedInfo -> {
+        _state.update { it.copy(selectedFeed = event.feed) }
+      }
+      DiscoveryEvent.HideFeedInfo -> {
+        _state.update { it.copy(selectedFeed = null) }
+      }
     }
   }
 

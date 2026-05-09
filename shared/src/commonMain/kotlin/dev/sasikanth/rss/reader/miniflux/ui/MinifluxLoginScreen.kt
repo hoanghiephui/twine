@@ -19,7 +19,6 @@ package dev.sasikanth.rss.reader.miniflux.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,19 +30,14 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,27 +47,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.sasikanth.rss.reader.components.AlertDialog
 import dev.sasikanth.rss.reader.components.Button
-import dev.sasikanth.rss.reader.components.CircularIconButton
+import dev.sasikanth.rss.reader.components.SimpleTopAppBar
 import dev.sasikanth.rss.reader.components.TextField
 import dev.sasikanth.rss.reader.miniflux.MinifluxLoginError
 import dev.sasikanth.rss.reader.miniflux.MinifluxLoginEvent
+import dev.sasikanth.rss.reader.miniflux.MinifluxLoginState
 import dev.sasikanth.rss.reader.miniflux.MinifluxLoginViewModel
-import dev.sasikanth.rss.reader.resources.icons.ArrowBack
-import dev.sasikanth.rss.reader.resources.icons.TwineIcons
 import dev.sasikanth.rss.reader.ui.AppTheme
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 import twine.shared.generated.resources.Res
 import twine.shared.generated.resources.buttonCancel
-import twine.shared.generated.resources.buttonGoBack
 import twine.shared.generated.resources.minifluxAPIKeyHint
 import twine.shared.generated.resources.minifluxApiKey
 import twine.shared.generated.resources.minifluxClearDataDesc
@@ -95,8 +90,6 @@ fun MinifluxLoginScreen(
   modifier: Modifier = Modifier,
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
-  val snackbarHostState = remember { SnackbarHostState() }
-  val (urlFocus, apiKeyFocus) = remember { FocusRequester.createRefs() }
 
   LaunchedEffect(state.loginSuccess, state.error) {
     if (state.loginSuccess) {
@@ -110,89 +103,56 @@ fun MinifluxLoginScreen(
           is MinifluxLoginError.Unknown ->
             error.message.ifBlank { getString(Res.string.minifluxErrorUnknown) }
         }
+      // Note: snackbarHostState handling is now inside MinifluxLoginContent
+    }
+  }
+
+  MinifluxLoginContent(
+    state = state,
+    onEvent = viewModel::onEvent,
+    goBack = goBack,
+    modifier = modifier,
+  )
+}
+
+@Composable
+private fun MinifluxLoginContent(
+  state: MinifluxLoginState,
+  onEvent: (MinifluxLoginEvent) -> Unit,
+  goBack: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val snackbarHostState = remember { SnackbarHostState() }
+  val (urlFocus, apiKeyFocus) = remember { FocusRequester.createRefs() }
+
+  LaunchedEffect(state.error) {
+    val error = state.error
+    if (error != null) {
+      val errorMessage =
+        when (error) {
+          MinifluxLoginError.LoginFailed -> getString(Res.string.minifluxErrorLoginFailed)
+          is MinifluxLoginError.Unknown ->
+            error.message.ifBlank { getString(Res.string.minifluxErrorUnknown) }
+        }
       snackbarHostState.showSnackbar(message = errorMessage)
     }
   }
 
   if (state.showConfirmationDialog) {
     AlertDialog(
-      onDismissRequest = { viewModel.onEvent(MinifluxLoginEvent.OnConfirmationDismissed) },
-      title = {
-        Text(
-          text = stringResource(Res.string.minifluxClearDataTitle),
-          color = AppTheme.colorScheme.onSurface,
-        )
-      },
-      text = {
-        Text(
-          text = stringResource(Res.string.minifluxClearDataDesc),
-          color = AppTheme.colorScheme.onSurfaceVariant,
-        )
-      },
-      confirmButton = {
-        TextButton(
-          onClick = { viewModel.onEvent(MinifluxLoginEvent.OnConfirmClearDataClicked) },
-          shape = MaterialTheme.shapes.large,
-        ) {
-          Text(
-            text = stringResource(Res.string.minifluxClearDataPositive),
-            style = MaterialTheme.typography.labelLarge,
-            color = AppTheme.colorScheme.primary,
-          )
-        }
-      },
-      dismissButton = {
-        TextButton(
-          onClick = { viewModel.onEvent(MinifluxLoginEvent.OnConfirmationDismissed) },
-          shape = MaterialTheme.shapes.large,
-        ) {
-          Text(
-            text = stringResource(Res.string.buttonCancel),
-            style = MaterialTheme.typography.labelLarge,
-            color = AppTheme.colorScheme.onSurfaceVariant,
-          )
-        }
-      },
-      containerColor = AppTheme.colorScheme.surfaceContainerLow,
-      titleContentColor = AppTheme.colorScheme.onSurface,
-      textContentColor = AppTheme.colorScheme.onSurface,
+      title = stringResource(Res.string.minifluxClearDataTitle),
+      text = stringResource(Res.string.minifluxClearDataDesc),
+      confirmText = stringResource(Res.string.minifluxClearDataPositive),
+      dismissText = stringResource(Res.string.buttonCancel),
+      onConfirm = { onEvent(MinifluxLoginEvent.OnConfirmClearDataClicked) },
+      onDismiss = { onEvent(MinifluxLoginEvent.OnConfirmationDismissed) },
     )
   }
 
   Scaffold(
     modifier = modifier,
     topBar = {
-      Box {
-        CenterAlignedTopAppBar(
-          title = {
-            Text(
-              text = stringResource(Res.string.minifluxLoginTitle),
-              color = AppTheme.colorScheme.onSurface,
-              style = MaterialTheme.typography.titleMedium,
-            )
-          },
-          navigationIcon = {
-            CircularIconButton(
-              modifier = Modifier.padding(start = 12.dp),
-              icon = TwineIcons.ArrowBack,
-              label = stringResource(Res.string.buttonGoBack),
-              onClick = goBack,
-            )
-          },
-          colors =
-            TopAppBarDefaults.topAppBarColors(
-              containerColor = AppTheme.colorScheme.surface,
-              navigationIconContentColor = AppTheme.colorScheme.onSurface,
-              titleContentColor = AppTheme.colorScheme.onSurface,
-              actionIconContentColor = AppTheme.colorScheme.onSurface,
-            ),
-        )
-
-        HorizontalDivider(
-          modifier = Modifier.align(Alignment.BottomCenter),
-          color = AppTheme.colorScheme.outlineVariant,
-        )
-      }
+      SimpleTopAppBar(title = stringResource(Res.string.minifluxLoginTitle), onBackClick = goBack)
     },
     snackbarHost = {
       SnackbarHost(hostState = snackbarHostState) { snackbarData ->
@@ -226,7 +186,7 @@ fun MinifluxLoginScreen(
           ),
         enabled = !state.isLoading && state.url.isNotBlank() && state.apiKey.isNotBlank(),
         shape = MaterialTheme.shapes.extraLarge,
-        onClick = { viewModel.onEvent(MinifluxLoginEvent.OnLoginClicked) },
+        onClick = { onEvent(MinifluxLoginEvent.OnLoginClicked) },
       ) {
         if (state.isLoading) {
           CircularProgressIndicator(
@@ -244,6 +204,7 @@ fun MinifluxLoginScreen(
       }
     },
     containerColor = AppTheme.colorScheme.backdrop,
+    contentColor = Color.Unspecified,
   ) { padding ->
     LazyColumn(
       modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 24.dp),
@@ -257,7 +218,7 @@ fun MinifluxLoginScreen(
           modifier =
             Modifier.fillMaxWidth().focusRequester(urlFocus).focusProperties { next = apiKeyFocus },
           value = state.url,
-          onValueChange = { viewModel.onEvent(MinifluxLoginEvent.OnUrlChanged(it)) },
+          onValueChange = { onEvent(MinifluxLoginEvent.OnUrlChanged(it)) },
           hint = stringResource(Res.string.minifluxServerUrl),
           enabled = !state.isLoading,
           keyboardOptions =
@@ -273,7 +234,7 @@ fun MinifluxLoginScreen(
         TextField(
           modifier = Modifier.fillMaxWidth().focusRequester(apiKeyFocus),
           value = state.apiKey,
-          onValueChange = { viewModel.onEvent(MinifluxLoginEvent.OnApiKeyChanged(it)) },
+          onValueChange = { onEvent(MinifluxLoginEvent.OnApiKeyChanged(it)) },
           hint = stringResource(Res.string.minifluxApiKey),
           enabled = !state.isLoading,
           visualTransformation = PasswordVisualTransformation(),
@@ -284,7 +245,7 @@ fun MinifluxLoginScreen(
               imeAction = ImeAction.Done,
             ),
           keyboardActions =
-            KeyboardActions(onDone = { viewModel.onEvent(MinifluxLoginEvent.OnLoginClicked) }),
+            KeyboardActions(onDone = { onEvent(MinifluxLoginEvent.OnLoginClicked) }),
           supportingText = {
             Text(
               text = stringResource(Res.string.minifluxAPIKeyHint),
@@ -296,4 +257,10 @@ fun MinifluxLoginScreen(
       }
     }
   }
+}
+
+@Preview(locale = "en")
+@Composable
+private fun MinifluxLoginPreview() {
+  AppTheme { MinifluxLoginContent(state = MinifluxLoginState.DEFAULT, onEvent = {}, goBack = {}) }
 }

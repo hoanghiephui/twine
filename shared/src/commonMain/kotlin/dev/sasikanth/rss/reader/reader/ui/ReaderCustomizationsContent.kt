@@ -37,9 +37,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.FormatLineSpacing
-import androidx.compose.material.icons.rounded.FormatSize
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -63,9 +60,12 @@ import dev.sasikanth.rss.reader.data.repository.ReaderFont.Golos
 import dev.sasikanth.rss.reader.data.repository.ReaderFont.GoogleSans
 import dev.sasikanth.rss.reader.data.repository.ReaderFont.Lora
 import dev.sasikanth.rss.reader.data.repository.ReaderFont.Merriweather
+import dev.sasikanth.rss.reader.data.repository.ReaderFont.Outfit
 import dev.sasikanth.rss.reader.data.repository.ReaderFont.RobotoSerif
 import dev.sasikanth.rss.reader.data.repository.isPremium
 import dev.sasikanth.rss.reader.resources.icons.CustomTypography
+import dev.sasikanth.rss.reader.resources.icons.FormatLineSpacing
+import dev.sasikanth.rss.reader.resources.icons.FormatSize
 import dev.sasikanth.rss.reader.resources.icons.Palette
 import dev.sasikanth.rss.reader.resources.icons.StarShine
 import dev.sasikanth.rss.reader.resources.icons.TwineIcons
@@ -76,6 +76,7 @@ import dev.sasikanth.rss.reader.ui.GoogleSansFontFamily
 import dev.sasikanth.rss.reader.ui.LocalTranslucentStyles
 import dev.sasikanth.rss.reader.ui.LoraFontFamily
 import dev.sasikanth.rss.reader.ui.MerriWeatherFontFamily
+import dev.sasikanth.rss.reader.ui.OutfitFontFamily
 import dev.sasikanth.rss.reader.ui.RobotoSerifFontFamily
 import kotlin.math.roundToInt
 import org.jetbrains.compose.resources.stringResource
@@ -111,7 +112,7 @@ internal fun ReaderCustomizationsContent(
       state = themeVariantListState,
       contentPadding = PaddingValues(horizontal = 28.dp, vertical = 8.dp),
       horizontalArrangement = Arrangement.spacedBy(16.dp),
-      verticalAlignment = Alignment.CenterVertically,
+      verticalAlignment = Alignment.Top,
     ) {
       items(ThemeVariant.entries) { themeVariant ->
         ThemeVariantIconButton(
@@ -119,6 +120,7 @@ internal fun ReaderCustomizationsContent(
           selected = themeVariant == selectedThemeVariant,
           isSubscribed = isSubscribed,
           useDarkTheme = isParentThemeDark,
+          showLabel = true,
           onClick = { onThemeVariantChange(themeVariant) },
         )
       }
@@ -145,6 +147,7 @@ internal fun ReaderCustomizationsContent(
             Lora -> LoraFontFamily
             Merriweather -> MerriWeatherFontFamily
             RobotoSerif -> RobotoSerifFontFamily
+            Outfit -> OutfitFontFamily
           }
 
         TypefaceChip(
@@ -184,7 +187,7 @@ private fun FontLineHeightStepper(
   ) {
     Icon(
       modifier = Modifier.requiredSize(20.dp),
-      imageVector = Icons.Rounded.FormatLineSpacing,
+      imageVector = TwineIcons.FormatLineSpacing,
       contentDescription = null,
       tint = AppTheme.colorScheme.onSurface,
     )
@@ -238,7 +241,7 @@ private fun FontScaleStepper(
   ) {
     Icon(
       modifier = Modifier.requiredSize(20.dp),
-      imageVector = Icons.Rounded.FormatSize,
+      imageVector = TwineIcons.FormatSize,
       contentDescription = null,
       tint = AppTheme.colorScheme.onSurface,
     )

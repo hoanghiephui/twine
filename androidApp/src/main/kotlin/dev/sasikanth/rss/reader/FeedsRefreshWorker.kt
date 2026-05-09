@@ -23,12 +23,12 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequest
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkerParameters
-import co.touchlab.crashkios.bugsnag.BugsnagKotlin
-import com.bugsnag.android.Bugsnag
 import dev.sasikanth.rss.reader.data.refreshpolicy.RefreshPolicy
 import dev.sasikanth.rss.reader.data.repository.SettingsRepository
 import dev.sasikanth.rss.reader.data.sync.SyncCoordinator
 import dev.sasikanth.rss.reader.data.sync.utils.NewArticleNotifier
+import dev.sasikanth.rss.reader.logging.CrashReporter
+import dev.sasikanth.rss.reader.widget.GlanceWidgetUpdater
 import java.time.Duration
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
@@ -75,14 +75,24 @@ class FeedsRefreshWorker(
             )
           },
           content = { applicationContext.getString(R.string.notification_new_articles_content) },
+          perFeedTitle = { feedName, count ->
+            applicationContext.resources.getQuantityString(
+              R.plurals.notification_new_articles_per_feed_title,
+              count,
+              feedName,
+              count,
+            )
+          },
         )
+
+        GlanceWidgetUpdater.update(applicationContext)
 
         Result.success()
       } catch (e: CancellationException) {
         Result.failure()
       } catch (e: Exception) {
-        Bugsnag.leaveBreadcrumb("Background Worker")
-        BugsnagKotlin.sendFatalException(e)
+        CrashReporter.leaveBreadcrumb("Background Worker")
+        CrashReporter.log(e)
         Result.failure()
       }
     } else {

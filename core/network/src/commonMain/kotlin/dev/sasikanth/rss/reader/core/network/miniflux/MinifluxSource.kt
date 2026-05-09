@@ -25,6 +25,7 @@ import dev.sasikanth.rss.reader.core.model.remote.miniflux.MinifluxEntriesPayloa
 import dev.sasikanth.rss.reader.core.model.remote.miniflux.MinifluxEntryContent
 import dev.sasikanth.rss.reader.core.model.remote.miniflux.MinifluxError
 import dev.sasikanth.rss.reader.core.model.remote.miniflux.MinifluxFeed
+import dev.sasikanth.rss.reader.core.model.remote.miniflux.MinifluxFeedIconResponse
 import dev.sasikanth.rss.reader.core.model.remote.miniflux.MinifluxUser
 import dev.sasikanth.rss.reader.util.DispatchersProvider
 import io.ktor.client.HttpClient
@@ -115,11 +116,31 @@ class MinifluxSource(
     }
   }
 
+  suspend fun feedIcon(feedId: Long): MinifluxFeedIconResponse? {
+    return withContext(dispatchersProvider.io) {
+      try {
+        val response =
+          authenticatedHttpClient()
+            .get(MinifluxApi.Feed.Icon(parent = MinifluxApi.Feed(feedId = feedId)))
+        if (response.status == HttpStatusCode.OK) {
+          response.body<MinifluxFeedIconResponse>()
+        } else {
+          null
+        }
+      } catch (e: Exception) {
+        Logger.e(e) { "Failed to fetch icon for feed: $feedId" }
+        null
+      }
+    }
+  }
+
   suspend fun entries(
-    status: List<String>? = null,
+    status: String? = null,
     limit: Int? = null,
     offset: Int? = null,
     after: Long? = null,
+    beforeEntryId: Long? = null,
+    afterEntryId: Long? = null,
     starred: Boolean? = null,
     feedId: Long? = null,
   ): MinifluxEntriesPayload {
@@ -132,7 +153,11 @@ class MinifluxSource(
               limit = limit,
               offset = offset,
               after = after,
+              beforeEntryId = beforeEntryId,
+              afterEntryId = afterEntryId,
               starred = starred?.toString(),
+              order = "published_at",
+              direction = "desc",
             )
           )
           .body<MinifluxEntriesPayload>()
@@ -145,7 +170,11 @@ class MinifluxSource(
               limit = limit,
               offset = offset,
               after = after,
+              beforeEntryId = beforeEntryId,
+              afterEntryId = afterEntryId,
               starred = starred?.toString(),
+              order = "published_at",
+              direction = "desc",
             )
           )
           .body<MinifluxEntriesPayload>()

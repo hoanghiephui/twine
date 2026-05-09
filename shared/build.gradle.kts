@@ -54,6 +54,7 @@ kotlin {
 
       freeCompilerArgs += iOSBinaryFlags
 
+      export(projects.core.base)
       export(libs.crashkios.bugsnag)
     }
   }
@@ -116,6 +117,9 @@ kotlin {
       implementation(libs.kermit)
       implementation(libs.reorderable)
       api(libs.filekit)
+      implementation(libs.landscapist.image)
+      implementation(libs.landscapist.coil3)
+      implementation(libs.landscapist.zoomable)
       implementation(libs.markdown.renderer)
       implementation(libs.markdown.material3)
       implementation(libs.markdown.coil)
@@ -145,8 +149,10 @@ kotlin {
         api(libs.androidx.core)
         api(libs.androidx.browser)
         implementation(libs.ktor.client.okhttp)
-        api(libs.crashkios.bugsnag)
-        implementation(libs.kermit.bugsnag)
+        if (!isFoss) {
+          api(libs.crashkios.bugsnag)
+          implementation(libs.kermit.bugsnag)
+        }
         if (!isFoss) {
           implementation(libs.purchases.core)
           implementation(libs.purchases.ui)

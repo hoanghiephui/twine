@@ -26,6 +26,7 @@ data class FeedReadCount(
   val feedName: String,
   val feedIcon: String,
   val homepageLink: String,
+  val showFeedFavIcon: Boolean,
   val readCount: Long,
 )
 
@@ -34,6 +35,7 @@ data class FeedReadCount(
 @Immutable
 data class ReadingStatistics(
   val totalReadCount: Long,
+  val dailyAverage: Int,
   val topFeeds: ImmutableList<FeedReadCount>,
   val readingTrends: ImmutableList<ReadingTrend>,
 )

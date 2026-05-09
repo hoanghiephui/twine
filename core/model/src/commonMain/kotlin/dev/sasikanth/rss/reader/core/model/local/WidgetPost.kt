@@ -17,8 +17,10 @@
 
 package dev.sasikanth.rss.reader.core.model.local
 
+import androidx.compose.runtime.Stable
 import kotlin.time.Instant
 
+@Stable
 data class WidgetPost(
   val id: String,
   val title: String?,
@@ -27,4 +29,5 @@ data class WidgetPost(
   val postedOn: Instant,
   val feedName: String?,
   val feedIcon: String?,
+  val readingTimeEstimate: Int,
 )

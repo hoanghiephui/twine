@@ -17,16 +17,17 @@
 
 package dev.sasikanth.rss.reader.app
 
-import androidx.compose.material3.SheetValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.dialog
 import androidx.navigation.navDeepLink
 import androidx.navigation.toRoute
@@ -72,14 +73,19 @@ import dev.sasikanth.rss.reader.reader.ReaderScreenArgs
 import dev.sasikanth.rss.reader.reader.ReaderScreenArgs.FromScreen
 import dev.sasikanth.rss.reader.reader.ReaderViewModel
 import dev.sasikanth.rss.reader.reader.page.ReaderPageViewModel
+import dev.sasikanth.rss.reader.reader.ui.ImageViewerScreen
 import dev.sasikanth.rss.reader.reader.ui.ReaderScreen
 import dev.sasikanth.rss.reader.search.SearchViewModel
 import dev.sasikanth.rss.reader.search.ui.SearchScreen
 import dev.sasikanth.rss.reader.settings.SettingsEvent
 import dev.sasikanth.rss.reader.settings.SettingsViewModel
+import dev.sasikanth.rss.reader.settings.ui.SettingsAppInfoScreen
+import dev.sasikanth.rss.reader.settings.ui.SettingsAppearanceScreen
+import dev.sasikanth.rss.reader.settings.ui.SettingsBehaviorScreen
+import dev.sasikanth.rss.reader.settings.ui.SettingsDataScreen
 import dev.sasikanth.rss.reader.settings.ui.SettingsScreen
+import dev.sasikanth.rss.reader.settings.ui.SettingsServicesScreen
 import dev.sasikanth.rss.reader.statistics.StatisticsViewModel
-import dev.sasikanth.rss.reader.statistics.ui.StatisticsScreen
 import kotlin.reflect.typeOf
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filter
@@ -139,11 +145,13 @@ fun NavGraphBuilder.onboardingScreen(
 fun NavGraphBuilder.accountSelectionScreen(
   accountSelectionViewModel: () -> AccountSelectionViewModel,
   navController: NavHostController,
+  modifier: Modifier = Modifier,
 ) {
   composable<Screen.AccountSelection> {
     val viewModel = viewModel { accountSelectionViewModel() }
 
     AccountSelectionScreen(
+      modifier = modifier,
       viewModel = viewModel,
       onNavigateToHome = {
         navController.navigate(Screen.Main(triggerSync = true)) {
@@ -177,7 +185,13 @@ fun NavGraphBuilder.mainScreen(
   screenModifier: Modifier,
 ) {
   composable<Screen.Main> {
-    val triggerSync = it.toRoute<Screen.Main>().triggerSync
+    val mainRoute = it.toRoute<Screen.Main>()
+    val triggerSync = mainRoute.triggerSync
+    val startTab = mainRoute.startTab
+    val feedsViewModel = viewModel { feedsViewModel() }
+
+    val currentEntry by navController.currentBackStackEntryAsState()
+    val isMainActive = currentEntry?.destination?.hasRoute(Screen.Main::class) ?: false
 
     LaunchedEffect(useDarkTheme) {
       toggleLightStatusBar(!useDarkTheme)
@@ -185,9 +199,10 @@ fun NavGraphBuilder.mainScreen(
     }
 
     MainScreen(
+      feedsViewModel = feedsViewModel,
+      startTab = startTab,
       homeContent = { openDrawer ->
         val viewModel = viewModel { homeViewModel() }
-        val feedsViewModel = viewModel { feedsViewModel() }
 
         LaunchedEffect(Unit) {
           it.savedStateHandle
@@ -218,23 +233,7 @@ fun NavGraphBuilder.mainScreen(
           feedsViewModel = feedsViewModel,
           triggerSync = triggerSync,
           openPost = { index, post -> openPost(index, post, FromScreen.Home) },
-          openGroupSelectionSheet = { feedsViewModel.dispatch(FeedsEvent.OnAddToGroupClicked) },
-          openFeedInfoSheet = { feedId -> navController.navigate(Modals.FeedInfo(feedId)) },
-          openAddFeedScreen = { navController.navigate(Screen.AddFeed) },
-          openGroupScreen = { groupId -> navController.navigate(Screen.FeedGroup(groupId)) },
-          openPaywall = { navController.navigate(Screen.Paywall) },
           onMenuClicked = openDrawer,
-          onBottomSheetStateChanged = { sheetValue ->
-            val showDarkSystemBars =
-              if (sheetValue == SheetValue.Expanded) {
-                true
-              } else {
-                useDarkTheme
-              }
-
-            toggleLightStatusBar(!showDarkSystemBars)
-            toggleLightNavBar(!showDarkSystemBars)
-          },
           modifier = screenModifier,
         )
       },
@@ -291,12 +290,12 @@ fun NavGraphBuilder.mainScreen(
         SettingsScreen(
           viewModel = viewModel,
           goBack = goBack,
-          openAbout = { navController.navigate(Screen.About) },
-          openStatistics = { navController.navigate(Screen.Statistics) },
-          openBlockedWords = { navController.navigate(Screen.BlockedWords) },
+          openAppearanceSettings = { navController.navigate(Screen.SettingsAppearance) },
+          openBehaviorSettings = { navController.navigate(Screen.SettingsBehavior) },
+          openServicesSettings = { navController.navigate(Screen.SettingsServices) },
+          openDataSettings = { navController.navigate(Screen.SettingsData) },
+          openAppInfoSettings = { navController.navigate(Screen.SettingsAppInfo) },
           openPaywall = { navController.navigate(Screen.Paywall) },
-          openFreshRssLogin = { navController.navigate(Screen.FreshRssLogin) },
-          openMinifluxLogin = { navController.navigate(Screen.MinifluxLogin) },
           modifier = screenModifier,
         )
       },
@@ -310,6 +309,95 @@ fun NavGraphBuilder.mainScreen(
           modifier = screenModifier,
         )
       },
+      openFeedInfoSheet = { feedId -> navController.navigate(Modals.FeedInfo(feedId)) },
+      openGroupScreen = { groupId -> navController.navigate(Screen.FeedGroup(groupId)) },
+      openGroupSelectionSheet = { feedsViewModel.dispatch(FeedsEvent.OnAddToGroupClicked) },
+      openAddFeedScreen = { navController.navigate(Screen.AddFeed) },
+      openPaywall = { navController.navigate(Screen.Paywall) },
+      canHandleBack = isMainActive,
+    )
+  }
+}
+
+fun NavGraphBuilder.settingsAppearanceScreen(
+  settingsViewModel: () -> SettingsViewModel,
+  navController: NavHostController,
+  modifier: Modifier = Modifier,
+) {
+  composable<Screen.SettingsAppearance> {
+    val viewModel = viewModel { settingsViewModel() }
+    SettingsAppearanceScreen(
+      modifier = modifier,
+      viewModel = viewModel,
+      goBack = { navController.popBackStack() },
+      openPaywall = { navController.navigate(Screen.Paywall) },
+    )
+  }
+}
+
+fun NavGraphBuilder.settingsBehaviorScreen(
+  settingsViewModel: () -> SettingsViewModel,
+  navController: NavHostController,
+  modifier: Modifier = Modifier,
+) {
+  composable<Screen.SettingsBehavior> {
+    val viewModel = viewModel { settingsViewModel() }
+    SettingsBehaviorScreen(
+      modifier = modifier,
+      viewModel = viewModel,
+      goBack = { navController.popBackStack() },
+      openBlockedWords = { navController.navigate(Screen.BlockedWords) },
+    )
+  }
+}
+
+fun NavGraphBuilder.settingsServicesScreen(
+  settingsViewModel: () -> SettingsViewModel,
+  navController: NavHostController,
+  modifier: Modifier = Modifier,
+) {
+  composable<Screen.SettingsServices> {
+    val viewModel = viewModel { settingsViewModel() }
+    SettingsServicesScreen(
+      modifier = modifier,
+      viewModel = viewModel,
+      goBack = { navController.popBackStack() },
+      openPaywall = { navController.navigate(Screen.Paywall) },
+      openFreshRssLogin = { navController.navigate(Screen.FreshRssLogin) },
+      openMinifluxLogin = { navController.navigate(Screen.MinifluxLogin) },
+    )
+  }
+}
+
+fun NavGraphBuilder.settingsDataScreen(
+  statisticsViewModel: () -> StatisticsViewModel,
+  navController: NavHostController,
+  modifier: Modifier = Modifier,
+) {
+  composable<Screen.SettingsData> {
+    val statisticsViewModel = viewModel { statisticsViewModel() }
+    SettingsDataScreen(
+      modifier = modifier,
+      statisticsViewModel = statisticsViewModel,
+      goBack = { navController.popBackStack() },
+    )
+  }
+}
+
+fun NavGraphBuilder.settingsAppInfoScreen(
+  settingsViewModel: () -> SettingsViewModel,
+  openChangelog: () -> Unit,
+  navController: NavHostController,
+  modifier: Modifier = Modifier,
+) {
+  composable<Screen.SettingsAppInfo> {
+    val viewModel = viewModel { settingsViewModel() }
+    SettingsAppInfoScreen(
+      modifier = modifier,
+      viewModel = viewModel,
+      goBack = { navController.popBackStack() },
+      openAbout = { navController.navigate(Screen.About) },
+      openChangelog = openChangelog,
     )
   }
 }
@@ -317,10 +405,12 @@ fun NavGraphBuilder.mainScreen(
 fun NavGraphBuilder.freshRssLoginScreen(
   freshRssLoginViewModel: () -> FreshRssLoginViewModel,
   navController: NavHostController,
+  modifier: Modifier = Modifier,
 ) {
   composable<Screen.FreshRssLogin> {
     val viewModel = viewModel { freshRssLoginViewModel() }
     FreshRssLoginScreen(
+      modifier = modifier,
       viewModel = viewModel,
       onLoginSuccess = {
         navController.previousBackStackEntry
@@ -336,10 +426,12 @@ fun NavGraphBuilder.freshRssLoginScreen(
 fun NavGraphBuilder.minifluxLoginScreen(
   minifluxLoginViewModel: () -> MinifluxLoginViewModel,
   navController: NavHostController,
+  modifier: Modifier = Modifier,
 ) {
   composable<Screen.MinifluxLogin> {
     val viewModel = viewModel { minifluxLoginViewModel() }
     MinifluxLoginScreen(
+      modifier = modifier,
       viewModel = viewModel,
       onLoginSuccess = {
         navController.previousBackStackEntry
@@ -377,6 +469,7 @@ fun NavGraphBuilder.readerScreen(
       pageViewModelFactory = { post -> viewModel(key = post.id) { readerPageViewModel(post) } },
       onBack = { navController.popBackStack() },
       openPaywall = { navController.navigate(Screen.Paywall) },
+      onImageClick = { imageUrl -> navController.navigate(Screen.ImageViewer(imageUrl)) },
       toggleLightStatusBar = toggleLightStatusBar,
       toggleLightNavBar = toggleLightNavBar,
       modifier = modifier,
@@ -390,6 +483,7 @@ fun NavGraphBuilder.addFeedScreen(
   useDarkTheme: Boolean,
   toggleLightStatusBar: (isLightStatusBar: Boolean) -> Unit,
   toggleLightNavBar: (isLightNavBar: Boolean) -> Unit,
+  modifier: Modifier = Modifier,
 ) {
   composable<Screen.AddFeed>(
     deepLinks = listOf(navDeepLink<Screen.AddFeed>(basePath = Screen.AddFeed.ROUTE))
@@ -415,6 +509,7 @@ fun NavGraphBuilder.addFeedScreen(
     }
 
     AddFeedScreen(
+      modifier = modifier,
       viewModel = viewModel,
       goBack = { navController.popBackStack() },
       openGroupSelection = { selectedGroupIds ->
@@ -453,21 +548,6 @@ fun NavGraphBuilder.discoveryScreen(
 fun NavGraphBuilder.aboutScreen(modifier: Modifier = Modifier, navController: NavHostController) {
   composable<Screen.About> {
     AboutScreen(modifier = modifier, goBack = { navController.popBackStack() })
-  }
-}
-
-fun NavGraphBuilder.statisticsScreen(
-  modifier: Modifier = Modifier,
-  statisticsViewModel: () -> StatisticsViewModel,
-  navController: NavHostController,
-) {
-  composable<Screen.Statistics> {
-    val viewModel = viewModel { statisticsViewModel() }
-    StatisticsScreen(
-      modifier = modifier,
-      viewModel = viewModel,
-      goBack = { navController.popBackStack() },
-    )
   }
 }
 
@@ -529,6 +609,24 @@ fun NavGraphBuilder.paywallScreen(
       modifier = modifier,
       hasPremium = hasPremium,
       goBack = { navController.popBackStack() },
+    )
+  }
+}
+
+fun NavGraphBuilder.imageViewerScreen(
+  navController: NavHostController,
+  toggleLightStatusBar: (isLightStatusBar: Boolean) -> Unit,
+  toggleLightNavBar: (isLightNavBar: Boolean) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  composable<Screen.ImageViewer> {
+    val imageUrl = it.toRoute<Screen.ImageViewer>().imageUrl
+    ImageViewerScreen(
+      modifier = modifier,
+      imageUrl = imageUrl,
+      onBack = { navController.popBackStack() },
+      toggleLightStatusBar = toggleLightStatusBar,
+      toggleLightNavBar = toggleLightNavBar,
     )
   }
 }

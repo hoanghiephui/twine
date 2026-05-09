@@ -25,11 +25,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import app.cash.paging.compose.LazyPagingItems
+import androidx.paging.compose.LazyPagingItems
 import dev.sasikanth.rss.reader.core.model.local.FeaturedPostItem
+import dev.sasikanth.rss.reader.core.model.local.PostsType
 import dev.sasikanth.rss.reader.core.model.local.ResolvedPost
 import dev.sasikanth.rss.reader.data.repository.HomeViewMode
-import dev.sasikanth.rss.reader.feeds.ui.sheet.BOTTOM_SHEET_PEEK_HEIGHT
+import dev.sasikanth.rss.reader.data.repository.MarkAsReadOn
+import dev.sasikanth.rss.reader.utils.PINNED_SOURCES_BOTTOM_BAR_HEIGHT
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -44,6 +46,8 @@ internal fun PostsList(
   listState: LazyListState,
   featuredPostsPagerState: PagerState,
   homeViewMode: HomeViewMode,
+  postsType: PostsType,
+  markAsReadOn: MarkAsReadOn,
   posts: () -> LazyPagingItems<ResolvedPost>,
   markFeaturedPostAsReadOnScroll: (String) -> Unit,
   onVisiblePostsChanged: (visiblePosts: Map<String, Int>, firstVisibleItemIndex: Int) -> Unit,
@@ -92,13 +96,18 @@ internal fun PostsList(
     modifier = modifier,
     state = listState,
     contentPadding =
-      PaddingValues(top = topContentPadding, bottom = BOTTOM_SHEET_PEEK_HEIGHT + 120.dp),
+      PaddingValues(
+        top = topContentPadding,
+        bottom = PINNED_SOURCES_BOTTOM_BAR_HEIGHT + 120.dp + paddingValues.calculateBottomPadding(),
+      ),
   ) {
     item(key = "featured_items", contentType = "featured_items") {
       FeaturedSection(
         paddingValues = paddingValues,
         featuredPosts = featuredPosts,
         pagerState = featuredPostsPagerState,
+        postsType = postsType,
+        markAsReadOn = markAsReadOn,
         markFeaturedPostAsReadOnScroll = markFeaturedPostAsReadOnScroll,
         onItemClick = { post, _ -> onFeaturedPostClicked(post) },
         onPostBookmarkClick = onPostBookmarkClick,
@@ -125,9 +134,21 @@ internal fun PostsList(
       val post = posts[index] ?: return@items
 
       when (homeViewMode) {
-        HomeViewMode.Default,
-        HomeViewMode.Simple -> {
+        HomeViewMode.Default -> {
           PostListItem(
+            item = post,
+            onClick = { onPostClicked(post, index) },
+            onPostBookmarkClick = { onPostBookmarkClick(post) },
+            onPostCommentsClick = { onPostCommentsClick(post.commentsLink!!) },
+            onPostSourceClick = { onPostSourceClick(post.sourceId) },
+            updatePostReadStatus = { updatedReadStatus ->
+              updateReadStatus(post.id, updatedReadStatus)
+            },
+            reduceReadItemAlpha = true,
+          )
+        }
+        HomeViewMode.Simple -> {
+          SimplePostListItem(
             item = post,
             onClick = { onPostClicked(post, index) },
             onPostBookmarkClick = { onPostBookmarkClick(post) },
@@ -142,7 +163,6 @@ internal fun PostsList(
         HomeViewMode.Compact -> {
           CompactPostListItem(
             item = post,
-            showDivider = index != posts.itemCount - 1,
             onClick = { onPostClicked(post, index) },
             onPostBookmarkClick = { onPostBookmarkClick(post) },
             onPostCommentsClick = { onPostCommentsClick(post.commentsLink!!) },

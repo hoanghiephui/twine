@@ -21,7 +21,7 @@ package dev.sasikanth.rss.reader.home
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material3.SheetValue
 import androidx.compose.runtime.Immutable
-import app.cash.paging.PagingData
+import androidx.paging.PagingData
 import dev.sasikanth.rss.reader.core.model.local.FeaturedPostItem
 import dev.sasikanth.rss.reader.core.model.local.PostsSortOrder
 import dev.sasikanth.rss.reader.core.model.local.PostsType
@@ -30,6 +30,7 @@ import dev.sasikanth.rss.reader.core.model.local.Source
 import dev.sasikanth.rss.reader.core.model.local.ThemeVariant
 import dev.sasikanth.rss.reader.core.model.local.UnreadSinceLastSync
 import dev.sasikanth.rss.reader.data.repository.HomeViewMode
+import dev.sasikanth.rss.reader.data.repository.MarkAsReadOn
 import dev.sasikanth.rss.reader.data.sync.SyncState
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.flow.Flow
@@ -49,12 +50,15 @@ data class HomeState(
   val postsSortOrder: PostsSortOrder,
   val hasUnreadPosts: Boolean,
   val homeViewMode: HomeViewMode,
+  val showFeaturedSection: Boolean,
   val themeVariant: ThemeVariant,
+  val markAsReadOn: MarkAsReadOn,
   val lastRefreshedAt: LocalDateTime?,
   val unreadSinceLastSync: UnreadSinceLastSync?,
   val prevActiveSource: Source?,
   val activePostIndex: Int,
   val showPostsSortFilter: Boolean,
+  val showPinnedSources: Boolean,
 ) {
 
   companion object {
@@ -71,13 +75,16 @@ data class HomeState(
         postsType = PostsType.ALL,
         postsSortOrder = PostsSortOrder.Latest,
         hasUnreadPosts = false,
+        showFeaturedSection = true,
         lastRefreshedAt = null,
         homeViewMode = HomeViewMode.Default,
         themeVariant = ThemeVariant.Dynamic,
+        markAsReadOn = MarkAsReadOn.Open,
         unreadSinceLastSync = null,
         prevActiveSource = null,
         activePostIndex = 0,
         showPostsSortFilter = false,
+        showPinnedSources = true,
       )
   }
 

@@ -20,10 +20,12 @@ import androidx.compose.runtime.Immutable
 import dev.sasikanth.rss.reader.app.AppIcon
 import dev.sasikanth.rss.reader.app.AppInfo
 import dev.sasikanth.rss.reader.billing.SubscriptionResult
+import dev.sasikanth.rss.reader.core.model.local.ServiceType
 import dev.sasikanth.rss.reader.core.model.local.ThemeVariant
 import dev.sasikanth.rss.reader.data.opml.OpmlFeed
 import dev.sasikanth.rss.reader.data.opml.OpmlResult
 import dev.sasikanth.rss.reader.data.repository.AppThemeMode
+import dev.sasikanth.rss.reader.data.repository.AudioMarkAsReadThreshold
 import dev.sasikanth.rss.reader.data.repository.BrowserType
 import dev.sasikanth.rss.reader.data.repository.HomeViewMode
 import dev.sasikanth.rss.reader.data.repository.MarkAsReadOn
@@ -44,32 +46,41 @@ data class SettingsState(
   val useAmoled: Boolean,
   val enableAutoSync: Boolean,
   val showFeedFavIcon: Boolean,
+  val showFeaturedSection: Boolean,
+  val showPinnedSources: Boolean,
   val markAsReadOn: MarkAsReadOn,
+  val audioMarkAsReadThreshold: AudioMarkAsReadThreshold,
   val subscriptionResult: SubscriptionResult?,
   val openPaywall: Boolean,
   val homeViewMode: HomeViewMode,
   val blockImages: Boolean,
   val enableNotifications: Boolean,
+  val groupByFeedNotifications: Boolean,
   val downloadFullContent: Boolean,
   val syncProgress: SyncProgress,
   val lastSyncedAt: Instant?,
   val hasCloudServiceSignedIn: Boolean,
+  val signedInService: ServiceType?,
   val authUrlToOpen: String?,
   val appIcon: AppIcon,
   val showAppIconSelectionSheet: Boolean,
   val canSubscribe: Boolean,
   val opmlFeedsToSelect: List<OpmlFeed>?,
   val showFreeFeedLimitWarning: Boolean,
+  val blockedWordsCount: Int,
 ) {
 
   val isSubscribed: Boolean
     get() = subscriptionResult == SubscriptionResult.Subscribed
 
-  enum class SyncProgress {
-    Idle,
-    Syncing,
-    Success,
-    Failure,
+  sealed interface SyncProgress {
+    data object Idle : SyncProgress
+
+    data object Syncing : SyncProgress
+
+    data object Success : SyncProgress
+
+    data class Failure(val exception: Exception) : SyncProgress
   }
 
   companion object {
@@ -88,22 +99,28 @@ data class SettingsState(
         useAmoled = false,
         enableAutoSync = true,
         showFeedFavIcon = true,
+        showFeaturedSection = true,
+        showPinnedSources = true,
         markAsReadOn = MarkAsReadOn.Open,
+        audioMarkAsReadThreshold = AudioMarkAsReadThreshold.Fifty,
         subscriptionResult = null,
         openPaywall = false,
         homeViewMode = HomeViewMode.Default,
         blockImages = false,
         enableNotifications = false,
+        groupByFeedNotifications = false,
         downloadFullContent = false,
         syncProgress = SyncProgress.Idle,
         lastSyncedAt = null,
         hasCloudServiceSignedIn = false,
+        signedInService = null,
         authUrlToOpen = null,
         appIcon = AppIcon.DarkJade,
         showAppIconSelectionSheet = false,
-        canSubscribe = true,
+        canSubscribe = false,
         opmlFeedsToSelect = null,
         showFreeFeedLimitWarning = false,
+        blockedWordsCount = 0,
       )
   }
 }
