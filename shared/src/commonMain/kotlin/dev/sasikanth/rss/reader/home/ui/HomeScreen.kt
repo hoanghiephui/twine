@@ -18,7 +18,6 @@ package dev.sasikanth.rss.reader.home.ui
 
 import androidx.compose.animation.core.animate
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,13 +49,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -69,7 +70,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -125,7 +125,6 @@ internal fun HomeScreen(
   openPost: (Int, ResolvedPost) -> Unit,
   onMenuClicked: (() -> Unit)? = null,
   modifier: Modifier = Modifier,
-  canHandleBack: Boolean = true,
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
   val feedsState by feedsViewModel.state.collectAsStateWithLifecycle()
@@ -163,6 +162,7 @@ internal fun HomeScreen(
         }
       }
       ?.collectAsLazyPagingItems()
+  val postsProvider = remember(posts) { { posts } }
 
   val featuredPosts by
     remember(
@@ -199,7 +199,7 @@ internal fun HomeScreen(
   HomeContent(
     state = state,
     feedsState = feedsState,
-    posts = posts,
+    posts = postsProvider,
     featuredPosts = featuredPosts,
     dispatch = viewModel::dispatch,
     feedsDispatch = feedsViewModel::dispatch,
@@ -213,7 +213,7 @@ internal fun HomeScreen(
 private fun HomeContent(
   state: HomeState,
   feedsState: FeedsState,
-  posts: LazyPagingItems<ResolvedPost>?,
+  posts: () -> LazyPagingItems<ResolvedPost>?,
   featuredPosts: ImmutableList<FeaturedPostItem>,
   dispatch: (HomeEvent) -> Unit,
   feedsDispatch: (FeedsEvent) -> Unit,
@@ -229,7 +229,7 @@ private fun HomeContent(
   val showScrollToTop by
     remember(featuredPosts, posts) {
       derivedStateOf {
-        val hasContent = featuredPosts.isNotEmpty() || (posts?.itemCount ?: 0) > 0
+        val hasContent = featuredPosts.isNotEmpty() || (posts()?.itemCount ?: 0) > 0
         hasContent && postsListState.firstVisibleItemIndex > 0
       }
     }
@@ -313,27 +313,7 @@ private fun HomeContent(
 
         val bottomBarModifier =
           remember(scaffoldBottomPadding, onMenuClicked, density) {
-            Modifier.padding(bottom = scaffoldBottomPadding).pointerInput(onMenuClicked) {
-              var verticalDragThresholdTriggered = false
-              var accumulatedDrag = 0f
-              val threshold = 40.dp.toPx()
-
-              detectVerticalDragGestures(
-                onDragStart = {
-                  verticalDragThresholdTriggered = false
-                  accumulatedDrag = 0f
-                },
-                onDragEnd = { verticalDragThresholdTriggered = false },
-                onDragCancel = { verticalDragThresholdTriggered = false },
-                onVerticalDrag = { _, dragAmount ->
-                  accumulatedDrag += dragAmount
-                  if (!verticalDragThresholdTriggered && accumulatedDrag < -threshold) {
-                    onMenuClicked?.invoke()
-                    verticalDragThresholdTriggered = true
-                  }
-                },
-              )
-            }
+            Modifier.padding(bottom = scaffoldBottomPadding)
           }
 
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -355,7 +335,6 @@ private fun HomeContent(
   ) { scaffoldPadding ->
     val colorScheme = AppTheme.colorScheme
     Box(modifier = Modifier.fillMaxSize().drawBehind { drawRect(colorScheme.backdrop) }) {
-      val hasFeeds = state.hasFeeds
       val nestedScrollModifier =
         if (platform !is Platform.Desktop) {
           Modifier.nestedScroll(homeScrollBehavior.nestedScrollConnection)
@@ -363,29 +342,30 @@ private fun HomeContent(
           Modifier
         }
 
+      val latestState by rememberUpdatedState(state)
+      val latestPosts by rememberUpdatedState(posts())
+      val latestFeaturedPosts by rememberUpdatedState(featuredPosts)
+
       HomeScreenContentScaffold(
         modifier = Modifier.then(nestedScrollModifier),
         bottomPadding = scaffoldPadding.calculateBottomPadding(),
         homeTopAppBar = {
-          val scrollBehavior =
-            if (platform !is Platform.Desktop) {
-              appBarScrollBehaviour
-            } else {
-              null
-            }
-
           HomeTopAppBar(
-            source = state.activeSource,
-            postsType = state.postsType,
+            source = latestState.activeSource,
+            postsType = latestState.postsType,
             listState = postsListState,
-            hasUnreadPosts = state.hasUnreadPosts,
-            scrollBehavior = scrollBehavior,
+            hasUnreadPosts = latestState.hasUnreadPosts,
+            scrollBehavior = if (platform !is Platform.Desktop) appBarScrollBehaviour else null,
             onMenuClicked = onMenuClicked,
             onShowPostsSortFilter = { dispatch(HomeEvent.ShowPostsSortFilter(true)) },
             onMarkPostsAsRead = { dispatch(HomeEvent.MarkPostsAsRead(it)) },
           )
         },
         body = { paddingValues ->
+          val featuredPosts = latestFeaturedPosts
+          val state = latestState
+          val posts = latestPosts
+
           val topOffset =
             remember(paddingValues, featuredPosts) {
               val topPaddingPx = with(density) { paddingValues.calculateTopPadding().roundToPx() }
@@ -414,24 +394,23 @@ private fun HomeContent(
             }
           }
 
-          val saveVisibleItemIndex by
-            rememberUpdatedState({
-              val firstVisibleItemInfoAfterOffset =
-                postsListState.layoutInfo.visibleItemsInfo.firstOrNull { itemInfo ->
-                  itemInfo.offset >= topOffset || itemInfo.offset == 0
-                }
-              val firstVisibleItemIndexAfterOffset = firstVisibleItemInfoAfterOffset?.index ?: 0
-              val firstVisibleItemKey = firstVisibleItemInfoAfterOffset?.key as? String
-              val settledPage = featuredPostsPagerState.settledPage
+          val saveVisibleItemIndex by rememberUpdatedState {
+            val firstVisibleItemInfoAfterOffset =
+              postsListState.layoutInfo.visibleItemsInfo.firstOrNull { itemInfo ->
+                itemInfo.offset >= topOffset || itemInfo.offset == 0
+              }
+            val firstVisibleItemIndexAfterOffset = firstVisibleItemInfoAfterOffset?.index ?: 0
+            val firstVisibleItemKey = firstVisibleItemInfoAfterOffset?.key as? String
+            val settledPage = featuredPostsPagerState.settledPage
 
-              dispatch(
-                HomeEvent.OnScreenStopped(
-                  firstVisibleItemIndex = firstVisibleItemIndexAfterOffset,
-                  firstVisibleItemKey = firstVisibleItemKey,
-                  settledPage = settledPage,
-                )
+            dispatch(
+              HomeEvent.OnScreenStopped(
+                firstVisibleItemIndex = firstVisibleItemIndexAfterOffset,
+                firstVisibleItemKey = firstVisibleItemKey,
+                settledPage = settledPage,
               )
-            })
+            )
+          }
 
           LifecycleEventEffect(event = Lifecycle.Event.ON_STOP) { saveVisibleItemIndex() }
 
@@ -440,10 +419,10 @@ private fun HomeContent(
           val pullToRefreshState = rememberPullToRefreshState()
 
           when {
-            hasFeeds == null || posts == null -> {
+            state.hasFeeds == null || posts == null -> {
               // no-op
             }
-            !hasFeeds -> {
+            !state.hasFeeds -> {
               NoFeeds { onMenuClicked?.invoke() }
             }
             featuredPosts.isEmpty() && posts.itemCount == 0 -> {
@@ -493,27 +472,27 @@ private fun HomeContent(
                   updateReadStatus = { postId, updatedReadStatus ->
                     dispatch(HomeEvent.UpdatePostReadStatus(postId, updatedReadStatus))
                   },
-                  modifier = Modifier.fillMaxSize(),
+                  modifier =
+                    Modifier.fillMaxSize()
+                      .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
+                      .drawWithContent {
+                        drawContent()
+                        drawRect(
+                          brush =
+                            Brush.verticalGradient(
+                              0f to Color.Black,
+                              0.85f to Color.Black,
+                              1f to Color.Transparent,
+                            ),
+                          blendMode = BlendMode.DstIn,
+                        )
+                      },
                 )
               }
             }
           }
         },
       )
-
-      if (canShowBottomBar) {
-        val colorScheme = AppTheme.colorScheme
-        Box(
-          modifier =
-            Modifier.fillMaxWidth()
-              .requiredHeight(PINNED_SOURCES_BOTTOM_BAR_HEIGHT)
-              .align(Alignment.BottomCenter)
-              .graphicsLayer { translationY = -bottomBarScrollState.state.heightOffset }
-              .drawBehind {
-                drawRect(Brush.verticalGradient(listOf(Color.Transparent, colorScheme.backdrop)))
-              }
-        )
-      }
 
       NewArticlesScrollToTopButton(
         unreadSinceLastSync = unreadSinceLastSync,
@@ -696,7 +675,7 @@ private fun HomePreview() {
     HomeContent(
       state = HomeState.default(),
       feedsState = FeedsState.DEFAULT,
-      posts = null,
+      posts = { null },
       featuredPosts = persistentListOf(),
       dispatch = {},
       feedsDispatch = {},
